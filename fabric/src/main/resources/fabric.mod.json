@@ -1,0 +1,35 @@
+{
+    "schemaVersion": 1,
+    "id": "fangsu",
+    "version": "${version}",
+    "name": "FangSu MTR Addon",
+    "description": "方速 MTR 扩展 / FangSu MTR Addon - A comprehensive MTR addon adding OBJ-format ticket barriers, platform screen doors, passenger information displays (PIDS), fare systems, custom trains and lifts, signs and boards, and a JavaScript scripting engine.",
+    "authors": ["596wjr"],
+    "contact": {
+        "homepage": "https://mtr.fangsu.top/",
+        "sources": "https://github.com/596wjr/FangSu_MTR_Addon/",
+        "issues": "https://github.com/596wjr/FangSu_MTR_Addon/issues"
+    },
+    "license": "MIT",
+    "icon": "assets/fangsu/icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": ["com.fangsu.fabric.MainFabric"],
+        "client": ["com.fangsu.fabric.client.MainFabricClient"]
+    },
+    "mixins": ["fangsu.mixins.json"],
+    "depends": {
+        "fabricloader": "${fabric_loader_dependency}",
+        "minecraft": "${minecraft_dependency}",
+        "java": ">=17",
+        "architectury": "${architectury_dependency}",
+        "fabric-api": "*",
+        "mtr": ">=1.16-3.2.2-0 <1.21-4.0.0"
+    },
+    "suggests": {},
+    "custom": {
+        "fabric-loader": {
+            "jvmArgs": ["--add-exports", "java.base/jdk.internal.module=ALL-UNNAMED", "--add-opens", "java.base/java.lang=ALL-UNNAMED"]
+        }
+    }
+}

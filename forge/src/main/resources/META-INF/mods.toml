@@ -1,0 +1,48 @@
+modLoader = "javafml"
+loaderVersion = "${forge_loader_dependency}"
+issueTrackerURL = "https://github.com/596wjr/FangSu_MTR_Addon/issues"
+license = "MIT"
+
+[[mods]]
+modId = "fangsu"
+version = "${version}"
+displayName = "FangSu MTR Addon"
+authors = "596wjr"
+description = '''
+方速 MTR 扩展 / FangSu MTR Addon - A comprehensive MTR addon adding OBJ-format ticket barriers, platform screen doors, passenger information displays (PIDS), fare systems, custom trains and lifts, signs and boards, and a JavaScript scripting engine.
+'''
+logoFile = "icon.png"
+
+[[dependencies.fangsu]]
+modId = "forge"
+mandatory = true
+versionRange = "${forge_loader_dependency}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.fangsu]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_dependency}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.fangsu]]
+modId = "architectury"
+mandatory = true
+versionRange = "${architectury_dependency}"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.fangsu]]
+modId = "mtr"
+mandatory = true
+versionRange = "[,4.0.0)"
+side = "BOTH"
+ordering = "AFTER"
+
+#[[dependencies.fangsu]]
+#modId = "mtrsteamloco"
+#mandatory = true
+#versionRange = "[0.5.2,)"
+#side = "BOTH"

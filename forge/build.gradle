@@ -1,0 +1,98 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+loom {
+    accessWidenerPath = project(":common").loom.accessWidenerPath
+    forge {
+        mixinConfig "fangsu.mixins.json"
+    }
+}
+
+architectury {
+    platformSetupLoomIde()
+    forge()
+}
+
+configurations {
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentForge.extendsFrom common
+
+    // Files in this configuration will be bundled into your mod using the Shadow plugin.
+    // Don't use the `shadow` configuration from the plugin itself as it's meant for excluding files.
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    forge "net.minecraftforge:forge:$rootProject.forge_version"
+
+    // Architectury API. This is optional, and you can comment it out if you don't need it.
+    modImplementation "dev.architectury:architectury-forge:$rootProject.architectury_api_version"
+
+    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
+    shadowBundle project(path: ':common', configuration: 'transformProductionForge')
+
+    modImplementation "maven.modrinth:minecraft-transit-railway:$rootProject.mtr_version_forge"
+    modImplementation "maven.modrinth:jcm:${rootProject.jcm_version_forge}"
+//    if (rootProject.require_nte) {
+//        modImplementation "maven.modrinth:mtr-nte:$rootProject.nte_version"
+//    }
+//    modImplementation("me.shedaniel.cloth:cloth-config-forge:11.1.136")
+    runtimeOnly("org.graalvm.sdk:graal-sdk:${rootProject.graaljsVersion}")
+    runtimeOnly("org.graalvm.truffle:truffle-api:${rootProject.graaljsVersion}")
+    runtimeOnly("org.graalvm.js:js-language:${rootProject.graaljsVersion}")
+    runtimeOnly("org.graalvm.js:js-scriptengine:${rootProject.graaljsVersion}")
+    shadowBundle("org.graalvm.sdk:graal-sdk:${rootProject.graaljsVersion}")
+    shadowBundle("org.graalvm.truffle:truffle-api:${rootProject.graaljsVersion}")
+    shadowBundle("org.graalvm.js:js-language:${rootProject.graaljsVersion}")
+    shadowBundle("org.graalvm.js:js-scriptengine:${rootProject.graaljsVersion}")
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'minecraft_dependency', project.minecraft_supports_range
+    inputs.property 'forge_loader_dependency', project.forge_loader_version
+    inputs.property 'architectury_dependency', ">=${project.architectury_api_version}"
+    inputs.property 'pack_format', project.pack_format
+
+    filesMatching('META-INF/mods.toml') {
+        expand version: inputs.properties.version,
+               minecraft_dependency: inputs.properties.minecraft_dependency,
+               forge_loader_dependency: inputs.properties.forge_loader_dependency,
+               architectury_dependency: inputs.properties.architectury_dependency
+    }
+    filesMatching('pack.mcmeta') {
+        expand pack_format: inputs.properties.pack_format
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowBundle]
+    archiveClassifier = 'dev-shadow'
+
+//    exclude 'com/oracle/truffle/**/*Test*'
+//    exclude 'com/oracle/truffle/**/*Benchmark*'
+
+    mergeServiceFiles()
+    zip64 true
+
+//    relocate("org.graalvm", "com.fangsu.shadow.org.graalvm")
+//    relocate("com.oracle.truffle", "com.fangsu.shadow.com.oracle.truffle")
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+    archiveFileName.set("$rootProject.mod_prefix$rootProject.archives_name-mc$project.minecraft_version-${platform}-${rootProject.mod_version}.jar")
+}
+
+tasks.named("sourcesJar") {
+    dependsOn tasks.named("processConditionalSources")
+}

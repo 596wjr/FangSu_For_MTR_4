@@ -1,0 +1,80 @@
+{
+  "common": [
+    {
+      "id": "mtr_sign_a",
+      "text": "fangsu.item.mtr_sign_a",
+      "model": "fangsu:sign/mtr_sign/mtr_sign.obj",
+      "unit": 8,
+      "isMtrTheme": true,
+      "mtrPoleOffset": -1.5,
+      "defaultBgColor": 0,
+      "tex": [
+        [
+          0.0625,
+          0.06
+        ],
+        [
+          0.5625,
+          0.06
+        ]
+      ],
+      "main": {
+        "subModel": "main",
+        "shape": [
+          [
+            4,
+            0,
+            6,
+            12,
+            12,
+            10
+          ]
+        ]
+      },
+      "side": {
+        "right": {
+          "subModel": "sidea",
+          "shape": [
+            [
+              8,
+              0,
+              6,
+              9,
+              6,
+              10
+            ]
+          ]
+        },
+        "left": {
+          "subModel": "sideb",
+          "shape": [
+            [
+              7,
+              0,
+              6,
+              8,
+              6,
+              10
+            ]
+          ]
+        }
+      },
+      "pole": {
+        "subModel": "pole",
+        "height": 4,
+        "shape": [
+          [
+            7.5,
+            8,
+            7.5,
+            8.5,
+            16,
+            8.5
+          ]
+        ]
+      }
+    }
+  ],
+  "on_wall": [
+  ]
+}

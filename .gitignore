@@ -1,0 +1,9 @@
+/forge/run/
+/fabric/run/
+build/
+/common/build/
+
+.gradle/
+.idea/
+
+/.venv/
