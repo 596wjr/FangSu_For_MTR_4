@@ -19,6 +19,7 @@ import com.fangsu.utils.ContentInfoUtil;
 import com.fangsu.utils.GraphicsTextureHelper;
 import com.fangsu.utils.ResourceUtil;
 import com.fangsu.utils.MtrUtil;
+import org.mtr.core.data.Platform;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -100,7 +101,7 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
         // 在注册绘制前构建路线并检查数据是否完整，避免在lambda中使用到不完整数据
         List<LocalRoute> routes = new ArrayList<>();
         if (stn.getRaw() != null) {
-            for (mtr.data.Platform plat : MtrUtil.getPlatformByStation(stn.getRaw())) {
+            for (Platform plat : MtrUtil.getPlatformByStation(stn.getRaw())) {
                 routes.addAll(MtrUtil.getRouteByPlatform(plat));
             }
         }

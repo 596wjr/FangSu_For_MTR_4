@@ -1,6 +1,6 @@
 package com.fangsu.mtr;
 
-import mtr.data.Platform;
+import org.mtr.core.data.Platform;
 
 public class LocalPlatform {
     private final Platform raw;
@@ -8,7 +8,7 @@ public class LocalPlatform {
 
     public LocalPlatform(Platform raw) {
         this.raw = raw;
-        this.id = raw != null ? raw.id : 0L;
+        this.id = raw != null ? raw.getId() : 0L;
     }
 
     public LocalPlatform() {

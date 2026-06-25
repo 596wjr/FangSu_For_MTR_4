@@ -2,7 +2,6 @@ package com.fangsu.blocks;
 
 import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.items.ModItems;
-import mtr.mappings.BlockEntityMapper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -71,7 +70,7 @@ public abstract class BaseObjBlock extends HorizontalDirectionalBlock implements
             if (blockEntity != null) {
                 return blockEntity.useWithWrench(state, level, pos, player, hand, hit);
             }
-        } else if (stack.is(mtr.Items.BRUSH.get())) {
+        } else if (stack.is(org.mtr.mod.Items.BRUSH.get().data)) {
             BaseObjBlockEntity blockEntity = (BaseObjBlockEntity) level.getBlockEntity(pos);
             if (blockEntity != null) {
                 return blockEntity.whenUseWithBrush(level, pos, player, hand, hit);
@@ -157,7 +156,7 @@ public abstract class BaseObjBlock extends HorizontalDirectionalBlock implements
         return blockState.rotate(mirror.getRotation((Direction) blockState.getValue(FACING)));
     }
 
-    <T extends BlockEntityMapper> void tick(Level world, BlockPos pos, T blockEntity) {
+    <T extends BlockEntity> void tick(Level world, BlockPos pos, T blockEntity) {
     }
 
     BlockEntityType<? extends BlockEntity> getType() {

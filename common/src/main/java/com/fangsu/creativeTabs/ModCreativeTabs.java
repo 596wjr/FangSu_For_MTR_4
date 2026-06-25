@@ -27,7 +27,8 @@ public class ModCreativeTabs {
             ModBlocks.ITEM_SIS,
             ModBlocks.ITEM_ADV_BOARD,
             ModBlocks.ITEM_SCREENDOOR_CENTRAL_CONTROL,
-            ModBlocks.ITEM_COLLISION_COMPENSATOR
+            ModBlocks.ITEM_COLLISION_COMPENSATOR,
+            ModBlocks.ITEM_MULTI_DIRECTION_NODE
     );
     //#elseif MC_VERSION >= 11903
     //$$ public static final CreativeModeTab FANGSU_MAIN = RegisterUtil.addCreativeTab(
@@ -48,7 +49,8 @@ public class ModCreativeTabs {
     //$$         ModBlocks.ITEM_SIS,
     //$$         ModBlocks.ITEM_ADV_BOARD,
     //$$         ModBlocks.ITEM_SCREENDOOR_CENTRAL_CONTROL,
-    //$$         ModBlocks.ITEM_COLLISION_COMPENSATOR
+    //$$         ModBlocks.ITEM_COLLISION_COMPENSATOR,
+    //$$         ModBlocks.ITEM_MULTI_DIRECTION_NODE
     //$$ );
     //#else
     //$$public static final CreativeModeTab FANGSU_MAIN = dev.architectury.registry.CreativeTabRegistry.create(

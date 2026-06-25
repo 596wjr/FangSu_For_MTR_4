@@ -1,7 +1,9 @@
 package com.fangsu.mtr;
 
-import mtr.data.Station;
+import org.mtr.core.data.Station;
+import org.mtr.core.data.StationExit;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,17 +16,20 @@ public class LocalStation extends LocalAreaBase {
 
     public LocalStation(Station station) {
         super(
-                station.id,
-                station.name,
-                station.color,
-                station.corner1.getA(),
-                station.corner1.getB(),
-                station.corner2.getA(),
-                station.corner2.getB()
+                station.getId(),
+                station.getName(),
+                station.getColor(),
+                (int) station.getMinX(),
+                (int) station.getMaxX(),
+                (int) station.getMinZ(),
+                (int) station.getMaxZ()
         );
         this.raw = station;
-        this.zone = station.zone;
-        this.exits = new HashMap<>(station.exits);
+        this.zone = (int) station.getZone1();
+        this.exits = new HashMap<>();
+        for (final StationExit exit : station.getExits()) {
+            this.exits.put(exit.getName(), new ArrayList<>(exit.getDestinations()));
+        }
     }
 
     public LocalStation() {

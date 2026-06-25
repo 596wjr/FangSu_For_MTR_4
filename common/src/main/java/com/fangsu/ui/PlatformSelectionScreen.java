@@ -2,12 +2,12 @@ package com.fangsu.ui;
 
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.MtrUtil;
-import mtr.data.Platform;
-import mtr.data.Station;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import org.mtr.core.data.Platform;
+import org.mtr.core.data.Station;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,23 +32,23 @@ public class PlatformSelectionScreen extends BaseSelectionScreen {
 
     @Override
     public void updateColumn() {
-        Station station = MtrUtil.getStationAt(MtrUtil.getCenterVector3f(pos));
+        final Station station = MtrUtil.getStationAt(MtrUtil.getCenterVector3f(pos));
         if (station != null) {
             if (this.items != null)
                 this.items.clear();
             else this.items = new ArrayList<>();
-            Set<SelectionItem> itemSet = new HashSet<>();
-            List<Platform> platforms = MtrUtil.getPlatformByStation(station);
+            final Set<SelectionItem> itemSet = new HashSet<>();
+            final List<Platform> platforms = MtrUtil.getPlatformByStation(station);
             if (platforms != null)
-                for (Platform p : platforms) {
-                    String dest = MtrUtil.getDestinationByPlatform(p);
+                for (final Platform p : platforms) {
+                    final String dest = MtrUtil.getDestinationByPlatform(p);
                     itemSet.add(new SelectionItem(
-                            p.name + " -> " + dest,
-                            String.valueOf(p.id),
+                            p.getName() + " -> " + dest,
+                            String.valueOf(p.getId()),
                             null
                     ));
                 }
-            List<SelectionItem> items = new ArrayList<>(itemSet);
+            final List<SelectionItem> items = new ArrayList<>(itemSet);
             this.items.add(items);
         }
     }

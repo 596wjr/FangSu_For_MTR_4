@@ -5,22 +5,19 @@ import com.fangsu.MainClient;
 import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.blockEntities.Scriptable;
 import com.fangsu.blocks.BaseObjBlock;
+import com.fangsu.mappings.RegistryObject;
 import com.fangsu.render.ShadersModHandler;
 import com.fangsu.render.sowcer.math.Matrix4f;
 import com.fangsu.render.sowcer.math.PoseStackUtil;
 import com.fangsu.render.sowcerext.reuse.DrawScheduler;
 import com.mojang.blaze3d.vertex.PoseStack;
-import mtr.RegistryObject;
-import mtr.block.IBlock;
-import mtr.mappings.BlockEntityRendererMapper;
-import mtr.mappings.BlockEntityRendererMapper;
+import org.mtr.mod.block.IBlock;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 //#if MC_VERSION >= 11904
 import net.minecraft.world.item.ItemDisplayContext;
 //#endif
@@ -59,7 +56,7 @@ public class BaseBlockEntityRender<T extends BaseObjBlockEntity> implements Bloc
         }
 
         final BlockPos pos = blockEntity.getBlockPos();
-        final Direction facing = IBlock.getStatePropertySafe(world, pos, BaseObjBlock.FACING);
+        final org.mtr.mapping.holder.Direction facing = IBlock.getStatePropertySafe(new org.mtr.mapping.holder.World(world), new org.mtr.mapping.holder.BlockPos(pos), new org.mtr.mapping.holder.DirectionProperty(BaseObjBlock.FACING));
 
         if (blockEntity.isMarkedError()) {
             matrices.pushPose();
@@ -79,7 +76,7 @@ public class BaseBlockEntityRender<T extends BaseObjBlockEntity> implements Bloc
 
         candyPose.translate(0.5f, 0f, 0.5f);
         candyPose.translate(blockEntity.translateX, blockEntity.translateY, blockEntity.translateZ);
-        candyPose.rotateY(-(float) Math.toRadians(facing.toYRot()) + (float) (Math.PI));
+        candyPose.rotateY(-(float) Math.toRadians(facing.data.toYRot()) + (float) (Math.PI));
         candyPose.rotateX(blockEntity.rotateX);
         candyPose.rotateY(blockEntity.rotateY);
         candyPose.rotateZ(blockEntity.rotateZ);

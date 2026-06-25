@@ -2,7 +2,6 @@ package com.fangsu.ticketSystem;
 
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.items.TicketItem;
-import mtr.data.Station;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -12,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.scores.Score;
+import org.mtr.core.data.Station;
 
 import java.util.Map;
 
@@ -50,8 +50,8 @@ public final class TicketBarrierHandler {
                 } else {
                     Station station = MtrTicketSystem.getStation(level, pos);
                     if (station == null) return false;
-                    dispName = station.name;
-                    zone = station.zone;
+                    dispName = station.getName();
+                    zone = (int) station.getZone1();
                 }
 
                 if (stack.isEmpty() || !(stack.getItem() instanceof TicketItem ticket)) {

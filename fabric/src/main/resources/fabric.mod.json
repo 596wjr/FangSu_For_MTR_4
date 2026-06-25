@@ -7,8 +7,8 @@
     "authors": ["596wjr"],
     "contact": {
         "homepage": "https://mtr.fangsu.top/",
-        "sources": "https://github.com/596wjr/FangSu_MTR_Addon/",
-        "issues": "https://github.com/596wjr/FangSu_MTR_Addon/issues"
+        "sources": "https://github.com/596wjr/FangSu_For_MTR_4/",
+        "issues": "https://github.com/596wjr/FangSu_For_MTR_4/issues"
     },
     "license": "MIT",
     "icon": "assets/fangsu/icon.png",
@@ -24,7 +24,7 @@
         "java": ">=17",
         "architectury": "${architectury_dependency}",
         "fabric-api": "*",
-        "mtr": ">=1.16-3.2.2-0 <1.21-4.0.0"
+        "mtr": ">=4.0.4 <4.1.0"
     },
     "suggests": {},
     "custom": {

@@ -37,7 +37,7 @@ side = "BOTH"
 [[dependencies.fangsu]]
 modId = "mtr"
 mandatory = true
-versionRange = "[,4.0.0)"
+versionRange = "[4.0.4,4.1.0)"
 side = "BOTH"
 ordering = "AFTER"
 

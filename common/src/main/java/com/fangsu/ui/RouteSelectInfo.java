@@ -2,7 +2,7 @@ package com.fangsu.ui;
 
 import com.fangsu.mtr.LocalPlatform;
 import com.fangsu.mtr.LocalRoute;
-import mtr.data.Platform;
+import org.mtr.core.data.Platform;
 
 import java.util.Objects;
 

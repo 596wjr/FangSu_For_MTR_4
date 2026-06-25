@@ -267,7 +267,7 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
                                 routes = l;
                                 List<List<Long>> saveRoutes = new ArrayList<>();
                                 for (RouteSelectInfo info : routes) {
-                                    saveRoutes.add(List.of(info.route.id, info.plat.id));
+                                    saveRoutes.add(List.of(info.route.id, info.plat.getId()));
                                 }
                                 extraConfigs.put("routes", Main.GSON.toJson(saveRoutes));
                                 resetDrawingState();

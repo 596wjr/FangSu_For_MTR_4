@@ -1,8 +1,7 @@
 # [MTR4] FangSu MTR Addon · 方速 MTR 扩展
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Minecraft](https://img.shields.io/badge/Minecraft-1.18.2~1.20.1-brightgreen)
-![Version](https://img.shields.io/badge/Version-1.0.0--rc5-orange)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-brightgreen)
 [![Fabric](https://img.shields.io/badge/Platform-Fabric-dbd0b4)](https://fabricmc.net/)
 [![Forge](https://img.shields.io/badge/Platform-Forge-e04e14)](https://minecraftforge.net/)
 

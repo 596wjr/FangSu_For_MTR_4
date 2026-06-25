@@ -80,21 +80,21 @@ def mtrFabricVersions = [
 //        "1.19.2": "FABRIC-1.19.2-3.2.2-hotfix-1",
 //        "1.19.3": "FABRIC-1.19.3-3.2.2-hotfix-1",
 //        "1.19.4": "FABRIC-1.19.4-3.2.2-hotfix-1",
-        "1.20.1": "FABRIC-4.0.4+1.20.1"
+        "1.20.1": "FABRIC-4.0.5+1.20.1"
 ]
 def mtrForgeVersions = [
 //        "1.18.2": "FORGE-1.18.2-3.2.2-hotfix-1",
 //        "1.19.2": "FORGE-1.19.2-3.2.2-hotfix-1",
 //        "1.19.3": "FORGE-1.19.3-3.2.2-hotfix-1",
 //        "1.19.4": "FORGE-1.19.4-3.2.2-hotfix-1",
-        "1.20.1": "FORGE-4.0.4+1.20.1"
+        "1.20.1": "FORGE-4.0.5+1.20.1"
 ]
 def mtrFabric = mtrFabricVersions[minecraft_version] ?: mtrFabricVersions["1.20.1"]
 def mtrForge = mtrForgeVersions[minecraft_version] ?: mtrForgeVersions["1.20.1"]
 
 
-def jcm_version_forge="FBttANi6"
-def jcm_version_fabric="v2.2.0+1.20.1"
+def jcm_version_forge="KaGitmYA"
+def jcm_version_fabric="v2.2.2+1.20.1"
 // 支持的 MC 版本描述
 def supportsVer = [
 //        "1.18.2": "1.18.x",

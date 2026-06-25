@@ -19,7 +19,6 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import mtr.Items;
 import org.jetbrains.annotations.NotNull;
 
 import static com.fangsu.blocks.ModBlocks.ITEM_COLLISION_COMPENSATOR;
@@ -130,7 +129,7 @@ public class BlockCollisionCompensator extends Block {
 
     private VoxelShape getCompensationShape(BlockGetter world, BlockPos pos, CollisionContext context, boolean collision) {
         if (!collision && context instanceof EntityCollisionContext ecc
-                && (ecc.isHoldingItem(Items.BRUSH.get()) || ecc.isHoldingItem(ITEM_COLLISION_COMPENSATOR.get()))) {
+                && (ecc.isHoldingItem(org.mtr.mod.Items.BRUSH.get().data) || ecc.isHoldingItem(ITEM_COLLISION_COMPENSATOR.get()))) {
             return Shapes.block();
         }
 

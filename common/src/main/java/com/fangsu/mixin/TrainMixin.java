@@ -2,112 +2,84 @@ package com.fangsu.mixin;
 
 import com.fangsu.blockEntities.IPlatformDoor;
 import com.fangsu.blocks.IBlockPlatform;
-import mtr.block.BlockPSDAPGBase;
-import mtr.block.BlockPlatform;
-import mtr.data.Train;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3d;
+import org.mtr.mapping.holder.*;
+import org.mtr.mod.Init;
+import org.mtr.mod.render.PositionAndRotation;
+import org.mtr.mod.render.RenderVehicleHelper;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(value = Train.class, remap = false, priority = 596)
+@Mixin(value = RenderVehicleHelper.class, remap = false, priority = 596)
 public abstract class TrainMixin {
-    /* ==========================================================
-     *  Shadow：Train 原生字段 / 方法
-     * ========================================================== */
-
-    @Shadow
-    protected boolean doorTarget;
-
-    @Shadow
-    protected float doorValue;
-
-    @Shadow
-    protected abstract boolean openDoors(
-            Level world, Block block, BlockPos pos, int dwellTicks
-    );
+    @Shadow(remap = false)
+    @Final
+    private static int CHECK_DOOR_RADIUS_XZ;
 
     @Shadow(remap = false)
-    protected abstract boolean skipScanBlocks(Level world, double trainX, double trainY, double trainZ);
+    @Final
+    private static int CHECK_DOOR_RADIUS_Y;
 
-    //    @Inject(
-//            method = "scanDoors",
-//            at = @At("RETURN"),
-//            cancellable = true,
-//            remap = false
-//    )
     @Inject(
-            method = "scanDoors",
-            at = @At("HEAD"),
+            method = "canOpenDoors",
+            at = @At("RETURN"),
             cancellable = true,
             remap = false
     )
-    private void scanCustomDoors(
-            Level world,
-            double trainX, double trainY, double trainZ,
-            float checkYaw, float pitch,
-            double halfSpacing, int dwellTicks,
-            CallbackInfoReturnable<Boolean> ci
-    ) {
-//        boolean original = ci.getReturnValue();
-
-        if (skipScanBlocks(world, trainX, trainY, trainZ)) {
-            ci.setReturnValue(false);
+    private static void met$InjectPlatformDetection(Box doorway, PositionAndRotation positionAndRotation, double doorValue, CallbackInfoReturnable<Boolean> cir) {
+        final ClientWorld clientWorld = MinecraftClient.getInstance().getWorldMapped();
+        if (clientWorld == null) {
             return;
         }
 
-        boolean hasPlatform = false;
+        final Vector3d doorwayPosition1 = positionAndRotation.transformForwards(new Vector3d(doorway.getMinXMapped(), doorway.getMaxYMapped(), doorway.getMinZMapped()), Vector3d::rotateX, Vector3d::rotateY, Vector3d::add);
+        final Vector3d doorwayPosition2 = positionAndRotation.transformForwards(new Vector3d(doorway.getMaxXMapped(), doorway.getMaxYMapped(), doorway.getMinZMapped()), Vector3d::rotateX, Vector3d::rotateY, Vector3d::add);
+        final Vector3d doorwayPosition3 = positionAndRotation.transformForwards(new Vector3d(doorway.getMaxXMapped(), doorway.getMaxYMapped(), doorway.getMaxZMapped()), Vector3d::rotateX, Vector3d::rotateY, Vector3d::add);
+        final Vector3d doorwayPosition4 = positionAndRotation.transformForwards(new Vector3d(doorway.getMinXMapped(), doorway.getMaxYMapped(), doorway.getMaxZMapped()), Vector3d::rotateX, Vector3d::rotateY, Vector3d::add);
+        final double minX = Math.min(Math.min(doorwayPosition1.x(), doorwayPosition2.x()), Math.min(doorwayPosition3.x(), doorwayPosition4.x()));
+        final double maxX = Math.max(Math.max(doorwayPosition1.x(), doorwayPosition2.x()), Math.max(doorwayPosition3.x(), doorwayPosition4.x()));
+        final double minY = Math.min(Math.min(doorwayPosition1.y(), doorwayPosition2.y()), Math.min(doorwayPosition3.y(), doorwayPosition4.y()));
+        final double maxY = Math.max(Math.max(doorwayPosition1.y(), doorwayPosition2.y()), Math.max(doorwayPosition3.y(), doorwayPosition4.y()));
+        final double minZ = Math.min(Math.min(doorwayPosition1.z(), doorwayPosition2.z()), Math.min(doorwayPosition3.z(), doorwayPosition4.z()));
+        final double maxZ = Math.max(Math.max(doorwayPosition1.z(), doorwayPosition2.z()), Math.max(doorwayPosition3.z(), doorwayPosition4.z()));
+        boolean canOpenDoors = false;
 
-        final Vec3 offsetVec = new Vec3(1, 0, 0).yRot(checkYaw).xRot(pitch);
-        final Vec3 traverseVec = new Vec3(0, 0, 1).yRot(checkYaw).xRot(pitch);
 
-        for (int x = 1; x <= 3; x++) {
-            for (int y = -2; y <= 3; y++) {
-                for (double z = -halfSpacing; z <= halfSpacing; z++) {
+        for (double checkX = minX - CHECK_DOOR_RADIUS_XZ; checkX <= maxX + CHECK_DOOR_RADIUS_XZ; checkX++) {
+            for (double checkY = minY - CHECK_DOOR_RADIUS_Y; checkY <= maxY + CHECK_DOOR_RADIUS_Y; checkY++) {
+                for (double checkZ = minZ - CHECK_DOOR_RADIUS_XZ; checkZ <= maxZ + CHECK_DOOR_RADIUS_XZ; checkZ++) {
+                    final BlockPos checkPos = Init.newBlockPos(checkX, checkY, checkZ);
+                    final BlockState blockState = clientWorld.getBlockState(checkPos);
+                    final Block block = blockState.getBlock();
+                    if (block.data instanceof IBlockPlatform) {
+                        canOpenDoors = true;
 
-                    //#if MC_VERSION >= 12000
-                    BlockPos pos = BlockPos.containing(
-                            trainX + offsetVec.x * x + traverseVec.x * z,
-                            trainY + y,
-                            trainZ + offsetVec.z * x + traverseVec.z * z
-                    );
-                    //#else
-                    //$$ BlockPos pos = new BlockPos(
-                    //$$     (int) Math.floor(trainX + offsetVec.x * x + traverseVec.x * z),
-                    //$$     (int) Math.floor(trainY + y),
-                    //$$     (int) Math.floor(trainZ + offsetVec.z * x + traverseVec.z * z)
-                    //$$ );
-                    //#endif
-
-                    Block block = world.getBlockState(pos).getBlock();
-                    if (block instanceof IBlockPlatform
-                            || block instanceof BlockPlatform || block instanceof BlockPSDAPGBase
-                    ) {
-                        openDoors(world, block, pos, dwellTicks);
-                        BlockEntity entity = world.getBlockEntity(pos);
-                        hasPlatform = true;
-                        if (entity instanceof IPlatformDoor be) {
-                            if (be.isLocked())
-                                hasPlatform = false;
-                            else {
-                                be.setDoorTarget(doorTarget);
-                                be.setDoorValue(doorValue);
-                            }
+                        BlockEntity blockEntity = clientWorld.getBlockEntity(checkPos);
+                        if(blockEntity != null && blockEntity.data instanceof IPlatformDoor platformDoor){
+                            platformDoor.setDoorValue((float) doorValue);
                         }
                     }
                 }
             }
         }
 
-        ci.setReturnValue(
-//                original ||
-                hasPlatform);
-        ci.cancel();
+//        for (double checkX = minX - CHECK_DOOR_RADIUS_XZ; checkX <= maxX + CHECK_DOOR_RADIUS_XZ; checkX++) {
+//            for (double checkY = minY - CHECK_DOOR_RADIUS_Y; checkY <= maxY + CHECK_DOOR_RADIUS_Y; checkY++) {
+//                for (double checkZ = minZ - CHECK_DOOR_RADIUS_XZ; checkZ <= maxZ + CHECK_DOOR_RADIUS_XZ; checkZ++) {
+//                    final BlockPos checkPos = Init.newBlockPos(checkX, checkY, checkZ);
+//                    final BlockState blockState = clientWorld.getBlockState(checkPos);
+//                    final Block block = blockState.getBlock();
+//                    if (block.data instanceof PlatformHelper) {
+//                        canOpenDoors = true;
+//                    }
+//                }
+//            }
+//        }
+
+        cir.setReturnValue(canOpenDoors || cir.getReturnValue());
     }
 }

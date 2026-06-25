@@ -18,7 +18,7 @@ public abstract class BaseRisDrawing {
         if (info == null || info.route == null) {
             return new RouteDrawer.RouteDrawInfo(null, arrowDirection, null, 0, new int[]{0, 0, texW, texH});
         }
-        int index = info.plat != null ? info.route.getPlatformIdIndex(info.plat.id) : 0;
+        int index = info.plat != null ? info.route.getPlatformIdIndex(info.plat.getId()) : 0;
         return new RouteDrawer.RouteDrawInfo(info.route.asRouteDetail(), arrowDirection, info.plat, index, new int[]{0, 0, texW, texH});
     }
 }

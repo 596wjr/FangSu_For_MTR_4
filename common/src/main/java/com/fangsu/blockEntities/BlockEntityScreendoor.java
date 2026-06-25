@@ -285,7 +285,7 @@ public class BlockEntityScreendoor extends BaseObjBlockEntity implements Syncabl
 
     @Override
     public VoxelShape setCollisionShape(BlockState state) {
-        if (getDoorTarget()) return Shapes.empty();
+        if (getDoorTarget() || getDoorValue() > 0) return Shapes.empty();
         return getFinalShape(state);
     }
 

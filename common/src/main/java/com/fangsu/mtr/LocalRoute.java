@@ -2,10 +2,12 @@ package com.fangsu.mtr;
 
 import com.fangsu.scripting.TextUtil;
 import com.fangsu.utils.MtrUtil;
-import mtr.data.Platform;
-import mtr.data.Route;
-import mtr.data.RouteType;
-import mtr.data.Station;
+import org.mtr.core.data.Platform;
+import org.mtr.core.data.Route;
+import org.mtr.core.data.RoutePlatformData;
+import org.mtr.core.data.SimplifiedRoute;
+import org.mtr.core.data.SimplifiedRoutePlatform;
+import org.mtr.core.data.Station;
 
 import java.util.*;
 
@@ -24,18 +26,37 @@ public class LocalRoute {
     private LocalRouteDetail cachedRouteDetail;
 
     public LocalRoute(Route route) {
-        this.routeType = RouteType.valueOf(route.routeType.name());
-        this.isLightRailRoute = route.isLightRailRoute;
-        this.isHidden = route.isHidden;
-        this.disableNextStationAnnouncements = route.disableNextStationAnnouncements;
-        this.circularState = CircularState.valueOf(route.circularState.name());
-        this.lightRailRouteNumber = route.lightRailRouteNumber;
+        this.routeType = RouteType.valueOf(route.getRouteType().name());
+        this.isLightRailRoute = route.getRouteType() == org.mtr.core.data.RouteType.LIGHT_RAIL;
+        this.isHidden = route.getHidden();
+        this.disableNextStationAnnouncements = false;
+        this.circularState = CircularState.valueOf(route.getCircularState().name());
+        this.lightRailRouteNumber = route.getRouteNumber();
         this.platformIds = new ArrayList<>();
-        this.name = route.name;
-        this.id = route.id;
-        this.color = route.color;
-        for (Route.RoutePlatform p : route.platformIds) {
-            this.platformIds.add(new RoutePlatform(p.platformId, p.customDestination));
+        this.name = route.getName();
+        this.id = route.getId();
+        this.color = route.getColor();
+        for (final RoutePlatformData p : route.getRoutePlatforms()) {
+            this.platformIds.add(new RoutePlatform(p.platform != null ? p.platform.getId() : 0L, p.getCustomDestination()));
+        }
+    }
+
+    /**
+     * 从 {@link SimplifiedRoute} 构造（客户端远程路线无完整 Route 数据时的回退）。
+     */
+    public LocalRoute(SimplifiedRoute route) {
+        this.routeType = RouteType.NORMAL;
+        this.isLightRailRoute = false;
+        this.isHidden = false;
+        this.disableNextStationAnnouncements = false;
+        this.circularState = CircularState.valueOf(route.getCircularState().name());
+        this.lightRailRouteNumber = "";
+        this.platformIds = new ArrayList<>();
+        this.name = route.getName();
+        this.id = route.getId();
+        this.color = route.getColor();
+        for (final SimplifiedRoutePlatform p : route.getPlatforms()) {
+            this.platformIds.add(new RoutePlatform(p.getPlatformId(), p.getDestination()));
         }
     }
 
@@ -98,41 +119,85 @@ public class LocalRoute {
 
     public LocalRouteDetail asRouteDetail() {
         if (cachedRouteDetail != null) return cachedRouteDetail;
-        List<LocalRouteDetail.StationDetails> stations = new ArrayList<>();
-        for (RoutePlatform p : platformIds) {
-            long platformId = p.platformId;
-            Platform plat = MtrUtil.getPlatformById(platformId);
-            if (plat != null) {
-                Station stn = MtrUtil.getStationByPlatform(plat);
-                if (stn != null) {
-                    List<Platform> plats = MtrUtil.getPlatformByStation(stn);
-                    Set<ColorNameTuple> trans = new HashSet<>();
+        final List<LocalRouteDetail.StationDetails> stations = new ArrayList<>();
 
-                    if (plats != null) {
-                        for (Platform plat1 : plats) {
-                            List<LocalRoute> routes = MtrUtil.getRouteByPlatform(plat1);
-                            if (routes != null) {
-                                for (LocalRoute route : routes) {
-                                    if (
-                                            !(TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.name, true)) &&
-                                                    TextUtil.getCjkMatching(this.name, false).equals(TextUtil.getCjkMatching(route.name, false)))
-                                    )
-                                        trans.add(new ColorNameTuple(route.color, TextUtil.getNonExtraParts(route.name)));
+        // 优先使用 SimplifiedRoute（客户端数据始终完整）
+        final SimplifiedRoute sr = MtrUtil.getSimplifiedRouteById(this.id);
+        if (sr != null && !sr.getPlatforms().isEmpty()) {
+            for (final SimplifiedRoutePlatform sp : sr.getPlatforms()) {
+                final String stationName = sp.getStationName();
+                if (stationName == null || stationName.isEmpty()) {
+                    stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null));
+                    continue;
+                }
+
+                // 获取换乘信息：通过站台查找该站所有路线
+                final Set<ColorNameTuple> trans = new HashSet<>();
+                final Platform plat = MtrUtil.getPlatformById(sp.getPlatformId());
+                if (plat != null && plat.area != null) {
+                    for (final Platform plat1 : plat.area.savedRails) {
+                        for (final Route route : plat1.routes) {
+                            if (!route.getHidden() &&
+                                    !(TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.getName(), true)) &&
+                                            TextUtil.getCjkMatching(this.name, false).equals(TextUtil.getCjkMatching(route.getName(), false)))
+                            ) {
+                                trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
+                            }
+                        }
+                    }
+                } else {
+                    // 远端车站：从 SimplifiedRoute 查找经过该站的路线
+                    final long stationId = sp.getStationId();
+                    for (final SimplifiedRoute otherSr : MtrUtil.getSimplifiedRoutes()) {
+                        if (otherSr.getId() != this.id) {
+                            for (final SimplifiedRoutePlatform osp : otherSr.getPlatforms()) {
+                                if (osp.getStationId() == stationId) {
+                                    trans.add(new ColorNameTuple(otherSr.getColor(), TextUtil.getNonExtraParts(otherSr.getName())));
+                                    break;
                                 }
                             }
                         }
-                        if (!trans.isEmpty())
-                            stations.add(new LocalRouteDetail.StationDetails(stn.name, new ArrayList<>(trans)));
-                        else stations.add(new LocalRouteDetail.StationDetails(stn.name, List.of()));
-                    } else {
-                        stations.add(new LocalRouteDetail.StationDetails(stn.name, null));
                     }
+                }
+
+                if (!trans.isEmpty()) {
+                    stations.add(new LocalRouteDetail.StationDetails(stationName, new ArrayList<>(trans)));
                 } else {
-                    stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null));
+                    stations.add(new LocalRouteDetail.StationDetails(stationName, List.of()));
+                }
+            }
+        } else {
+            // 回退：原有逻辑（通过 Platform/Station 查找）
+            for (final RoutePlatform p : platformIds) {
+                final long platformId = p.platformId;
+                final Platform plat = MtrUtil.getPlatformById(platformId);
+                if (plat != null) {
+                    final Station stn = plat.area;
+                    if (stn != null) {
+                        final Set<ColorNameTuple> trans = new HashSet<>();
+                        for (final Platform plat1 : stn.savedRails) {
+                            for (final Route route : plat1.routes) {
+                                if (!route.getHidden() &&
+                                        !(TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.getName(), true)) &&
+                                                TextUtil.getCjkMatching(this.name, false).equals(TextUtil.getCjkMatching(route.getName(), false)))
+                                ) {
+                                    trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
+                                }
+                            }
+                        }
+                        if (!trans.isEmpty()) {
+                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), new ArrayList<>(trans)));
+                        } else {
+                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), List.of()));
+                        }
+                    } else {
+                        stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null));
+                    }
                 }
             }
         }
-        LocalRouteDetail result = new LocalRouteDetail(name, color, circularState, 0, stations);
+
+        final LocalRouteDetail result = new LocalRouteDetail(name, color, circularState, 0, stations);
         cachedRouteDetail = result;
         return result;
     }

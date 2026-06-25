@@ -374,7 +374,7 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
                                 stitchedLoaded = false;
                                 List<List<Long>> saveRoutes = new ArrayList<>();
                                 for (RouteSelectInfo info : routes) {
-                                    saveRoutes.add(List.of(info.route.id, info.plat.id));
+                                    saveRoutes.add(List.of(info.route.id, info.plat.getId()));
                                 }
                                 extraConfigs.put("routes", Main.GSON.toJson(saveRoutes));
                                 sendUpdateC2S();

@@ -8,7 +8,7 @@ import com.fangsu.ui.PlatformSelectionScreen;
 import com.fangsu.utils.MtrUtil;
 import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonObject;
-import mtr.data.Platform;
+import org.mtr.core.data.Platform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -36,7 +36,7 @@ public class DestinationItem extends SignItem {
     @Override
     protected JsonObject saveToJson() {
         JsonObject json = new JsonObject();
-        if (plat != null) json.addProperty("plat", plat.id);
+        if (plat != null) json.addProperty("plat", plat.getId());
         json.addProperty("align", align);
         return json;
     }

@@ -12,9 +12,6 @@ import com.fangsu.utils.GraphicContext;
 import com.fangsu.utils.ScreenUtil;
 import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
-import mtr.client.ClientData;
-import mtr.data.Route;
-import mtr.data.Station;
 //#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
 //#endif
@@ -26,6 +23,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import org.mtr.core.data.Platform;
+import org.mtr.core.data.Route;
+import org.mtr.core.data.RoutePlatformData;
+import org.mtr.core.data.Station;
+import org.mtr.mod.client.MinecraftClientData;
 
 import java.awt.*;
 import java.util.*;
@@ -86,27 +88,26 @@ public class TicketMachineMainScreen extends Screen {
 
         this.station = MtrUtil.getStationAt(MtrUtil.getCenterVector3f(this.pos));
 
-        int currentZone = this.station != null ? this.station.zone : 0;
-        Map<String, RouteFareInfo> routeMap = new HashMap<>();
-        for (Route route : ClientData.ROUTES) {
-            String key = TextUtil.getNonExtraParts(route.name);
-            RouteFareInfo routeInfo = routeMap.computeIfAbsent(
+        final int currentZone = this.station != null ? (int) this.station.getZone1() : 0;
+        final Map<String, RouteFareInfo> routeMap = new HashMap<>();
+        for (final Route route : MinecraftClientData.getInstance().routes) {
+            final String key = TextUtil.getNonExtraParts(route.getName());
+            final RouteFareInfo routeInfo = routeMap.computeIfAbsent(
                     key,
                     k -> new RouteFareInfo(
                             k,
-                            new Color(route.color).getRGB(),
+                            new Color(route.getColor()).getRGB(),
                             new HashSet<>()
                     )
             );
-            for (Route.RoutePlatform routePlatform : route.platformIds) {
-                Station stn = MtrUtil.getStationByPlatform(
-                        MtrUtil.getPlatformById(routePlatform.platformId)
-                );
+            for (final RoutePlatformData routePlatform : route.getRoutePlatforms()) {
+                final Platform platform = routePlatform.getPlatform();
+                final Station stn = platform != null ? platform.area : null;
                 if (stn == null) continue;
                 routeInfo.stations().add(
                         new StationFareInfo(
-                                stn.name,
-                                MtrTicketSystem.calcFare(currentZone, stn.zone)
+                                stn.getName(),
+                                MtrTicketSystem.calcFare(currentZone, (int) stn.getZone1())
                         )
                 );
             }
@@ -215,7 +216,7 @@ public class TicketMachineMainScreen extends Screen {
             currentX += 4;
             currentX = g.drawString(font, ComponentHelper.translatable("ui.fangsu.ticketmachine.current"), currentX, texturePosY(8), 0xffffffff, true);
             int spareX = BG_TEXTURE_DRAW_WIDTH - currentX + texturePosX(0);
-            String[] lines = station.name.split("\\|");
+            String[] lines = station.getName().split("\\|");
             if (lines.length == 1)
                 ScreenUtil.drawCenteredStringScale(nativeGfx, lines[0], currentX + spareX / 2, texturePosY(8), 0xffffffff, 1.2f, true);
             else {
@@ -370,7 +371,7 @@ public class TicketMachineMainScreen extends Screen {
             g.drawString(font, ComponentHelper.translatable("ui.fangsu.ticketmachine.confirm2", ComponentHelper.translatable("ui.fangsu.ticket.singleJourney")), texturePosX(54), currentY, 0xff000000, false);
             currentY += 10;
             if (station != null) {
-                g.drawString(font, ComponentHelper.translatable("ui.fangsu.ticketmachine.confirm3", station.name.replace("|", " ")), texturePosX(54), currentY, 0xff000000, false);
+                g.drawString(font, ComponentHelper.translatable("ui.fangsu.ticketmachine.confirm3", station.getName().replace("|", " ")), texturePosX(54), currentY, 0xff000000, false);
                 currentY += 10;
             }
             if (selectedStation != null) {

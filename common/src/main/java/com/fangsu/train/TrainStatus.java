@@ -4,24 +4,29 @@ import com.fangsu.mtr.DrawableRoute;
 import com.fangsu.mtr.LocalRoute;
 import com.fangsu.render.sowcer.math.Matrix4f;
 import com.fangsu.render.sowcer.math.Vector3f;
-import mtr.client.ClientData;
-import mtr.data.*;
-import mtr.path.PathData;
+import com.lx862.mtrscripting.mod.impl.mtr.vehicle.NTETrainWrapper;
+import com.lx862.mtrscripting.mod.impl.mtr.vehicle.VehicleWrapper;
+import org.mtr.core.data.*;
+import org.mtr.mod.client.MinecraftClientData;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 
+/**
+ * 基于 {@link NTETrainWrapper}（而非 MTR3 TrainClient）的列车状态包装。
+ * <p>
+ * 站台/路线信息通过 {@link VehicleWrapper.Stop} 获取，
+ * 兼容 MTR4 的 VehicleExtension 数据模型。
+ */
 public class TrainStatus {
-    private final TrainClient train;
+    private final NTETrainWrapper train;
 
     public final boolean[] doorLeftOpen;
     public final boolean[] doorRightOpen;
 
-    public final Matrix4f[] lastWorldPose;
     public final Vector3f[] lastCarPosition;
     public final Vector3f[] lastCarRotation;
+    public final Matrix4f[] lastWorldPose;
 
     public boolean shouldRender;
     public boolean isInDetailDistance;
@@ -41,14 +46,9 @@ public class TrainStatus {
      */
     public int trainStatus;
 
-    private PlatformLookupMap trainPlatforms;
-    private List<PathData> trainPlatformsValidPath;
-
-    private int cacheIndex;
-
-    public TrainStatus(TrainClient train) {
+    public TrainStatus(NTETrainWrapper train) {
         this.train = train;
-        int trainCars = train.trainCars;
+        final int trainCars = train.getCarCount();
         doorLeftOpen = new boolean[trainCars];
         doorRightOpen = new boolean[trainCars];
         lastWorldPose = new Matrix4f[trainCars];
@@ -56,31 +56,37 @@ public class TrainStatus {
         lastCarRotation = new Vector3f[trainCars];
         shouldRender = true;
         isInDetailDistance = false;
-    }
 
-    public void reset() {
-        if (trainPlatformsValidPath == null || !trainPlatformsValidPath.equals(train.path) || trainPlatforms.platforms.isEmpty()) {
-            trainPlatformsValidPath = new ArrayList<>(train.path);
-            if (!train.getRouteIds().isEmpty()) {
-                trainPlatforms = getTrainPlatforms();
-            } else {
-                trainPlatforms = new PlatformLookupMap();
-            }
+        // 从 NTETrainWrapper 复制车厢位置
+        for (int i = 0; i < trainCars; i++) {
+            lastCarPosition[i] = new Vector3f(
+                    (float) train.lastCarPosition[i].x(),
+                    (float) train.lastCarPosition[i].y(),
+                    (float) train.lastCarPosition[i].z()
+            );
+            lastCarRotation[i] = new Vector3f(
+                    (float) train.lastCarRotation[i].x(),
+                    (float) train.lastCarRotation[i].y(),
+                    (float) train.lastCarRotation[i].z()
+            );
         }
     }
 
     public void updateRoute() {
-        reset();
-        int nextIndex = getAllPlatformsNextIndex();
-        if (nextIndex < trainPlatforms.platforms.size()) {
-            var nextPlatformInfo = trainPlatforms.platforms.get(nextIndex);
-            this.currentRoute = new LocalRoute(nextPlatformInfo.route);
-        } else if (!train.getRouteIds().isEmpty()) {
-            // 尚未到达第一个站台，但已有路线信息 → 使用第一条路线
-            Route route = ClientData.DATA_CACHE.routeIdMap.get(train.getRouteIds().get(0));
-            this.currentRoute = route != null ? new LocalRoute(route) : null;
+        final List<VehicleWrapper.Stop> allPlatforms = train.getAllPlatforms();
+        final int nextIndex = train.getAllPlatformsNextIndex();
+
+        if (nextIndex < allPlatforms.size()) {
+            final VehicleWrapper.Stop nextStop = allPlatforms.get(nextIndex);
+            this.currentRoute = stopToLocalRoute(nextStop);
         } else {
-            this.currentRoute = null;
+            final long routeId = train.getMtrVehicle().vehicleExtraData.getThisRouteId();
+            if (routeId != 0) {
+                final Route route = MinecraftClientData.getInstance().routeIdMap.get(routeId);
+                this.currentRoute = route != null ? new LocalRoute(route) : null;
+            } else {
+                this.currentRoute = null;
+            }
         }
 
         if (currentRoute != null) {
@@ -89,9 +95,9 @@ public class TrainStatus {
             this.drawableRoute = null;
         }
 
-        this.isOnRoute = train.isOnRoute();
-        this.isReverse = train.isReversed();
-        this.trainStatus = geTrainStatus();
+        this.isOnRoute = train.getMtrVehicle().getIsOnRoute();
+        this.isReverse = train.getMtrVehicle().getReversed();
+        this.trainStatus = calcTrainStatus();
     }
 
     public void update(int carIndex, boolean doorLeftOpen, boolean doorRightOpen, Matrix4f carPose) {
@@ -100,73 +106,54 @@ public class TrainStatus {
         this.doorRightOpen[carIndex] = doorRightOpen;
         this.lastWorldPose[carIndex] = carPose.copy();
         this.lastCarPosition[carIndex] = carPose.getTranslationPart();
-//        this.lastCarRotation[carIndex] = carPose.getEulerAnglesXYZ();
-
     }
 
-    private PlatformLookupMap getTrainPlatforms() {
-        List<Long> routeIds = train.getRouteIds();
-        DataCache dataCache = ClientData.DATA_CACHE;
-        PlatformLookupMap result = new PlatformLookupMap();
-        result.siding = dataCache.sidingIdMap.get(train.sidingId);
-        if (routeIds.isEmpty()) return result;
-
-        int routeIndex = 0;
-        List<PlatformInfo> currentRoutePlatforms = new ArrayList<>();
-        for (int pathIndex = 0; pathIndex < train.path.size(); pathIndex++) {
-            if (train.path.get(pathIndex).dwellTime <= 0) continue;
-            if (train.path.get(pathIndex).rail.railType != RailType.PLATFORM) continue;
-
-            if (routeIndex >= routeIds.size()) break;
-            Route thisRoute = dataCache.routeIdMap.get(routeIds.get(routeIndex));
-            Route nextRoute = routeIndex < routeIds.size() - 1 ? dataCache.routeIdMap.get(routeIds.get(routeIndex + 1)) : null;
-            boolean reverseAtPlatform = !thisRoute.platformIds.isEmpty() && nextRoute != null && !nextRoute.platformIds.isEmpty()
-                    && thisRoute.getLastPlatformId() == nextRoute.getFirstPlatformId();
-
-            int routeStationIndex = currentRoutePlatforms.size();
-            Station thisStation = dataCache.platformIdToStation.get((thisRoute.platformIds.get(routeStationIndex)).platformId);
-            Platform thisPlatform = dataCache.platformIdMap.get((thisRoute.platformIds.get(routeStationIndex)).platformId);
-            String customDestination = thisRoute.getDestination(routeStationIndex);
-//            double distance = ((TrainAccessor)train).getDistances().get(pathIndex);
-            boolean reverseAtThisPlatform = (currentRoutePlatforms.size() + 1 >= thisRoute.platformIds.size() && reverseAtPlatform);
-            Station lastStation = ClientData.DATA_CACHE.platformIdToStation.get(thisRoute.getLastPlatformId());
-            PlatformInfo platformInfo = new PlatformInfo(thisRoute, thisStation, thisPlatform, lastStation,
-                    customDestination != null ? customDestination : (lastStation != null ? lastStation.name : ""),
-                    0, reverseAtThisPlatform);
-
-            result.pathToPlatformIndex.put(pathIndex, result.platforms.size());
-            result.platforms.add(platformInfo);
-            result.pathToRoutePlatformIndex.put(pathIndex, currentRoutePlatforms.size());
-            currentRoutePlatforms.add(platformInfo);
-
-            if (currentRoutePlatforms.size() >= thisRoute.platformIds.size()) {
-                result.pathToRoutePlatforms.put(pathIndex, currentRoutePlatforms);
-                currentRoutePlatforms = new ArrayList<>();
-                routeIndex++;
-                if (reverseAtPlatform) {
-                    currentRoutePlatforms.add(platformInfo);
-                }
-            }
-        }
-
-        return result;
+    /**
+     * 获取完整停靠站列表（所有路线合并）。
+     */
+    public List<VehicleWrapper.Stop> getAllPlatforms() {
+        return train.getAllPlatforms();
     }
 
-    public List<PlatformInfo> getAllPlatforms() {
-        return trainPlatforms.platforms;
+    /**
+     * 获取当前路线的停靠站列表。
+     */
+    public List<VehicleWrapper.Stop> getThisRoutePlatforms() {
+        return train.getThisRoutePlatforms();
     }
 
-    private int geTrainStatus() {
+    /**
+     * 获取当前路线下一站索引（本地索引）。
+     */
+    public int getThisRoutePlatformsNextIndex() {
+        return train.getNextStopIndex(train.getThisRouteStops(), 0);
+    }
+
+    /**
+     * 获取全局下一站索引（用于 DrawableRoute）。
+     */
+    public int getThisRoutePlatformsNextIndexGlobal() {
+        final int localIndex = getThisRoutePlatformsNextIndex();
+        if (drawableRoute == null) return localIndex;
+        return drawableRoute.beginIndexInclusive + localIndex;
+    }
+
+    /**
+     * 获取完整列表的下一站索引。
+     */
+    public int getAllPlatformsNextIndex() {
+        return train.getAllPlatformsNextIndex();
+    }
+
+    private int calcTrainStatus() {
         if (currentRoute == null) return 0;
-        if (!train.isOnRoute()) {
+        if (!train.getMtrVehicle().getIsOnRoute()) {
             // 有路线但不在正线上：有速度→出库中，无速度→等待中
-            return train.getSpeed() > 0.01f ? 2 : 1;
+            return train.getMtrVehicle().getSpeed() > 0.01 ? 2 : 1;
         }
-        int nextIndex = getAllPlatformsNextIndex();
-        // 平台数据为空或已过最后一个平台：说明路线数据尚未就绪或列车已到终点
-        int platformCount = trainPlatforms.platforms.size();
+        final int nextIndex = getAllPlatformsNextIndex();
+        final int platformCount = train.getAllPlatforms().size();
         if (platformCount == 0) {
-            // 无平台数据（刚出库尚未到达首个站台）：当作运行中
             return 3;
         }
         if (nextIndex >= platformCount) return 6;
@@ -174,151 +161,91 @@ public class TrainStatus {
         return 3;
     }
 
-    public List<PlatformInfo> getThisRoutePlatforms() {
-        int headIndex = train.getIndex(0, train.spacing, true);
-        Map.Entry<Integer, List<PlatformInfo>> ceilEntry = trainPlatforms.pathToRoutePlatforms.ceilingEntry(headIndex);
-        if (ceilEntry == null) return List.of();
-        return ceilEntry.getValue();
-    }
+    private boolean onPlatformRail() {
+        final int nextIndex = getAllPlatformsNextIndex();
+        final List<VehicleWrapper.Stop> allPlatforms = train.getAllPlatforms();
+        if (nextIndex >= allPlatforms.size()) return false;
 
-    public int getThisRoutePlatformsNextIndex() {
-        int headIndex = train.getIndex(0, train.spacing, true);
-        Map.Entry<Integer, Integer> ceilEntry = trainPlatforms.pathToRoutePlatformIndex.ceilingEntry(headIndex);
-        if (ceilEntry == null) return getThisRoutePlatforms().size();
-        return ceilEntry.getValue();
+        final List<PathData> path = train.getPathData();
+        if (path.isEmpty()) return false;
+
+        final long nextPlatformId = allPlatforms.get(nextIndex).platform != null
+                ? allPlatforms.get(nextIndex).platform.getId() : 0;
+
+        // 检查车头或车尾是否在目标站台轨道上
+        final int idx1 = Math.max(0, Math.min(getPathIndex(getRailProgress(0), false), path.size() - 1));
+        final int idx2 = Math.max(0, Math.min(getPathIndex(getRailProgress(getCarCount() - 1), true), path.size() - 1));
+        final PathData path1 = path.get(idx1);
+        final PathData path2 = path.get(idx2);
+
+        return (path1.getDwellTime() != 0 && path1.getSavedRailBaseId() == nextPlatformId) ||
+                (path2.getDwellTime() != 0 && path2.getSavedRailBaseId() == nextPlatformId);
     }
 
     /**
-     * 获取下一站在整个长交路 DrawableRoute 中的全局索引。
-     * 用于传递给 DrawableRoute.getStations() 以保证索引匹配。
+     * 将 {@link VehicleWrapper.Stop} 转换为方速用的 {@link LocalRoute}。
      */
-    public int getThisRoutePlatformsNextIndexGlobal() {
-        int localIndex = getThisRoutePlatformsNextIndex();
-        if (drawableRoute == null) return localIndex;
-        return drawableRoute.beginIndexInclusive + localIndex;
+    private LocalRoute stopToLocalRoute(VehicleWrapper.Stop stop) {
+        if (stop.route == null) return null;
+        final Route route = MinecraftClientData.getInstance().routeIdMap.get(stop.route.getId());
+        return route != null ? new LocalRoute(route) : null;
     }
 
-    public int getAllPlatformsNextIndex() {
-        int headIndex = train.getIndex(0, train.spacing, true);
-        Map.Entry<Integer, Integer> ceilEntry = trainPlatforms.pathToPlatformIndex.ceilingEntry(headIndex);
-        if (ceilEntry == null) return trainPlatforms.platforms.size();
-        return ceilEntry.getValue();
-    }
-
-    private boolean onPlatformRail() {
-        int nextIndex = getAllPlatformsNextIndex();
-        if (nextIndex >= trainPlatforms.platforms.size()) return false;
-
-        int pathSize = train.path.size();
-        if (pathSize == 0) return false;
-
-        int idx1 = Math.max(0, Math.min(train.getIndex(getRailProgress(0), false), pathSize - 1));
-        int idx2 = Math.max(0, Math.min(train.getIndex(getRailProgress(train.trainCars - 1), true), pathSize - 1));
-        var path1 = train.path.get(idx1); // 车头所在轨道
-        var path2 = train.path.get(idx2); // 车尾所在轨道
-        var nextPlatformId = trainPlatforms.platforms.get(nextIndex).platform.id;
-        return (path1.dwellTime != 0 && path1.savedRailBaseId == nextPlatformId) || (path2.dwellTime != 0 && path2.savedRailBaseId == nextPlatformId);
-    }
-
-    private static class PlatformLookupMap {
-        public Siding siding;
-        public final List<PlatformInfo> platforms = new ArrayList<>();
-        public final TreeMap<Integer, Integer> pathToPlatformIndex = new TreeMap<>();
-        public final TreeMap<Integer, List<PlatformInfo>> pathToRoutePlatforms = new TreeMap<>();
-        public final TreeMap<Integer, Integer> pathToRoutePlatformIndex = new TreeMap<>();
-    }
-
-    public static class PlatformInfo {
-
-        public Route route;
-        public Station station;
-        public Platform platform;
-        public Station destinationStation;
-        public String destinationName;
-        public double distance;
-        public boolean reverseAtPlatform;
-
-        public PlatformInfo(Route route, Station station, Platform platform,
-                            Station destinationStation, String destinationName, double distance,
-                            boolean reverseAtPlatform) {
-            this.route = route;
-            this.station = station;
-            this.platform = platform;
-            this.destinationStation = destinationStation;
-            this.destinationName = destinationName;
-            this.distance = distance;
-            this.reverseAtPlatform = reverseAtPlatform;
-        }
-    }
+    // ========== 向后兼容的便捷方法 ==========
 
     @SuppressWarnings("unused")
-    public Train mtrTrain() {
+    public NTETrainWrapper getWrapper() {
         return train;
     }
 
     @SuppressWarnings("unused")
     public long id() {
-        return train.id;
+        return train.getId();
     }
 
     @SuppressWarnings("unused")
     public Siding siding() {
-        return trainPlatforms.siding;
+        return train.getSiding();
     }
 
     @SuppressWarnings("unused")
     public String trainTypeId() {
-        return train.trainId;
-    }
-
-    @SuppressWarnings("unused")
-    public String baseTrainType() {
-        return train.baseTrainType;
+        return train.getVehicleId(0);
     }
 
     @SuppressWarnings("unused")
     public TransportMode transportMode() {
-        return train.transportMode;
+        return train.getTransportMode();
     }
 
     @SuppressWarnings("unused")
-    public int spacing() {
-        return train.spacing;
-    }
-
-    @SuppressWarnings("unused")
-    public int width() {
-        return train.width;
+    public int getCarCount() {
+        return train.getCarCount();
     }
 
     @SuppressWarnings("unused")
     public int trainCars() {
-        return train.trainCars;
+        return train.getCarCount();
     }
 
     @SuppressWarnings("unused")
     public float accelerationConstant() {
-        return train.accelerationConstant;
+        return (float) (train.getServiceAcceleration() * 1000 * 1000 / (1 / 400.0));
     }
 
     @SuppressWarnings("unused")
     public boolean manualAllowed() {
-        return train.isManualAllowed;
-    }
-
-    @SuppressWarnings("unused")
-    public int maxManualSpeed() {
-        return train.maxManualSpeed;
+        return train.isManualAllowed();
     }
 
     @SuppressWarnings("unused")
     public int manualToAutomaticTime() {
-        return train.manualToAutomaticTime;
+        return train.getManualToAutomaticTime();
     }
 
     @SuppressWarnings("unused")
     public List<PathData> path() {
-        return train.path;
+        return train.getPathData();
     }
 
     @SuppressWarnings("unused")
@@ -328,57 +255,69 @@ public class TrainStatus {
 
     @SuppressWarnings("unused")
     public double getRailProgress(int car) {
-        return train.getRailProgress() - car * train.spacing;
+        return train.getRailProgress() - (double) car * (train.getLength(0));
     }
 
     @SuppressWarnings("unused")
-    public int getRailIndex(double railProgress, boolean roundDown) {
-        return train.getIndex(railProgress, roundDown);
+    public int getPathIndex(double railProgress, boolean roundDown) {
+        final List<PathData> path = train.getPathData();
+        if (path.isEmpty()) return 0;
+        final int index = (int) (railProgress / (train.getLength(0)));
+        if (roundDown) {
+            return Math.max(0, Math.min(index, path.size() - 1));
+        } else {
+            return Math.max(0, Math.min((int) Math.ceil(railProgress / (train.getLength(0))), path.size() - 1));
+        }
     }
 
     @SuppressWarnings("unused")
-    public float getRailSpeed(int railIndex) {
-        return train.getRailSpeed(railIndex);
+    public int spacing() {
+        return (int) train.getLength(0);
+    }
+
+    @SuppressWarnings("unused")
+    public int width() {
+        return (int) train.getWidth(0);
     }
 
     @SuppressWarnings("unused")
     public float speed() {
-        return train.getSpeed();
+        return (float) (train.getSpeedMs() * 20);
     }
 
     @SuppressWarnings("unused")
     public float doorValue() {
-        return train.getDoorValue();
+        return (float) train.getDoorValue();
     }
 
     @SuppressWarnings("unused")
     public boolean isCurrentlyManual() {
-        return train.isCurrentlyManual();
+        return false; // MTR4 中手动驾驶通过不同机制处理
     }
 
     @SuppressWarnings("unused")
     public boolean isReversed() {
-        return train.isReversed();
+        return train.getMtrVehicle().getReversed();
     }
 
     @SuppressWarnings("unused")
     public boolean isOnRoute() {
-        return train.isOnRoute();
+        return train.getMtrVehicle().getIsOnRoute();
     }
 
     @SuppressWarnings("unused")
     public boolean justOpening() {
-        return train.justOpening();
+        return train.getDoorValue() > 0;
     }
 
     @SuppressWarnings("unused")
     public boolean justClosing(float doorCloseTime) {
-        return train.justClosing(doorCloseTime);
+        return train.getDoorValue() > 0;
     }
 
     @SuppressWarnings("unused")
     public final boolean isDoorOpening() {
-        return train.isDoorOpening();
+        return train.getDoorValue() > 0;
     }
 
     @SuppressWarnings("unused")

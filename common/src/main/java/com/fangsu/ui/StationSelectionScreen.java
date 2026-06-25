@@ -2,8 +2,8 @@ package com.fangsu.ui;
 
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.MtrUtil;
-import mtr.client.ClientData;
-import mtr.data.Station;
+import org.mtr.core.data.Station;
+import org.mtr.mod.client.MinecraftClientData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
@@ -30,26 +30,26 @@ public class StationSelectionScreen extends BaseSelectionScreen {
 
     @Override
     public void updateColumn() {
-        var raw = new ArrayList<>(ClientData.STATIONS);
+        final List<Station> raw = new ArrayList<>(MinecraftClientData.getInstance().stations);
         if (this.items != null)
             this.items.clear();
         else this.items = new ArrayList<>();
-        List<SelectionItem> items = new ArrayList<>();
+        final List<SelectionItem> items = new ArrayList<>();
 
-        // 鎸夎窛绂讳粠杩戝埌杩滄帓锟?
-        double px = pos.getX(), pz = pos.getZ();
+        // 按距离从近到远排序
+        final double px = pos.getX(), pz = pos.getZ();
         raw.sort(Comparator.comparingDouble(station -> {
-            double sx = (station.corner1.getA() + station.corner2.getA()) / 2.0;
-            double sz = (station.corner1.getB() + station.corner2.getB()) / 2.0;
-            double dx = sx - px, dz = sz - pz;
+            final double sx = (station.getMinX() + station.getMaxX()) / 2.0;
+            final double sz = (station.getMinZ() + station.getMaxZ()) / 2.0;
+            final double dx = sx - px, dz = sz - pz;
             return dx * dx + dz * dz;
         }));
 
-        for (Station station : raw) {
+        for (final Station station : raw) {
             items.add(new SelectionItem(
-                    station.name,
-                    Long.toString(station.id),
-                    station.color
+                    station.getName(),
+                    Long.toString(station.getId()),
+                    station.getColor()
             ));
         }
         this.items.add(items);

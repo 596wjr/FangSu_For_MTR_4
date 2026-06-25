@@ -14,7 +14,7 @@ apply from: "build_dep_ver.gradle"
 architectury {
     minecraft = project.minecraft_version
 }
-
+3
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
@@ -98,6 +98,7 @@ subprojects {
                 includeGroup "maven.modrinth"
             }
         }
+//        maven { url 'https://repo.sleeping.town/' }
 
         maven {
             url = "https://maven.fabricmc.net/"

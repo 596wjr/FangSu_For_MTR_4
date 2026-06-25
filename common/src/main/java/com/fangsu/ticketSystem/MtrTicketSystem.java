@@ -1,14 +1,21 @@
 package com.fangsu.ticketSystem;
 
 import com.fangsu.items.TicketItem;
-import mtr.mappings.Text;
+import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.mixin.InitAccessorMixin;
+import com.fangsu.mixin.MainAccessorMixin;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.scores.Score;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
-import mtr.data.*;
+import org.mtr.core.Main;
+import org.mtr.core.data.Position;
+import org.mtr.core.data.Station;
+import org.mtr.core.simulation.Simulator;
+import org.mtr.mod.Init;
 
 public class MtrTicketSystem {
     //TODO 交通卡系统
@@ -30,19 +37,19 @@ public class MtrTicketSystem {
 
         // 已入闸
         if (entryZone.getScore() != 0) {
-            player.displayClientMessage(Text.translatable("gui.mtr.already_entered"), true);
+            player.displayClientMessage(ComponentHelper.translatable("gui.mtr.already_entered"), true);
             return false;
         }
 
         // 余额不足
         if (balance.getScore() < 0) {
-            player.displayClientMessage(Text.translatable("gui.mtr.insufficient_balance", balance.getScore()), true);
+            player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", balance.getScore()), true);
             return false;
         }
 
         entryZone.setScore(encodeZone(zone));
         player.displayClientMessage(
-                Text.translatable(
+                ComponentHelper.translatable(
                         "gui.mtr.enter_barrier",
                         dispName.replace('|', ' '),
                         balance.getScore()
@@ -76,7 +83,7 @@ public class MtrTicketSystem {
         balance.add(-fare);
 
         player.displayClientMessage(
-                Text.translatable(
+                ComponentHelper.translatable(
                         "gui.mtr.exit_barrier",
                         dispName.replace('|', ' '),
                         fare,
@@ -89,10 +96,27 @@ public class MtrTicketSystem {
 
     /* ===================== 内部工具 ===================== */
 
+    /**
+     * 通过 Mixin 访问器获取 MTR4 服务端 Simulator，按位置查找车站。
+     */
     protected static Station getStation(Level world, BlockPos pos) {
-        RailwayData data = RailwayData.getInstance(world);
-        if (data == null) return null;
-        return RailwayData.getStation(data.stations, data.dataCache, pos);
+        try {
+            final Main main = InitAccessorMixin.getMain();
+            final String dimensionId = Init.getWorldId(new org.mtr.mapping.holder.World(world));
+            final Position position = new Position(pos.getX(), pos.getY(), pos.getZ());
+
+            for (final Simulator simulator : ((MainAccessorMixin) main).getSimulators()) {
+                if (simulator.dimension.equals(dimensionId)) {
+                    for (final Station station : simulator.stations) {
+                        if (station.inArea(position)) {
+                            return station;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     public static void addObjectivesIfMissing(Level world) {
@@ -100,7 +124,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     BALANCE_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Text.literal("Balance"),
+                    Component.literal("Balance"),
                     ObjectiveCriteria.RenderType.INTEGER
             );
         } catch (Exception ignored) {
@@ -110,7 +134,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     ENTRY_ZONE_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Text.literal("Entry Zone"),
+                    Component.literal("Entry Zone"),
                     ObjectiveCriteria.RenderType.INTEGER
             );
         } catch (Exception ignored) {

@@ -14,7 +14,6 @@ import com.fangsu.drawing.diaoban.DiaobanDrawManager;
 import com.fangsu.drawing.pids.PidsDrawManager;
 import com.fangsu.drawing.ris.RisDrawManager;
 import com.fangsu.drawing.sis.SisDrawManager;
-import com.fangsu.train.FunctionalCustomTrains;
 import com.fangsu.train.LcdManager;
 import com.fangsu.train.lcds.MtrLcd;
 import com.fangsu.ui.ModMenus;
@@ -130,12 +129,6 @@ public class MainClient {
                 LcdManager.getInstance().injectLcd("mtr", MtrLcd::new);
             } catch (Exception e) {
                 Main.LOGGER.error("[FangSu] LcdManager init failed", e);
-            }
-
-            try {
-                FunctionalCustomTrains.init(resourceManager);
-            } catch (Exception e) {
-                Main.LOGGER.error("[FangSu] FunctionalCustomTrains.init failed", e);
             }
 
             for (Runnable runnable : resourceInitRunnables) {

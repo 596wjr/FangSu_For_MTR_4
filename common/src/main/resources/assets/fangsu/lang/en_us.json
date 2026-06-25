@@ -146,5 +146,10 @@
     "ui.fangsu.screendoor.centralControl.doorCount": "Scanned %s screendoors",
     "ui.fangsu.screendoor.isAuto": "Auto Door Side",
     "ui.fangsu.screendoor.isolation": "Isolation",
-    "ui.fangsu.screendoor.doorOpenOverride": "Door Open"
+    "ui.fangsu.screendoor.doorOpenOverride": "Door Open",
+    "block.fangsu.multi_direction_node": "Universal Direction Node",
+    "ui.fangsu.multi_direction_node.angle": "Track Angle",
+    "msg.fangsu.multi_direction_node.angle_set": "Universal node angle set to %s°",
+    "msg.fangsu.multi_direction_node.bound": "Direction bound",
+    "msg.fangsu.multi_direction_node.unbound": "Direction unbound"
 }

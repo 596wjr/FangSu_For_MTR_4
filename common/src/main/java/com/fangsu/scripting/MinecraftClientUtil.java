@@ -2,20 +2,17 @@ package com.fangsu.scripting;
 
 import com.fangsu.render.sowcer.math.Vector3f;
 import com.mojang.text2speech.Narrator;
-import mtr.mappings.Text;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
-import mtr.data.Rail;
-import mtr.path.PathData;
 import net.minecraft.core.BlockPos;
-import mtr.client.ClientData;
-import mtr.data.RailwayData;
-import mtr.data.Station;
-import mtr.data.Platform;
 import net.minecraft.world.level.Level;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.pipeline.RenderCall;
 import net.minecraft.client.renderer.LevelRenderer;
+import org.mtr.core.data.Platform;
+import org.mtr.core.data.Position;
+import org.mtr.core.data.Station;
+import org.mtr.mod.client.MinecraftClientData;
 
 
 import java.util.HashMap;
@@ -48,7 +45,7 @@ public class MinecraftClientUtil {
         final Player player = Minecraft.getInstance().player;
         if (player != null) {
             Minecraft.getInstance().execute(() -> {
-                player.displayClientMessage(Text.literal(message), actionBar);
+                player.displayClientMessage(net.minecraft.network.chat.Component.literal(message), actionBar);
             });
         }
     }
@@ -74,55 +71,45 @@ public class MinecraftClientUtil {
         }
     }
 
+    // TODO: MTR4 信号系统待适配，当前返回 0（无占用）
     public static int getOccupiedAspect(Vector3f vPos, float facing, int aspects) {
-        BlockPos pos = vPos.toBlockPos();
-        Map<BlockPos, Float> nodesToScan = new HashMap<>();
-        nodesToScan.put(pos, facing);
-        int occupiedAspect = -1;
-
-        for (int j = 1; j < aspects; j++) {
-            final Map<BlockPos, Float> newNodesToScan = new HashMap<>();
-
-            for (final Map.Entry<BlockPos, Float> checkNode : nodesToScan.entrySet()) {
-                final Map<BlockPos, Rail> railMap = ClientData.RAILS.get(checkNode.getKey());
-
-                if (railMap != null) {
-                    for (final BlockPos endPos : railMap.keySet()) {
-                        final Rail rail = railMap.get(endPos);
-
-                        if (rail.facingStart.similarFacing(checkNode.getValue())) {
-                            if (ClientData.SIGNAL_BLOCKS.isOccupied(PathData.getRailProduct(checkNode.getKey(), endPos))) {
-                                return j;
-                            } else {
-                                final Boolean isOccupied = ClientData.OCCUPIED_RAILS.get(PathData.getRailProduct(checkNode.getKey(), endPos));
-                                if (isOccupied != null && isOccupied) {
-                                    return j;
-                                }
-                            }
-
-                            newNodesToScan.put(endPos, rail.facingEnd.getOpposite().angleDegrees);
-                            occupiedAspect = 0;
-                        }
-                    }
-                }
-            }
-
-            nodesToScan = newNodesToScan;
-        }
-
-        return occupiedAspect;
+        return 0;
     }
 
     public static Station getStationAt(Vector3f pos) {
-        return RailwayData.getStation(ClientData.STATIONS, ClientData.DATA_CACHE, pos.toBlockPos());
+        final int x = (int) Math.floor(pos.x());
+        final int z = (int) Math.floor(pos.z());
+        long closestDist = Long.MAX_VALUE;
+        Station closestStation = null;
+        for (final Station station : MinecraftClientData.getInstance().stations) {
+            if (x >= station.getMinX() && x <= station.getMaxX() && z >= station.getMinZ() && z <= station.getMaxZ()) {
+                final long cx = (station.getMinX() + station.getMaxX()) / 2;
+                final long cz = (station.getMinZ() + station.getMaxZ()) / 2;
+                final long dist = Math.abs(cx - x) + Math.abs(cz - z);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestStation = station;
+                }
+            }
+        }
+        return closestStation;
     }
 
     public static Platform getPlatformAt(Vector3f pos, int radius, int lower, int upper) {
-        Station station = RailwayData.getStation(ClientData.STATIONS, ClientData.DATA_CACHE, pos.toBlockPos());
-        Map<Long, Platform> platformPositions = ClientData.DATA_CACHE.requestStationIdToPlatforms(station.id);
-        Long id = RailwayData.getClosePlatformId(ClientData.PLATFORMS, ClientData.DATA_CACHE, pos.toBlockPos(), radius, lower, upper);
-        Platform platform = platformPositions.get(id);
-        return platform;
+        final Station station = getStationAt(pos);
+        if (station == null) return null;
+        final BlockPos blockPos = pos.toBlockPos();
+        Platform closestPlatform = null;
+        long closestDistance = Long.MAX_VALUE;
+        for (final Platform platform : station.savedRails) {
+            final Position midPos = platform.getMidPosition();
+            final long distance = Math.abs(midPos.getX() - blockPos.getX()) + Math.abs(midPos.getZ() - blockPos.getZ());
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestPlatform = platform;
+            }
+        }
+        return closestPlatform;
     }
 
     public static Vector3f getCameraPos() {

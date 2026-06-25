@@ -12,7 +12,7 @@ import com.fangsu.utils.GraphicsTextureHelper;
 import com.fangsu.utils.MtrUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import mtr.data.Platform;
+import org.mtr.core.data.Platform;
 
 import java.awt.*;
 import java.util.*;
@@ -34,7 +34,7 @@ public interface RouteDrawer {
             route = routeSelectInfo.route;
             plat = routeSelectInfo.plat;
             if (plat != null) {
-                index = route.getPlatformIdIndex(routeSelectInfo.plat.id);
+                index = route.getPlatformIdIndex(routeSelectInfo.plat.getId());
             }
         }
         if (route == null) {
