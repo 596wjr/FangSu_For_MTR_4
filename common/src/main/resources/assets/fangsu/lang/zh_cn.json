@@ -146,10 +146,5 @@
     "ui.fangsu.screendoor.centralControl.doorCount": "已扫描到 %s 个屏蔽门",
     "ui.fangsu.screendoor.isAuto": "自动开门方向",
     "ui.fangsu.screendoor.isolation": "门隔离",
-    "ui.fangsu.screendoor.doorOpenOverride": "门开启",
-    "block.fangsu.multi_direction_node": "万向节点",
-    "ui.fangsu.multi_direction_node.angle": "轨道角度",
-    "msg.fangsu.multi_direction_node.angle_set": "万向节点角度已设置为 %s°",
-    "msg.fangsu.multi_direction_node.bound": "方向已绑定",
-    "msg.fangsu.multi_direction_node.unbound": "方向已解除绑定"
+    "ui.fangsu.screendoor.doorOpenOverride": "门开启"
 }

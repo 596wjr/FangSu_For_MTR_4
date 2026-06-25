@@ -75,13 +75,6 @@ public class ModBlocks {
     public static final RegistrySupplier<Item> ITEM_COLLISION_COMPENSATOR =
             RegisterUtil.addBlockItem("collision_compensation_block", BLOCK_COLLISION_COMPENSATOR);
 
-    public static final RegistrySupplier<Block> BLOCK_MULTI_DIRECTION_NODE =
-            RegisterUtil.addBlock("multi_direction_node", BlockMultiDirectionNode::new);
-    public static final RegistrySupplier<Item> ITEM_MULTI_DIRECTION_NODE =
-            RegisterUtil.addBlockItem("multi_direction_node", BLOCK_MULTI_DIRECTION_NODE);
-    public static final RegistrySupplier<BlockEntityType<BlockEntityMultiDirectionNode>> BLOCK_ENTITY_MULTI_DIRECTION_NODE =
-            RegisterUtil.addBlockEntity("block_entity_multi_direction_node", BLOCK_MULTI_DIRECTION_NODE, BlockEntityMultiDirectionNode::new);
-
     public static void init() {
     }
 

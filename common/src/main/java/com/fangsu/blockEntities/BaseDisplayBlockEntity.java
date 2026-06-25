@@ -530,6 +530,9 @@ public abstract class BaseDisplayBlockEntity extends BaseObjBlockEntity {
             helper.initForBlock(getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ, shape);
             rotated = helper.getShapeForBlock(getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ);
         }
+        if (rotated == null) {
+            rotated = shape.asVoxelShape();
+        }
         return rotated.move(trans.x, trans.y, trans.z).optimize();
     }
 }
