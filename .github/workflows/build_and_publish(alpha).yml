@@ -1,4 +1,4 @@
-name: Build (Release)
+name: Build & Publish (Alpha)
 
 on:
   workflow_dispatch:
@@ -94,7 +94,7 @@ jobs:
 
             # 构造元数据
             VERSION_NUMBER="${BASE_VERSION}+${platform}.${game_version}"
-            VERSION_NAME="MTR3-${BASE_VERSION}-$(echo $platform | tr 'a-z' 'A-Z')"
+            VERSION_NAME="MTR4-${BASE_VERSION}-$(echo $platform | tr 'a-z' 'A-Z')"
             LOADERS="[\"$platform\"]"
             GAME_VERSIONS="[\"$game_version\"]"
 
