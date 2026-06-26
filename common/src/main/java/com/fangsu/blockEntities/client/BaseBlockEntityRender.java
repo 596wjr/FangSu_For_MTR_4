@@ -3,6 +3,7 @@ package com.fangsu.blockEntities.client;
 import com.fangsu.Main;
 import com.fangsu.MainClient;
 import com.fangsu.blockEntities.BaseObjBlockEntity;
+import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.Scriptable;
 import com.fangsu.blocks.BaseObjBlock;
 import com.fangsu.mappings.RegistryObject;
@@ -74,12 +75,14 @@ public class BaseBlockEntityRender<T extends BaseObjBlockEntity> implements Bloc
             return;
         }
 
-        candyPose.translate(0.5f, 0f, 0.5f);
-        candyPose.translate(blockEntity.translateX, blockEntity.translateY, blockEntity.translateZ);
-        candyPose.rotateY(-(float) Math.toRadians(facing.data.toYRot()) + (float) (Math.PI));
-        candyPose.rotateX(blockEntity.rotateX);
-        candyPose.rotateY(blockEntity.rotateY);
-        candyPose.rotateZ(blockEntity.rotateZ);
+        if(blockEntity instanceof FunctionalObjBlockEntity transformAble) {
+            candyPose.translate(0.5f, 0f, 0.5f);
+            candyPose.translate(transformAble.translateX, transformAble.translateY, transformAble.translateZ);
+            candyPose.rotateY(-(float) Math.toRadians(facing.data.toYRot()) + (float) (Math.PI));
+            candyPose.rotateX(transformAble.rotateX);
+            candyPose.rotateY(transformAble.rotateY);
+            candyPose.rotateZ(transformAble.rotateZ);
+        }
 //        if (prop.model != null) {
 //            MainClient.drawScheduler.enqueue(prop.model, candyPose, lightToUse);
 //        }

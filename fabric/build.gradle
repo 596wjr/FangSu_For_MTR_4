@@ -45,7 +45,7 @@ dependencies {
     shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
 
     modImplementation "maven.modrinth:minecraft-transit-railway:$rootProject.mtr_version_fabric"
-    modImplementation "maven.modrinth:jcm:${rootProject.jcm_version_fabric}"
+//    modImplementation "maven.modrinth:jcm:${rootProject.jcm_version_fabric}"
 //    implementation 'folk.sisby:kaleido-config:0.3.3+1.3.2'
 //    include 'folk.sisby:kaleido-config:0.3.3+1.3.2'
 //    if (rootProject.require_nte) {

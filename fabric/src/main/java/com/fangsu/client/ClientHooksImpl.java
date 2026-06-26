@@ -1,6 +1,6 @@
 package com.fangsu.client;
 
-import com.fangsu.blockEntities.BaseObjBlockEntity;
+import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.BlockEntityScreendoorCentralControl;
 import com.fangsu.drawing.sign.SignItem;
 import com.fangsu.ui.*;
@@ -18,7 +18,7 @@ public final class ClientHooksImpl {
     private ClientHooksImpl() {
     }
 
-    public static void openObjBlockConfigScreen(BaseObjBlockEntity blockEntity) {
+    public static void openObjBlockConfigScreen(FunctionalObjBlockEntity blockEntity) {
         Minecraft.getInstance().setScreen(new ObjBlockConfigScreen(blockEntity));
     }
 

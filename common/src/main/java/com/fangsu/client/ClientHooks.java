@@ -1,7 +1,7 @@
 package com.fangsu.client;
 
 import com.fangsu.Main;
-import com.fangsu.blockEntities.BaseObjBlockEntity;
+import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.BlockEntityScreendoorCentralControl;
 import com.fangsu.drawing.sign.SignItem;
 import com.fangsu.ui.RouteSelectInfo;
@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 
 public final class ClientHooks {
 
-    public static Consumer<BaseObjBlockEntity> OPEN_OBJ_BLOCK_CONFIG_SCREEN
+    public static Consumer<FunctionalObjBlockEntity> OPEN_OBJ_BLOCK_CONFIG_SCREEN
             = blockEntity -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
@@ -46,7 +46,7 @@ public final class ClientHooks {
     private ClientHooks() {
     }
 
-    public static void openObjBlockConfigScreen(BaseObjBlockEntity blockEntity) {
+    public static void openObjBlockConfigScreen(FunctionalObjBlockEntity blockEntity) {
         OPEN_OBJ_BLOCK_CONFIG_SCREEN.accept(blockEntity);
     }
 

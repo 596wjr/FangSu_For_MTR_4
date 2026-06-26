@@ -58,11 +58,11 @@ def forgeVer = minecraft_version + "-" + (forgeVersions[minecraft_version] ?: "4
 def forgeMajorVer = (forgeVersions[minecraft_version] ?: "47").split("[.-]")[0] as int
 
 // Fabric Loader & API 版本
-def fabricLoaderVer = "0.18.4"
+def fabricLoaderVer = "0.19.3"
 def fabricApiVersions = [
 //        "1.18.2": "0.77.0+1.18.2",
 //        "1.19.2": "0.77.0+1.19.2", "1.19.3": "0.76.1+1.19.3", "1.19.4": "0.87.2+1.19.4",
-        "1.20.1": "0.91.0+1.20.1"
+        "1.20.1": "0.92.9+1.20.1"
 ]
 def fabricApiVer = fabricApiVersions[minecraft_version] ?: fabricLoaderVer
 

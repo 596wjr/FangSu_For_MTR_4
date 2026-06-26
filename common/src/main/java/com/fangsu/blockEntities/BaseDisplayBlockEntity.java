@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
  *   <li>在 {@link #whenRendering()} 中绘制主模型后调用 {@link #renderDisplayModel(ObjBlockScriptContext)}</li>
  * </ul>
  */
-public abstract class BaseDisplayBlockEntity extends BaseObjBlockEntity {
+public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
 
     // ==================== 通用状态管理 ====================
 
