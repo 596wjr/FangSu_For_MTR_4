@@ -94,6 +94,9 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
         // whenLoading 可能改变 shape（长度/模型变化），清除形状缓存使 setShape 重新计算
         RotatableShapeHelper.getInstance().removeCache(getWorldPos());
 
+        // 重置错误标记，确保之前加载失败后可以重新尝试
+        markedError = false;
+
         ensureExtraConfig("extraConfig", "{}");
 
         mainModel = CustomItemHelper.checkMainModel(this, DEFAULT_MAIN_MODEL);

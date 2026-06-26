@@ -197,7 +197,8 @@ public class GraphicsTextureHelper {
     }
 
     /**
-     * 替换已注册抽象 ID 的绘制函数（不重建纹理，保留纹理现有内容）
+     * 替换已注册抽象 ID 的绘制函数（不重建纹理，保留纹理现有内容）。
+     * 会重置 available 标记，使 tick 循环重新执行新的绘制函数。
      */
     public synchronized void replaceDrawFunction(String id, DrawFunctionGt drawFunction) {
         String drawInfoId = idToDrawInfoId.get(id);
@@ -208,6 +209,8 @@ public class GraphicsTextureHelper {
 
         info.drawFunction = drawFunction;
         info.retryCount = 0;
+        // 标记为不可用，使 tick 循环能重新执行绘制函数（静态纹理在 available=true 时会跳过）
+        info.available = false;
     }
 
     /**
@@ -277,6 +280,21 @@ public class GraphicsTextureHelper {
         return info != null && info.available;
     }
 
+    /**
+     * 判断抽象 ID 是否有已注册的绘制条目（无论是否可用）。
+     * 用于决定是替换绘制函数还是创建新的纹理。
+     */
+    public synchronized boolean hasRegisteredGraphic(String id) {
+        String drawInfoId = idToDrawInfoId.get(id);
+        if (drawInfoId == null) return false;
+        GTInfo info = loadGts.get(drawInfoId);
+        return info != null && !info.isClosed;
+    }
+
+    public synchronized boolean hasRegisteredGraphic(BlockPos block) {
+        return hasRegisteredGraphic(getBlockId(block));
+    }
+
     /* =========================
        对外 API（BlockPos 兼容版本）
        ========================= */
@@ -295,6 +313,14 @@ public class GraphicsTextureHelper {
             DrawFunctionGt drawFunction
     ) {
         addDrawGraphicWithGt(getBlockId(block), drawInfo, drawFunction);
+    }
+
+    /**
+     * 替换已注册 BlockPos 的绘制函数（不重建纹理，保留纹理现有内容）。
+     * 用于参数变更时避免因为重建纹理而出现短暂黑色闪烁。
+     */
+    public synchronized void replaceDrawFunction(BlockPos block, DrawFunctionGt drawFunction) {
+        replaceDrawFunction(getBlockId(block), drawFunction);
     }
 
     public synchronized void removeDrawGraphic(BlockPos block) {

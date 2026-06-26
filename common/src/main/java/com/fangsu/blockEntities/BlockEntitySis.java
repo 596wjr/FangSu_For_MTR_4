@@ -54,6 +54,9 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
         // whenLoading 可能改变 shape，清除形状缓存使 setShape 重新计算
         RotatableShapeHelper.getInstance().removeCache(getWorldPos());
 
+        // 重置错误标记，确保之前加载失败后可以重新尝试
+        markedError = false;
+
         ensureExtraConfig("extraConfig", "{}");
         ensureExtraConfig("station", "0");
 

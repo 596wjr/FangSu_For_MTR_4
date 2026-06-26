@@ -212,6 +212,7 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
     protected final void triggerAsyncRouteReload(String routeJson) {
         final List<JsonElement>[] rawRoutesRef = new List[]{new ArrayList<>()};
         final Map<Long, Route>[] routeMapRef = new Map[]{new HashMap<>()};
+        final Map<Long, SimplifiedRoute>[] simplifiedRouteMapRef = new Map[]{new HashMap<>()};
         final Map<Long, Platform>[] platformMapRef = new Map[]{new HashMap<>()};
         final int myGen = ++asyncTaskGen;
 
@@ -228,6 +229,11 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
                     final Map<Long, Route> map = new HashMap<>();
                     for (final Route r : MinecraftClientData.getInstance().routes) map.put(r.getId(), r);
                     routeMapRef[0] = map;
+                    final Map<Long, SimplifiedRoute> srMap = new HashMap<>();
+                    for (final SimplifiedRoute sr : MinecraftClientData.getInstance().simplifiedRoutes) {
+                        srMap.put(sr.getId(), sr);
+                    }
+                    simplifiedRouteMapRef[0] = srMap;
                     final Map<Long, Platform> pMap = new HashMap<>();
                     for (final Platform p : MinecraftClientData.getInstance().platforms) pMap.put(p.getId(), p);
                     platformMapRef[0] = pMap;
@@ -238,14 +244,24 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
                     if (myGen != asyncTaskGen) return;
                     final List<RouteSelectInfo> results = new ArrayList<>();
                     final Map<Long, Route> rMap = routeMapRef[0];
+                    final Map<Long, SimplifiedRoute> srMap = simplifiedRouteMapRef[0];
                     final Map<Long, Platform> pMap = platformMapRef[0];
                     for (final JsonElement rawRoute : rawRoutesRef[0]) {
                         if (!rawRoute.isJsonArray() || rawRoute.getAsJsonArray().size() < 2) continue;
                         final JsonArray a = rawRoute.getAsJsonArray();
-                        final Route mtrRoute = rMap.get(a.get(0).getAsLong());
+                        final long routeId = a.get(0).getAsLong();
                         final Platform plat = pMap.get(a.get(1).getAsLong());
-                        if (mtrRoute != null && plat != null) {
+                        if (plat == null) continue;
+                        final Route mtrRoute = rMap.get(routeId);
+                        if (mtrRoute != null) {
                             results.add(new RouteSelectInfo(new LocalRoute(mtrRoute), plat));
+                        } else {
+                            // 如果在完整 Route 中找不到，尝试从 SimplifiedRoute 查找
+                            //（同步 reloadRoute 使用 MtrUtil.getRouteById 也会查 simplifiedRouteIdMap）
+                            final SimplifiedRoute sr = srMap.get(routeId);
+                            if (sr != null) {
+                                results.add(new RouteSelectInfo(new LocalRoute(sr), plat));
+                            }
                         }
                     }
                     if (results.isEmpty()) {
@@ -431,11 +447,17 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             scriptDone = true;
             return true;
         }
-        gtHelper.removeDrawGraphic(getBlockPos());
-        gtHelper.addDrawGraphicWithGt(getBlockPos(),
-                new GraphicsTextureHelper.DrawInfo(drawInfoId, w, h, true, false),
-                drawCallback
-        );
+        // 如果方块已有已注册的绘制条目，仅替换绘制函数以保留旧纹理内容，
+        // 避免先 remove 再 add 导致重建纹理出现短暂黑色闪烁（旧纹理被销毁，新纹理为空）
+        // 使用 hasRegisteredGraphic 而非 hasDrawGraphic，覆盖纹理可用前（background draw 未完成）的情况
+        if (gtHelper.hasRegisteredGraphic(getBlockPos())) {
+            gtHelper.replaceDrawFunction(getBlockPos(), drawCallback);
+        } else {
+            gtHelper.addDrawGraphicWithGt(getBlockPos(),
+                    new GraphicsTextureHelper.DrawInfo(drawInfoId, w, h, true, false),
+                    drawCallback
+            );
+        }
         lastRegisteredDrawInfoId = drawInfoId;
         scriptDone = true;
         return true;
