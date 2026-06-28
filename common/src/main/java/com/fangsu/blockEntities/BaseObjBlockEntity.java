@@ -61,6 +61,7 @@ public abstract class BaseObjBlockEntity extends BlockEntity {
     @Override
     public void saveAdditional(@NotNull CompoundTag tag) {
         super.saveAdditional(tag);
+        if(markedError) return;
 
         tag.putBoolean("fullLight", fullLight);
 
@@ -77,6 +78,7 @@ public abstract class BaseObjBlockEntity extends BlockEntity {
     @Override
     public void load(@NotNull CompoundTag tag) {
         super.load(tag);
+        markedError = false;
 
         fullLight = tag.getBoolean("fullLight");
 

@@ -141,7 +141,7 @@ public class GraphicsTextureHelper {
                             info.flameCompleted = true;
                             info.retryCount++;
                             Main.LOGGER.warn("Draw failed (attempt {}/{}) for {}: {}",
-                                    info.retryCount, GTInfo.MAX_RETRIES, info.ids, t.getMessage());
+                                    info.retryCount, GTInfo.MAX_RETRIES, info.ids, t.toString());
                             return null;
                         })
                         .thenRun(() -> info.drawing = false);
@@ -198,7 +198,7 @@ public class GraphicsTextureHelper {
 
     /**
      * 替换已注册抽象 ID 的绘制函数（不重建纹理，保留纹理现有内容）。
-     * 会重置 available 标记，使 tick 循环重新执行新的绘制函数。
+     * 会重置 available 和 flameCompleted 标记，使 tick 循环能重新执行新的绘制函数。
      */
     public synchronized void replaceDrawFunction(String id, DrawFunctionGt drawFunction) {
         String drawInfoId = idToDrawInfoId.get(id);
@@ -209,8 +209,10 @@ public class GraphicsTextureHelper {
 
         info.drawFunction = drawFunction;
         info.retryCount = 0;
-        // 标记为不可用，使 tick 循环能重新执行绘制函数（静态纹理在 available=true 时会跳过）
+        // 标记为不可用，使 tick 循环不会因静态纹理检查而跳过
         info.available = false;
+        // 重置帧完成标记，使 tick 循环通过 !flameCompleted 检查
+        info.flameCompleted = true;
     }
 
     /**

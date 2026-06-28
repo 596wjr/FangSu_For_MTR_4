@@ -22,7 +22,6 @@ import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonObject;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.resources.ResourceManager;
 
 import java.util.ArrayList;
@@ -105,26 +104,6 @@ public class MainClient {
                 Main.LOGGER.error("Failed to reload FangSu shaders", e);
             }
 
-            try {
-                CustomMtrLifts customMtrLifts = CustomMtrLifts.getInstance();
-                customMtrLifts.load();
-                {
-                    JsonObject defaultLift = new JsonObject();
-                    defaultLift.addProperty("id", "default");
-                    defaultLift.addProperty("texture", "mtr:textures/entity/lift_1.png");
-                    defaultLift.addProperty("name", ComponentHelper.translatable("mtr.fangsu.lift.vanilla").getString());
-                    defaultLift.addProperty("description", ComponentHelper.translatable("mtr.fangsu.lift.vanilla.description").getString());
-                    JsonObject nonTransparent = new JsonObject();
-                    nonTransparent.addProperty("id", "non_transparent");
-                    nonTransparent.addProperty("texture", "fangsu:textures/entity/non_transparent.png");
-                    nonTransparent.addProperty("name", ComponentHelper.translatable("fangsu:textures/entity/non_transparent.png").getString());
-                    nonTransparent.addProperty("description", ComponentHelper.translatable("mtr.fangsu.lift.non_transparent.description").getString());
-                    customMtrLifts.injectBuiltInTexturedLifts(defaultLift);
-                    customMtrLifts.injectBuiltInTexturedLifts(nonTransparent);
-                }
-            } catch (Exception e) {
-                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
-            }
             try {
                 LcdManager.getInstance().injectLcd("mtr", MtrLcd::new);
             } catch (Exception e) {

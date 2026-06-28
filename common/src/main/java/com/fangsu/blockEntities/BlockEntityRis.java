@@ -170,7 +170,6 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
             arrowDirection = 0;
         }
         extraConfigs.put("arrowDirection", String.valueOf(arrowDirection));
-        resetDrawingState();
         sendUpdateC2S();
         return InteractionResult.SUCCESS;
     }
@@ -198,7 +197,6 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
                 () -> getExtraConfigInt("arrowDirection", 0),
                 (v) -> {
                     extraConfigs.put("arrowDirection", v.toString());
-                    resetDrawingState();
                     sendUpdateC2S();
                 }
         ));
@@ -232,7 +230,6 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
                                     }
                                     userExtraConfigs.put(savePos, new JsonPrimitive(String.valueOf(v)));
                                     extraConfigs.put("extraConfig", Main.GSON.toJson(userExtraConfigs));
-                                    resetDrawingState();
                                     sendUpdateC2S();
                                 }
                             }
@@ -274,7 +271,6 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
                                     saveRoutes.add(List.of(info.route.id, info.plat.getId()));
                                 }
                                 extraConfigs.put("routes", Main.GSON.toJson(saveRoutes));
-                                resetDrawingState();
                                 sendUpdateC2S();
                             },
                             getBlockPos(), maxSelect

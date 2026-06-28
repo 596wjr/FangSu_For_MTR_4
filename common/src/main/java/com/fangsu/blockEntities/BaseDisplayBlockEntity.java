@@ -319,6 +319,10 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
      */
     private ResourceLocation lastDispTextureId = null;
     /**
+     * 上一次渲染的显示模型实例，用于检测模型是否被重建（whenLoading 后 uploadLater 替换了模型）
+     */
+    private ModelCluster lastDispModel = null;
+    /**
      * 显示纹理是否已获取并可用，为 true 时跳过每帧的 synchronized 查询
      */
     private boolean dispTextureReady = false;
@@ -483,17 +487,23 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             return;
         }
 
-        // 纹理已就绪：直接绘制，跳过每帧的 synchronized 查询
+        // 检测模型是否被重建（whenLoading 后 uploadLater 替换了 ModelCluster）
+        // 如果模型实例变了，需要重新应用纹理，否则新模型会使用默认黑色贴图
         if (dispTextureReady) {
-            ctx.drawModel(dispModel, null);
-            return;
+            if (dispModel != lastDispModel) {
+                dispTextureReady = false;
+            } else {
+                ctx.drawModel(dispModel, null);
+                return;
+            }
         }
 
-        // 首次获取纹理（合并 isTextureAvailable + getBlockGraphics 为一次 synchronized 调用）
+        // 获取纹理并应用到模型
         GraphicsTexture tex = GraphicsTextureHelper.getInstance().getBlockGraphics(getBlockPos());
         if (tex != null && tex.isValid()) {
             dispModel.replaceAllTexture(tex.identifier);
             lastDispTextureId = tex.identifier;
+            lastDispModel = dispModel;
             dispTextureReady = true;
             ctx.drawModel(dispModel, null);
         }
@@ -521,6 +531,16 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
         resetRetryTimer();
         // 清除待处理的异步任务结果，避免 UI 更新后过期数据覆盖正确路线
         cancelPendingAsyncTask();
+    }
+
+    /**
+     * 重写父类方法，在发送配置同步前自动重置绘制状态。
+     * 确保切换模型、刷子右键等操作后立即触发重新绘制，避免显示黑色默认贴图。
+     */
+    @Override
+    public void sendUpdateC2S() {
+        resetDrawingState();
+        super.sendUpdateC2S();
     }
 
     // ================================================================
