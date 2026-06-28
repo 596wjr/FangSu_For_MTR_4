@@ -69,6 +69,10 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
 
         parseUserExtraConfigs(getExtraConfig("extraConfig", "{}"));
 
+        // 服务端不需要加载模型和绘制，仅同步路线数据
+        routes = reloadRoute(getExtraConfig("routes", "[]"));
+        if (level == null || !level.isClientSide) return;
+
         try {
             content = ContentInfoUtil.getRisContent(mainModel, subModel);
             if (content == null) {
@@ -88,7 +92,7 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
             resetDrawingState();
         } catch (Exception e) {
             Main.LOGGER.error("Route info sign content load error", e);
-            markedError = true;
+            if (level != null && level.isClientSide) markedError = true;
         }
     }
 
@@ -164,6 +168,7 @@ public class BlockEntityRis extends BaseDisplayBlockEntity implements RouteDrawe
 
     @Override
     public InteractionResult whenUseWithBrush(Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (!level.isClientSide) return InteractionResult.SUCCESS;
         int arrowDirection = getExtraConfigInt("arrowDirection", 0);
         arrowDirection += 1;
         if (arrowDirection >= 3) {
