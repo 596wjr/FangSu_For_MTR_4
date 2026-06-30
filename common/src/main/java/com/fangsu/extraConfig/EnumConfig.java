@@ -1,6 +1,7 @@
 package com.fangsu.extraConfig;
 
 import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.mappings.LocalComponent;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
@@ -23,6 +24,16 @@ public class EnumConfig extends ConfigEntry<Integer> {
     ) {
         super(title, spec, getter, setter);
         this.entries = entries;
+    }
+
+    public EnumConfig(
+            LocalComponent title,
+            ConfigSpec spec,
+            List<? extends Component> entries,
+            Supplier<Integer> getter,
+            Consumer<Integer> setter
+    ) {
+        this(title.getRaw(), spec,entries, getter, setter);
     }
 
     @Override

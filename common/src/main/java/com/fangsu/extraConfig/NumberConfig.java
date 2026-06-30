@@ -1,6 +1,7 @@
 package com.fangsu.extraConfig;
 
 import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.mappings.LocalComponent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -30,6 +31,15 @@ public class NumberConfig extends ConfigEntry<Float> {
         this.min = spec.getFloat("min", 0f);
         this.max = spec.getFloat("max", 1f);
         this.step = spec.getFloat("step", 0f);
+    }
+
+    public NumberConfig(
+            LocalComponent title,
+            ConfigSpec spec,
+            Supplier<Float> getter,
+            Consumer<Float> setter
+    ) {
+        this(title.getRaw(), spec, getter, setter);
     }
 
     @Override
