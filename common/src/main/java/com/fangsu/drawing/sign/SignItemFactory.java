@@ -5,7 +5,7 @@ import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.resources.ResourceLocation;
+import com.fangsu.mappings.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -30,6 +30,13 @@ public final class SignItemFactory {
         REGISTRY.put("routeb", RouteItemB::new);
         REGISTRY.put("destination", DestinationItem::new);
         REGISTRY.put("trainicon", TrainIconItem::new);
+    }
+    
+    public static void add(String type, Function<JsonObject, SignItem> factory) {
+        if (REGISTRY.containsKey(type)) {
+            Main.LOGGER.warn("[FangSu] SignItemFactory: Type {} is already registered. Overwriting.", type);
+        }
+        REGISTRY.put(type, factory);
     }
 
     public static Function<JsonObject, SignItem> get(String type) {

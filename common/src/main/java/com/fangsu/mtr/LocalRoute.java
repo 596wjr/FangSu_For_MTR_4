@@ -131,30 +131,32 @@ public class LocalRoute {
                     continue;
                 }
 
-                // 获取换乘信息：通过站台查找该站所有路线
                 final Set<ColorNameTuple> trans = new HashSet<>();
                 final Platform plat = MtrUtil.getPlatformById(sp.getPlatformId());
                 if (plat != null && plat.area != null) {
                     for (final Platform plat1 : plat.area.savedRails) {
                         for (final Route route : plat1.routes) {
-                            if (!route.getHidden() &&
-                                    !(TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.getName(), true)) &&
-                                            TextUtil.getCjkMatching(this.name, false).equals(TextUtil.getCjkMatching(route.getName(), false)))
-                            ) {
-                                trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
+                            if (route.getHidden()) continue;
+                            if (route.getId() == this.id) continue;
+                            if (Objects.equals(TextUtil.getNonExtraParts(route.getName()),TextUtil.getNonExtraParts(name))) {
+                                continue;
                             }
+                            trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
                         }
                     }
                 } else {
-                    // 远端车站：从 SimplifiedRoute 查找经过该站的路线
+                    // 远端车站：从 SimplifiedRoute 查找经过该站的其他路线（排除同线路反向）
                     final long stationId = sp.getStationId();
                     for (final SimplifiedRoute otherSr : MtrUtil.getSimplifiedRoutes()) {
-                        if (otherSr.getId() != this.id) {
-                            for (final SimplifiedRoutePlatform osp : otherSr.getPlatforms()) {
-                                if (osp.getStationId() == stationId) {
-                                    trans.add(new ColorNameTuple(otherSr.getColor(), TextUtil.getNonExtraParts(otherSr.getName())));
-                                    break;
-                                }
+                        if (otherSr.getId() == this.id) continue;
+                        if (otherSr.getName().isEmpty()) continue;
+                        if (Objects.equals(TextUtil.getNonExtraParts(otherSr.getName()),TextUtil.getNonExtraParts(name))) {
+                            continue;
+                        }
+                        for (final SimplifiedRoutePlatform osp : otherSr.getPlatforms()) {
+                            if (osp.getStationId() == stationId) {
+                                trans.add(new ColorNameTuple(otherSr.getColor(), TextUtil.getNonExtraParts(otherSr.getName())));
+                                break;
                             }
                         }
                     }
@@ -177,12 +179,12 @@ public class LocalRoute {
                         final Set<ColorNameTuple> trans = new HashSet<>();
                         for (final Platform plat1 : stn.savedRails) {
                             for (final Route route : plat1.routes) {
-                                if (!route.getHidden() &&
-                                        !(TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.getName(), true)) &&
-                                                TextUtil.getCjkMatching(this.name, false).equals(TextUtil.getCjkMatching(route.getName(), false)))
-                                ) {
-                                    trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
+                                if (route.getHidden()) continue;
+                                if (route.getId() == this.id) continue;
+                                if (TextUtil.getCjkMatching(this.name, true).equals(TextUtil.getCjkMatching(route.getName(), true))) {
+                                    continue;
                                 }
+                                trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
                             }
                         }
                         if (!trans.isEmpty()) {

@@ -26,6 +26,8 @@ import net.minecraft.world.level.Level;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
 import org.mtr.core.data.RoutePlatformData;
+import org.mtr.core.data.SimplifiedRoute;
+import org.mtr.core.data.SimplifiedRoutePlatform;
 import org.mtr.core.data.Station;
 import org.mtr.mod.client.MinecraftClientData;
 
@@ -89,27 +91,57 @@ public class TicketMachineMainScreen extends Screen {
         this.station = MtrUtil.getStationAt(MtrUtil.getCenterVector3f(this.pos));
 
         final int currentZone = this.station != null ? (int) this.station.getZone1() : 0;
-        final Map<String, RouteFareInfo> routeMap = new HashMap<>();
-        for (final Route route : MinecraftClientData.getInstance().routes) {
-            final String key = TextUtil.getNonExtraParts(route.getName());
-            final RouteFareInfo routeInfo = routeMap.computeIfAbsent(
-                    key,
-                    k -> new RouteFareInfo(
-                            k,
-                            new Color(route.getColor()).getRGB(),
-                            new HashSet<>()
-                    )
-            );
-            for (final RoutePlatformData routePlatform : route.getRoutePlatforms()) {
-                final Platform platform = routePlatform.getPlatform();
-                final Station stn = platform != null ? platform.area : null;
-                if (stn == null) continue;
-                routeInfo.stations().add(
-                        new StationFareInfo(
-                                stn.getName(),
-                                MtrTicketSystem.calcFare(currentZone, (int) stn.getZone1())
+        final Map<String, RouteFareInfo> routeMap = new LinkedHashMap<>();
+        // 优先使用 SimplifiedRoute（始终完整），回退到 Route
+        final boolean hasData = !MinecraftClientData.getInstance().simplifiedRoutes.isEmpty();
+        if (hasData) {
+            for (final SimplifiedRoute sr : MinecraftClientData.getInstance().simplifiedRoutes) {
+                if (sr.getName().isEmpty()) continue;
+                final String key = TextUtil.getNonExtraParts(sr.getName());
+                final RouteFareInfo routeInfo = routeMap.computeIfAbsent(
+                        key,
+                        k -> new RouteFareInfo(
+                                sr.getName(),
+                                new Color(sr.getColor()).getRGB(),
+                                new LinkedHashSet<>()
                         )
                 );
+                for (final SimplifiedRoutePlatform sp : sr.getPlatforms()) {
+                    final String stnName = sp.getStationName();
+                    if (stnName == null || stnName.isEmpty()) continue;
+                    final int stnZone = 0;
+                    routeInfo.stations().add(
+                            new StationFareInfo(
+                                    stnName,
+                                    MtrTicketSystem.calcFare(currentZone, stnZone)
+                            )
+                    );
+                }
+            }
+        } else {
+            // 回退：直接用 Route 数据
+            for (final Route route : MinecraftClientData.getInstance().routes) {
+                if (route.getName().isEmpty()) continue;
+                final String key = TextUtil.getNonExtraParts(route.getName());
+                final RouteFareInfo routeInfo = routeMap.computeIfAbsent(
+                        key,
+                        k -> new RouteFareInfo(
+                                route.getName(),
+                                new Color(route.getColor()).getRGB(),
+                                new LinkedHashSet<>()
+                        )
+                );
+                for (final RoutePlatformData rpd : route.getRoutePlatforms()) {
+                    final Platform plat = rpd.getPlatform();
+                    final Station stn = plat != null ? plat.area : null;
+                    if (stn == null) continue;
+                    routeInfo.stations().add(
+                            new StationFareInfo(
+                                    stn.getName(),
+                                    MtrTicketSystem.calcFare(currentZone, (int) stn.getZone1())
+                            )
+                    );
+                }
             }
         }
         routes = new ArrayList<>(routeMap.values());

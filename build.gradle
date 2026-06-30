@@ -153,6 +153,7 @@ subprojects {
 //
 //        }
 //        modImplementation "maven.modrinth:mtr-nte:$rootProject.nte_version"
+//        compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
 
         compileOnly "maven.modrinth:minecraft-transit-railway:${rootProject.mtr_version_forge}"
         compileOnly "maven.modrinth:jcm:${rootProject.jcm_version_forge}"

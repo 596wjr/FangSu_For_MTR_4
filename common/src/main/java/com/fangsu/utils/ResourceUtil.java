@@ -87,6 +87,9 @@ public class ResourceUtil {
         return lines.toArray(new String[0]);
     }
 
+    public static String[] loadStringAsArray(com.fangsu.mappings.ResourceLocation location) throws IOException {
+        return loadStringAsArray(location.getRaw());
+    }
 
     public static byte[] loadResourceBytes(ResourceLocation location) throws IOException {
         if (resourceManager == null) {
@@ -103,6 +106,9 @@ public class ResourceUtil {
         }
     }
 
+    public static byte[] loadResourceBytes(com.fangsu.mappings.ResourceLocation location) throws IOException {
+        return loadResourceBytes(location.getRaw());
+    }
 
     /**
      * 从文件加载字符串
@@ -132,6 +138,10 @@ public class ResourceUtil {
             register.put(GlobalRegisterKey, s);
             return s;
         }
+    }
+
+    public static String loadString(com.fangsu.mappings.ResourceLocation location) throws IOException {
+        return loadString(location.getRaw());
     }
 
     /**
@@ -172,6 +182,10 @@ public class ResourceUtil {
             Main.LOGGER.warn("Image resource not found: {}", location);
             throw e;
         }
+    }
+
+    public static BufferedImage loadImage(com.fangsu.mappings.ResourceLocation location) throws IOException {
+        return loadImage(location.getRaw());
     }
 
     public static RawModel loadModel(ResourceLocation location, Boolean flipV) throws IOException {
@@ -238,27 +252,15 @@ public class ResourceUtil {
         if (existing != null) {
             return existing;
         }
-        Map<String, DynamicModelHolder> map = new ConcurrentHashMap<>();
-        existing = (Map<String, DynamicModelHolder>) register.putIfAbsent(GlobalRegisterKey, map);
-        if (existing != null) {
-            return existing;
+        Map<String, DynamicModelHolder> map = new HashMap<>();
+        Map<String, RawModel> models = loadPartedModel(location, flipV);
+        for (Map.Entry<String, RawModel> entry : models.entrySet()) {
+            RawModel model = entry.getValue();
+            DynamicModelHolder dmh = new DynamicModelHolder();
+            dmh.uploadLater(model);
+            map.put(entry.getKey(), dmh);
         }
-
-        // 异步加载模型，避免首次放置方块时阻塞主线程
-        MODEL_LOADER.submit(() -> {
-            try {
-                Map<String, RawModel> models = loadPartedModel(location, flipV);
-                for (Map.Entry<String, RawModel> entry : models.entrySet()) {
-                    RawModel model = entry.getValue();
-                    DynamicModelHolder dmh = new DynamicModelHolder();
-                    dmh.uploadLater(model);
-                    map.put(entry.getKey(), dmh);
-                }
-            } catch (IOException e) {
-                Main.LOGGER.error("Failed to load parted model async: {}", location, e);
-            }
-        });
-
+        register.put(GlobalRegisterKey, map);
         return map;
     }
 
@@ -281,6 +283,10 @@ public class ResourceUtil {
         }
 
         return new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+    }
+
+    public static Font loadFont(com.fangsu.mappings.ResourceLocation location) {
+        return loadFont(location.getRaw());
     }
 
     /**
@@ -373,6 +379,10 @@ public class ResourceUtil {
         return json;
     }
 
+    public static @NotNull JsonElement simpleLoadAsJson(com.fangsu.mappings.ResourceLocation location) {
+        return simpleLoadAsJson(location.getRaw());
+    }
+
     /**
      * 从所有资源包加载并合并JSON文件
      * 合并规则：第一层对象合并属性，第一层数组合并元素，更深层直接覆盖
@@ -380,6 +390,10 @@ public class ResourceUtil {
      * @param location 资源位置
      * @return 合并后的JsonElement
      */
+    public static @NotNull JsonElement loadAsJSON(com.fangsu.mappings.ResourceLocation location) {
+        return loadAsJSON(location.getRaw());
+    }
+
     public static @NotNull JsonElement loadAsJSON(ResourceLocation location) {
         String GlobalRegisterKey = "Identifier" + location.toString() + "@Json";
         if (register.containsKey(GlobalRegisterKey)) {

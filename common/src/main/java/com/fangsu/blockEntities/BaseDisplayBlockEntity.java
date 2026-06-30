@@ -87,35 +87,38 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
     private long lastRetryTime = 0;
 
     /**
-     * 外部 MTR 数据变更检测：记录 SimplifiedRoute 的 name+color hash，
-     * 仅在数据实际变化时才触发重载，避免每 2 秒定时闪烁。
+     * 外部 MTR 数据变更检测：哈希+定时器双保险。
+     * 哈希检测避免每 2 秒无意义闪烁；30 秒定时器确保首次漏检后也能补上。
      */
     private int lastRouteDataHash = 0;
+    private long lastDataCheckTime = 0;
+    private static final long DATA_CHECK_FALLBACK_MS = 30000;
 
-    /**
-     * 检查外部 MTR 数据是否已变更（路线颜色、名称等）。
-     * 仅在数据实际变化时返回 true，取代原有的定时轮询。
-     */
     protected boolean shouldCheckDataChange() {
+        final long now = System.currentTimeMillis();
         try {
             final int currentHash = computeRouteDataHash();
             if (currentHash != lastRouteDataHash) {
                 lastRouteDataHash = currentHash;
+                lastDataCheckTime = now;
                 return true;
             }
         } catch (Exception ignored) {
         }
+        // 定时回退：30 秒至少检查一次
+        if (now - lastDataCheckTime >= DATA_CHECK_FALLBACK_MS) {
+            lastDataCheckTime = now;
+            return true;
+        }
         return false;
     }
 
-    /**
-     * 计算当前 SimplifiedRoute 数据的哈希值，用于检测变化。
-     */
     private static int computeRouteDataHash() {
         int hash = 0;
-        for (final var sr : MinecraftClientData.getInstance().simplifiedRoutes) {
+        for (final SimplifiedRoute sr : MinecraftClientData.getInstance().simplifiedRoutes) {
             hash = hash * 31 + (int) (sr.getId() ^ (sr.getId() >>> 32));
-            hash = hash * 31 + sr.getName().hashCode();
+            final String name = sr.getName();
+            hash = hash * 31 + (name != null ? name.hashCode() : 0);
             hash = hash * 31 + sr.getColor();
         }
         return hash;
