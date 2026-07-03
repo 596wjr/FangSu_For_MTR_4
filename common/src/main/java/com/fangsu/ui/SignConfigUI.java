@@ -298,9 +298,10 @@ public class SignConfigUI extends Screen {
         int gap = 6;
         int usableWidth = width - 32;
         int lineItems = Math.max(1, usableWidth / (cell + gap));
-        int contentHeight = ((EDITOR_ITEMS.size() + lineItems - 1) / lineItems) * (cell + gap);
+        final var itemsList = new ArrayList<>(EDITOR_ITEMS);
+        int contentHeight = ((itemsList.size() + lineItems - 1) / lineItems) * (cell + gap);
         ctx.enableScissor(12, top, width - 12, height - 12);
-        for (int idx = 0; idx < EDITOR_ITEMS.size(); idx++) {
+        for (int idx = 0; idx < itemsList.size(); idx++) {
             int row = idx / lineItems;
             int col = idx % lineItems;
             int x = 16 + col * (cell + gap);
@@ -313,7 +314,7 @@ public class SignConfigUI extends Screen {
             ctx.fill(x, y + cell - 1, x + cell, y + cell, border);
             ctx.fill(x, y, x + 1, y + cell, border);
             ctx.fill(x + cell - 1, y, x + cell, y + cell, border);
-            SignItem token = EDITOR_ITEMS.get(idx);
+            SignItem token = itemsList.get(idx);
             var location = token.getIconLocation() == null ? new com.fangsu.mappings.ResourceLocation("mtrsteamloco:imgnnotfound.png") : token.getIconLocation();
             ctx.blit(location.getRaw(), x + 3, y + 3, 0, 0, cell - 6, cell - 6, cell - 6, cell - 6);
             if (hover) ctx.drawString(font, "+", x + cell / 2 - 3, y + cell / 2 - 4, 0xFFFFFF, false);

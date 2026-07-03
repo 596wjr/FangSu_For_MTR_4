@@ -55,7 +55,7 @@ public class TrainIconItem extends SignItem {
             g.fillRoundRect((int) (x), (int) y, (int) u, (int) u, (int) (u * 0.15), (int) (u * 0.15));
         }
         try {
-            g.drawImage(ResourceUtil.loadImage(ICON_LOCATION), (int) x, (int) y, (int) u, (int) u, null);
+            g.drawImage(ResourceUtil.loadImage(ICON_LOCATION.getRaw()), (int) x, (int) y, (int) u, (int) u, null);
         } catch (IOException ignored) {
         }
     }

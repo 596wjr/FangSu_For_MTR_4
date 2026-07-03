@@ -7,7 +7,6 @@ import com.fangsu.scripting.TextUtil;
 import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.network.chat.Component;
 import com.fangsu.mappings.ResourceLocation;
 
 import java.awt.*;
@@ -55,7 +54,7 @@ public class TextItem extends SignItem {
         String[] lines = TextUtil.getNonExtraParts(text).split("\\|");
         g.setColor(color);
         Font font;
-        font = ResourceUtil.loadFont(fontLocation);
+        font = ResourceUtil.loadFont(fontLocation.getRaw());
         return G2dTextHelper.getMultiLinesWidth(g, font, (int) unit, lines);
     }
 
@@ -66,7 +65,7 @@ public class TextItem extends SignItem {
         float u = ctx.unit();
         g.setColor(color);
         Font font;
-        font = ResourceUtil.loadFont(fontLocation);
+        font = ResourceUtil.loadFont(fontLocation.getRaw());
         G2dTextHelper.drawStrMultiLines(g, font, (int) ctx.x(), (int) ctx.y() - (int) u, (int) u, align, lines);
     }
 
@@ -80,7 +79,7 @@ public class TextItem extends SignItem {
         List<ConfigEntry<?>> configs = new ArrayList<>();
         configs.add(new StringConfig(
                 ComponentHelper.translatable("ui.fangsu.common.text"),
-                new ConfigSpec("str"),
+                new ConfigSpec("str").setParam("multiline", new JsonPrimitive(true)).setParam("lines", new JsonPrimitive(2)),
                 () -> this.text,
                 (v) -> this.text = v
         ));
@@ -101,11 +100,18 @@ public class TextItem extends SignItem {
                 () -> this.align,
                 (v) -> this.align = v
         ));
-        configs.add(new StringConfig(
+//        configs.add(new StringConfig(
+//                ComponentHelper.translatable("ui.fangsu.common.fontLocation"),
+//                new ConfigSpec("str").setParam("multiline", new JsonPrimitive(true)).setParam("lines", new JsonPrimitive(2)),
+//                () -> this.fontLocation.toString(),
+//                (v) -> this.fontLocation = new ResourceLocation(v)
+//        ));
+        configs.add(new ResourceConfig(
                 ComponentHelper.translatable("ui.fangsu.common.fontLocation"),
                 new ConfigSpec("str"),
                 () -> this.fontLocation.toString(),
-                (v) -> this.fontLocation = new ResourceLocation(v)
+                (v) -> this.fontLocation = new ResourceLocation(v),
+                List.of(".ttf", ".otf")
         ));
         return configs;
     }

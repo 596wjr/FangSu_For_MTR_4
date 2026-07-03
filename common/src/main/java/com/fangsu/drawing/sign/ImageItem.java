@@ -66,7 +66,7 @@ public class ImageItem extends SignItem {
         float corner = u * (1 - scale) / 2;
         if (image == null) {
             try {
-                image = ResourceUtil.loadImage(imageLocation);
+                image = ResourceUtil.loadImage(imageLocation.getRaw());
             } catch (IOException e) {
                 image = null;
             }

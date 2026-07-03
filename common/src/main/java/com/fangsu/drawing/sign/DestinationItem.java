@@ -30,7 +30,7 @@ public class DestinationItem extends SignItem {
         if (json.has("align")) {
             align = json.getAsJsonPrimitive("align").getAsInt();
         } else align = 0;
-        font = ResourceUtil.loadFont(new ResourceLocation("fangsu:fonts/source-han-sans-bold.otf"));
+        font = ResourceUtil.loadFont(new ResourceLocation("fangsu:fonts/source-han-sans-bold.otf").getRaw());
     }
 
     @Override

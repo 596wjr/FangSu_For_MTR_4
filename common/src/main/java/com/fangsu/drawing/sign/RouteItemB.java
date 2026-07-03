@@ -34,7 +34,7 @@ public class RouteItemB extends SignItem {
             route = null;
             routeId = -1;
         }
-        font = ResourceUtil.loadFont(new ResourceLocation("fangsu:fonts/source-han-sans-bold.otf"));
+        font = ResourceUtil.loadFont(new ResourceLocation("fangsu:fonts/source-han-sans-bold.otf").getRaw());
     }
 
     @Override

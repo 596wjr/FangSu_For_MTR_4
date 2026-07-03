@@ -87,10 +87,6 @@ public class ResourceUtil {
         return lines.toArray(new String[0]);
     }
 
-    public static String[] loadStringAsArray(com.fangsu.mappings.ResourceLocation location) throws IOException {
-        return loadStringAsArray(location.getRaw());
-    }
-
     public static byte[] loadResourceBytes(ResourceLocation location) throws IOException {
         if (resourceManager == null) {
             return null;
@@ -104,10 +100,6 @@ public class ResourceUtil {
         } catch (IOException e) {
             return null;
         }
-    }
-
-    public static byte[] loadResourceBytes(com.fangsu.mappings.ResourceLocation location) throws IOException {
-        return loadResourceBytes(location.getRaw());
     }
 
     /**
@@ -138,10 +130,6 @@ public class ResourceUtil {
             register.put(GlobalRegisterKey, s);
             return s;
         }
-    }
-
-    public static String loadString(com.fangsu.mappings.ResourceLocation location) throws IOException {
-        return loadString(location.getRaw());
     }
 
     /**
@@ -182,10 +170,6 @@ public class ResourceUtil {
             Main.LOGGER.warn("Image resource not found: {}", location);
             throw e;
         }
-    }
-
-    public static BufferedImage loadImage(com.fangsu.mappings.ResourceLocation location) throws IOException {
-        return loadImage(location.getRaw());
     }
 
     public static RawModel loadModel(ResourceLocation location, Boolean flipV) throws IOException {
@@ -285,10 +269,6 @@ public class ResourceUtil {
         return new Font(Font.SANS_SERIF, Font.PLAIN, 12);
     }
 
-    public static Font loadFont(com.fangsu.mappings.ResourceLocation location) {
-        return loadFont(location.getRaw());
-    }
-
     /**
      * 检查资源是否存在
      */
@@ -379,10 +359,6 @@ public class ResourceUtil {
         return json;
     }
 
-    public static @NotNull JsonElement simpleLoadAsJson(com.fangsu.mappings.ResourceLocation location) {
-        return simpleLoadAsJson(location.getRaw());
-    }
-
     /**
      * 从所有资源包加载并合并JSON文件
      * 合并规则：第一层对象合并属性，第一层数组合并元素，更深层直接覆盖
@@ -390,10 +366,6 @@ public class ResourceUtil {
      * @param location 资源位置
      * @return 合并后的JsonElement
      */
-    public static @NotNull JsonElement loadAsJSON(com.fangsu.mappings.ResourceLocation location) {
-        return loadAsJSON(location.getRaw());
-    }
-
     public static @NotNull JsonElement loadAsJSON(ResourceLocation location) {
         String GlobalRegisterKey = "Identifier" + location.toString() + "@Json";
         if (register.containsKey(GlobalRegisterKey)) {
@@ -554,6 +526,45 @@ public class ResourceUtil {
         }
 
         return result;
+    }
+
+    /**
+     * 列出指定命名空间和路径前缀下的所有资源文件
+     *
+     * @param namespace  命名空间过滤，null表示所有命名空间
+     * @param pathPrefix 路径前缀过滤，null表示所有路径
+     * @param suffixes   文件后缀过滤集合（如 [".json", ".png"]），null或空集合表示所有后缀
+     * @return 匹配的ResourceLocation列表，按路径排序
+     */
+    public static List<ResourceLocation> listResources(String namespace, String pathPrefix, Collection<String> suffixes) {
+        if (resourceManager == null) {
+            return Collections.emptyList();
+        }
+
+        //#if MC_VERSION >= 11900
+        Map<ResourceLocation, Resource> resources = resourceManager.listResources(
+                pathPrefix != null ? pathPrefix : "",
+                loc -> {
+                    if (namespace != null && !loc.getNamespace().equals(namespace)) return false;
+                    if (suffixes != null && !suffixes.isEmpty()) {
+                        boolean matches = false;
+                        for (String s : suffixes) {
+                            if (loc.getPath().endsWith(s)) {
+                                matches = true;
+                                break;
+                            }
+                        }
+                        if (!matches) return false;
+                    }
+                    return true;
+                }
+        );
+        List<ResourceLocation> result = new ArrayList<>(resources.keySet());
+        result.sort(Comparator.comparing(ResourceLocation::toString));
+        return result;
+        //#else
+        //$$ return Collections.emptyList();
+        //#endif
     }
 
     public static String hashTo12Chars(String input) {

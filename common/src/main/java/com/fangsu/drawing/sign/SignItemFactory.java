@@ -15,7 +15,7 @@ public final class SignItemFactory {
     private static final ResourceLocation SIGN_LOCATION = new ResourceLocation("fangsu:sign/script_sign.json");
 
     private static final Map<String, Function<JsonObject, SignItem>> REGISTRY = new HashMap<>();
-    public static final List<SignItem> EDITOR_ITEMS = new ArrayList<>();
+    public static final Set<SignItem> EDITOR_ITEMS = new HashSet<>();
 
     private SignItemFactory() {
     }
@@ -58,7 +58,7 @@ public final class SignItemFactory {
     public static void init() {
         registerBuiltInSign();
         registerJsItems();
-        JsonElement builtInSign = ResourceUtil.simpleLoadAsJson(new ResourceLocation("fangsu:sign/builtin_sign.json"));
+        JsonElement builtInSign = ResourceUtil.simpleLoadAsJson(new ResourceLocation("fangsu:sign/builtin_sign.json").getRaw());
         if (builtInSign.isJsonObject()) {
             JsonObject obj = builtInSign.getAsJsonObject();
             if (obj.has("signItems") && obj.get("signItems").isJsonArray()) {
@@ -71,7 +71,7 @@ public final class SignItemFactory {
                 }
             }
         }
-        JsonElement mtrItem = ResourceUtil.loadAsJSON(new ResourceLocation("mtr:mtr_custom_resources.json"));
+        JsonElement mtrItem = ResourceUtil.loadAsJSON(new ResourceLocation("mtr:mtr_custom_resources.json").getRaw());
         Map<String, SignItem> mtrItems = getMtrItems(mtrItem);
         for (Map.Entry<String, SignItem> entry : mtrItems.entrySet()) {
             SignItem current = entry.getValue();
@@ -143,7 +143,7 @@ public final class SignItemFactory {
     }
 
     private static void registerJsItems() {
-        JsonElement signJsonElement = ResourceUtil.loadAsJSON(SIGN_LOCATION);
+        JsonElement signJsonElement = ResourceUtil.loadAsJSON(SIGN_LOCATION.getRaw());
         if (signJsonElement == null || !signJsonElement.isJsonObject()) return;
         JsonObject signJsonObject = signJsonElement.getAsJsonObject();
         for (Map.Entry<String, JsonElement> entry : signJsonObject.entrySet()) {
