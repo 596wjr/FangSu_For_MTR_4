@@ -1,5 +1,6 @@
 package com.fangsu.client;
 
+import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.BlockEntityScreendoorCentralControl;
 import com.fangsu.drawing.sign.SignItem;
@@ -25,6 +26,12 @@ public final class ClientHooksImpl {
 //    }
     public static void openObjBlockConfigScreen(FunctionalObjBlockEntity blockEntity) {
         Minecraft.getInstance().setScreen(new ObjBlockConfigScreen(blockEntity));
+    }
+
+    public static void openRotatingRailConfigScreen(BaseObjBlockEntity be) {
+        Minecraft.getInstance().setScreen(
+                new ConfigScreen(com.fangsu.mappings.ComponentHelper.translatable("ui.fangsu.block.extras"), ((com.fangsu.blockEntities.BlockEntityRotatingRail) be).getConfigs())
+        );
     }
 
     public static void openSignConfigScreen(

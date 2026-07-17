@@ -1,6 +1,7 @@
 package com.fangsu.client;
 
 import com.fangsu.Main;
+import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.BlockEntityScreendoorCentralControl;
 import com.fangsu.drawing.sign.SignItem;
@@ -43,6 +44,11 @@ public final class ClientHooks {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
 
+    public static Consumer<BaseObjBlockEntity> OPEN_ROTATING_RAIL_CONFIG_SCREEN
+            = be -> {
+                Main.LOGGER.error("打开方法没有被替换!");
+            };
+
     private ClientHooks() {
     }
 
@@ -70,6 +76,10 @@ public final class ClientHooks {
 
     public static void openStationSelectionScreen(Component component, List<Long> defaultValue, Consumer<List<Long>> setter, BlockPos pos, int maxSelect) {
         OPEN_STATION_SELECT_SCREEN.accept(component, defaultValue, setter, pos, maxSelect);
+    }
+
+    public static void openRotatingRailConfigScreen(BaseObjBlockEntity be) {
+        OPEN_ROTATING_RAIL_CONFIG_SCREEN.accept(be);
     }
 
     @FunctionalInterface

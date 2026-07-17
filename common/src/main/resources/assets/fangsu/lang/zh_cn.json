@@ -151,5 +151,19 @@
     "ui.fangsu.screendoor.centralControl.doorCount": "已扫描到 %s 个屏蔽门",
     "ui.fangsu.screendoor.isAuto": "自动开门方向",
     "ui.fangsu.screendoor.isolation": "门隔离",
-    "ui.fangsu.screendoor.doorOpenOverride": "门开启"
+    "ui.fangsu.screendoor.doorOpenOverride": "门开启",
+    "block.fangsu.rotating_rail": "旋转轨道",
+    "ui.fangsu.rotating_rail.mode": "轨道模式",
+    "ui.fangsu.rotating_rail.mode.f": "平移",
+    "ui.fangsu.rotating_rail.mode.r": "弯曲",
+    "ui.fangsu.rotating_rail.mode.crossing": "旋转",
+    "ui.fangsu.rotating_rail.model": "模型路径",
+    "ui.fangsu.rotating_rail.t_length": "段长",
+    "ui.fangsu.rotating_rail.length": "长度",
+    "ui.fangsu.rotating_rail.interval": "间隔",
+    "ui.fangsu.rotating_rail.flip": "翻转方向",
+    "ui.fangsu.rotating_rail.count": "段数",
+    "ui.fangsu.rotating_rail.rotation": "旋转角度",
+    "ui.fangsu.rotating_rail.r1": "旋转角度(平台侧)",
+    "ui.fangsu.rotating_rail.r2": "旋转角度(非平台侧)"
 }
