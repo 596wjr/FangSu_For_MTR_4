@@ -46,6 +46,23 @@ public class TrainStatus {
      */
     public int trainStatus;
 
+    /** 创建一个空的默认状态（用于 LCD 纹理初始化时避免 null 引用） */
+    public TrainStatus() {
+        this.train = null;
+        doorLeftOpen = new boolean[0];
+        doorRightOpen = new boolean[0];
+        lastWorldPose = new Matrix4f[0];
+        lastCarPosition = new Vector3f[0];
+        lastCarRotation = new Vector3f[0];
+        shouldRender = true;
+        isInDetailDistance = false;
+        currentRoute = null;
+        drawableRoute = null;
+        isOnRoute = false;
+        isReverse = false;
+        trainStatus = 0;
+    }
+
     public TrainStatus(NTETrainWrapper train) {
         this.train = train;
         final int trainCars = train.getCarCount();

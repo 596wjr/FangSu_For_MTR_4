@@ -39,6 +39,10 @@ public class LevelRendererMixin {
 
     @Inject(method = "renderLevel", at = @At("TAIL"))
     private void renderLevelLast(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
+        BufferSourceProxy vertexConsumersProxy = new BufferSourceProxy(renderBuffers.bufferSource());
+        MainClient.drawScheduler.commit(vertexConsumersProxy, MainClient.drawContext);
+        if (!MainClient.is_nte_loaded)
+            vertexConsumersProxy.commit();
         MainClient.drawContext.resetFrameProfiler();
     }
 

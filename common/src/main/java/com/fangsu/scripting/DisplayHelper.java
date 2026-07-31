@@ -28,6 +28,21 @@ public class DisplayHelper {
     private Map<String, AffineTransform> slotTransforms;
     public DynamicModelHolder model;
 
+    /** 返回上传后的模型，如果尚未完成上传则返回 null */
+    public ModelCluster getUploadedModelOrNull() {
+        if (model != null) {
+            ModelCluster mc = model.getUploadedModel();
+            if (mc != null) return mc;
+        }
+        // 模型未就绪，尝试通过 baseModel 重建
+        if (baseModel != null && baseModel.getUploadedModel() != null) {
+            this.model = this.baseModel;
+            this.model.getUploadedModel().replaceAllTexture(this.texture.identifier);
+            return this.model.getUploadedModel();
+        }
+        return null;
+    }
+
     private DisplayHelper() {
     }
 

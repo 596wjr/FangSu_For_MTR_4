@@ -18,17 +18,31 @@ import java.util.List;
 import java.util.Map;
 
 public class MtrLcd extends LcdBase {
+
+    private static Font CJK_FONT;
+    private static Font NON_CJK_FONT;
+
+    private static Font getCjkFont() {
+        if (CJK_FONT == null) CJK_FONT = ResourceUtil.loadFont(new ResourceLocation("mtr:font/noto-serif-cjk-tc-semibold.ttf"));
+        return CJK_FONT;
+    }
+
+    private static Font getNonCjkFont() {
+        if (NON_CJK_FONT == null) NON_CJK_FONT = ResourceUtil.loadFont(new ResourceLocation("mtr:font/noto-sans-semibold.ttf"));
+        return NON_CJK_FONT;
+    }
+
     @Override
     public void draw(Graphics2D g, TrainStatus status, LcdInfo info, Map<String, Object> state, String side, int x, int y, int w, int h, Runnable callback) {
-        Font cjkFont = ResourceUtil.loadFont(new ResourceLocation("mtr:font/noto-serif-cjk-tc-semibold.ttf"));
-        Font nonCjkFont = ResourceUtil.loadFont(new ResourceLocation("mtr:font/noto-sans-semibold.ttf"));
+        final Font cjkFont = getCjkFont();
+        final Font nonCjkFont = getNonCjkFont();
 
         if (status.currentRoute == null || status.drawableRoute == null) {
-            g.setColor(Color.WHITE);
+            g.setColor(Color.RED);
             g.fillRect(x, y, w, h);
-            g.setColor(Color.BLACK);
-            drawStationNameCenter(g, x, y, w, h, "无线路信息", "No route loaded", cjkFont, nonCjkFont);
-            drawMindTheGap(g, x, y, w, h, cjkFont, nonCjkFont);
+            g.setColor(Color.WHITE);
+            g.setFont(cjkFont.deriveFont((float) h / 4));
+            g.drawString("LCD TEST", x + 10, y + h / 2);
             callback.run();
             return;
         }

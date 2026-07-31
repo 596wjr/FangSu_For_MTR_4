@@ -145,21 +145,15 @@ public class LocalRoute {
                         }
                     }
                 } else {
-                    // 远端车站：从 SimplifiedRoute 查找经过该站的其他路线（排除同线路反向）
-                    final long stationId = sp.getStationId();
-                    for (final SimplifiedRoute otherSr : MtrUtil.getSimplifiedRoutes()) {
-                        if (otherSr.getId() == this.id) continue;
-                        if (otherSr.getName().isEmpty()) continue;
-                        if (Objects.equals(TextUtil.getNonExtraParts(otherSr.getName()),TextUtil.getNonExtraParts(name))) {
-                            continue;
-                        }
-                        for (final SimplifiedRoutePlatform osp : otherSr.getPlatforms()) {
-                            if (osp.getStationId() == stationId) {
-                                trans.add(new ColorNameTuple(otherSr.getColor(), TextUtil.getNonExtraParts(otherSr.getName())));
-                                break;
+                    // 远端车站：利用 SimplifiedRoutePlatform 内建的换乘数据
+                    //（该数据在服务端构建 SimplifiedRoute 时已预计算，不依赖本地 Station 加载状态）
+                    sp.forEach((color, interchangeRouteNamesForColor) -> {
+                        interchangeRouteNamesForColor.forEach(routeName -> {
+                            if (!TextUtil.getNonExtraParts(routeName).equals(TextUtil.getNonExtraParts(name))) {
+                                trans.add(new ColorNameTuple(color, TextUtil.getNonExtraParts(routeName)));
                             }
-                        }
-                    }
+                        });
+                    });
                 }
 
                 if (!trans.isEmpty()) {

@@ -28,7 +28,7 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
 
         switch (info.type()) {
             case MTR, CUSTOM -> {
-                SingleJourneyTicketData.enter(stack, info.value());
+                SingleJourneyTicketData.enter(stack, info.value(), info.value2(), info.value3());
                 String name = info.displayName() == null || info.displayName().isEmpty() ? ComponentHelper.translatable("block.fangsu.ticket_barrier").getString() : info.displayName();
                 player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticket.enter1", name.replace("|", " ")), true);
                 return true;
@@ -48,6 +48,9 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
         }
     }
 
+    private static final int BASE_FARE = 2;
+    private static final int ZONE_FARE = 1;
+
     @Override
     public boolean exit(Level world, Player player, ItemStack stack, FareInfo info) {
         if (!SingleJourneyTicketData.hasEntered(stack)) {
@@ -56,7 +59,17 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
         }
 
         if (info.type() == FareType.MTR || info.type() == FareType.CUSTOM) {
-            int fare = Math.abs(SingleJourneyTicketData.getEntryZone(stack) - info.value());
+            int entryZone1 = SingleJourneyTicketData.getEntryZone1(stack);
+            int entryZone2 = SingleJourneyTicketData.getEntryZone2(stack);
+            int entryZone3 = SingleJourneyTicketData.getEntryZone3(stack);
+            int exitZone1 = info.value();
+            int exitZone2 = info.value2();
+            int exitZone3 = info.value3();
+            int fare = BASE_FARE + ZONE_FARE * (
+                    Math.abs(entryZone1 - exitZone1) +
+                    Math.abs(entryZone2 - exitZone2) +
+                    Math.abs(entryZone3 - exitZone3)
+            );
             if (SingleJourneyTicketData.getPrice(stack) < fare) {
                 player.displayClientMessage(ComponentHelper.translatable("ui.fangsu.ticket.error"), true);
                 return false;
@@ -64,7 +77,7 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
             stack.shrink(1);
             if (info.type() == FareType.MTR) {
                 String name = info.displayName() == null || info.displayName().isEmpty() ? ComponentHelper.translatable("block.fangsu.ticket_barrier").getString() : info.displayName();
-                player.displayClientMessage(ComponentHelper.translatable("ui.fangsu.ticket.exit1", name.replace("|", " ")), true);
+                player.displayClientMessage(ComponentHelper.translatable("ui.fangsu.ticket.exit1", name.replace("|", " "), fare), true);
             } else player.displayClientMessage(ComponentHelper.translatable("ui.fangsu.ticket.success"), true);
             return true;
         }

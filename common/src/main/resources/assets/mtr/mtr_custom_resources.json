@@ -1,40 +1,48 @@
 {
-  "custom_trains": {
-    "r_train_fangsu_lcd": {
-      "name": "R-TRAIN (LCD)",
-      "description": "Provided by FangSu Blocks",
-      "color": "6CB5E2",
-      "lcd": {
-        "id": "mtr",
-        "slots": "mtr:r_train/slots.json"
-      },
-      "texture_id": "mtr:textures/entity/r_train",
-      "base_train_type": "r_train",
-      "speed_sound_base_id": "c1141a"
+    "custom_trains": {
+        "r_train_fangsu_lcd": {
+            "name": "R-TRAIN (LCD)",
+            "description": "Provided by FangSu Blocks",
+            "color": "6CB5E2",
+            "texture_id": "mtr:textures/entity/r_train",
+            "base_train_type": "r_train",
+            "lcd": {
+                "id": "mtr",
+                "slots": "mtr:r_train/slots.json"
+            },
+            "speed_sound_base_id": "c1141a"
+        },
+        "r_train_small_fangsu_lcd": {
+            "name": "R-TRAIN (LCD) (Small)",
+            "description": "Provided by FangSu Blocks",
+            "color": "6CB5E2",
+            "texture_id": "mtr:textures/entity/r_train",
+            "base_train_type": "r_train_small",
+            "lcd": {
+                "id": "mtr",
+                "slots": "mtr:r_train/slots_small.json"
+            },
+            "speed_sound_base_id": "c1141a"
+        },
+        "r_train_mini_fangsu_lcd": {
+            "name": "R-TRAIN (LCD) (Mini)",
+            "description": "Provided by FangSu Blocks",
+            "color": "6CB5E2",
+            "texture_id": "mtr:textures/entity/r_train",
+            "base_train_type": "r_train_mini",
+            "speed_sound_base_id": "c1141a",
+            "lcd": {
+                "id": "mtr",
+                "slots": "mtr:r_train/slots_mini.json"
+            }
+        }
     },
-    "r_train_small_fangsu_lcd": {
-      "name": "R-TRAIN (LCD) (Small)",
-      "description": "Provided by FangSu Blocks",
-      "color": "6CB5E2",
-      "lcd": {
-        "id": "mtr",
-        "slots": "mtr:r_train/slots_small.json"
-      },
-      "texture_id": "mtr:textures/entity/r_train",
-      "base_train_type": "r_train_small",
-      "speed_sound_base_id": "c1141a"
-    },
-    "r_train_mini_fangsu_lcd": {
-      "name": "R-TRAIN (LCD) (Mini)",
-      "description": "Provided by FangSu Blocks",
-      "color": "6CB5E2",
-      "lcd": {
-        "id": "mtr",
-        "slots": "mtr:r_train/slots_mini.json"
-      },
-      "texture_id": "mtr:textures/entity/r_train",
-      "base_train_type": "r_train_mini",
-      "speed_sound_base_id": "c1141a"
-    }
-  }
+    "lifts": [
+        {
+            "id": "fangsu_non_transparent",
+            "name": "Non Transparent Lift",
+            "color": "CCCCCC",
+            "textureResource": "fangsu:textures/entity/non_transparent.png"
+        }
+    ]
 }

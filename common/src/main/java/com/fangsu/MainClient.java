@@ -14,6 +14,8 @@ import com.fangsu.drawing.diaoban.DiaobanDrawManager;
 import com.fangsu.drawing.pids.PidsDrawManager;
 import com.fangsu.drawing.ris.RisDrawManager;
 import com.fangsu.drawing.sis.SisDrawManager;
+import com.fangsu.mtr.LcdVehicleRegistry;
+import com.fangsu.train.LcdDrawManager;
 import com.fangsu.train.LcdManager;
 import com.fangsu.train.lcds.MtrLcd;
 import com.fangsu.ui.ModMenus;
@@ -108,6 +110,12 @@ public class MainClient {
                 LcdManager.getInstance().injectLcd("mtr", MtrLcd::new);
             } catch (Exception e) {
                 Main.LOGGER.error("[FangSu] LcdManager init failed", e);
+            }
+
+            try {
+                LcdVehicleRegistry.load();
+            } catch (Exception e) {
+                Main.LOGGER.error("[FangSu] LcdVehicleRegistry init failed", e);
             }
 
             for (Runnable runnable : resourceInitRunnables) {

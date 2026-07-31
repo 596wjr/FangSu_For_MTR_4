@@ -43,26 +43,30 @@ public final class TicketBarrierHandler {
         switch (fareType) {
             case 0:
                 String dispName = "";
-                int zone = 0;
+                int zone1 = 0;
+                int zone2 = 0;
+                int zone3 = 0;
                 if (useCustomZone) {
-                    zone = Integer.parseInt(extraConfigs.getOrDefault("customZone", "0"));
+                    zone1 = Integer.parseInt(extraConfigs.getOrDefault("customZone", "0"));
                     dispName = extraConfigs.getOrDefault("customDisplayName", "");
                 } else {
                     Station station = MtrTicketSystem.getStation(level, pos);
                     if (station == null) return false;
                     dispName = station.getName();
-                    zone = (int) station.getZone1();
+                    zone1 = (int) station.getZone1();
+                    zone2 = (int) station.getZone2();
+                    zone3 = (int) station.getZone3();
                 }
 
                 if (stack.isEmpty() || !(stack.getItem() instanceof TicketItem ticket)) {
                     if (!isExit) {
-                        if (MtrTicketSystem.enter(level, dispName, zone, player)) {
+                        if (MtrTicketSystem.enter(level, dispName, zone1, zone2, zone3, player)) {
                             extraConfigs.put("isOpen", "true");
                             sendUpdateC2S.run();
                             return true;
                         }
                     } else {
-                        if (MtrTicketSystem.exit(level, dispName, zone, player)) {
+                        if (MtrTicketSystem.exit(level, dispName, zone1, zone2, zone3, player)) {
                             extraConfigs.put("isOpen", "true");
                             sendUpdateC2S.run();
                             return true;
@@ -71,8 +75,8 @@ public final class TicketBarrierHandler {
                     return true;
                 } else {
                     boolean success = isExit
-                            ? ticket.exit(level, player, stack, new FareInfo(FareType.CUSTOM, zone, dispName))
-                            : ticket.enter(level, player, stack, new FareInfo(FareType.CUSTOM, zone, dispName));
+                            ? ticket.exit(level, player, stack, new FareInfo(FareType.CUSTOM, zone1, zone2, zone3, dispName))
+                            : ticket.enter(level, player, stack, new FareInfo(FareType.CUSTOM, zone1, zone2, zone3, dispName));
                     if (!success) return false;
                     extraConfigs.put("isOpen", "true");
                     sendUpdateC2S.run();

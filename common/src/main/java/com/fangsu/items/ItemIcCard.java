@@ -14,7 +14,9 @@ public class ItemIcCard extends Item implements TicketItem {
 
     private static final String BALANCE = "Balance";
     private static final String ENTERED = "Entered";
-    private static final String ENTRY_ZONE = "EntryZone";
+    private static final String ENTRY_ZONE_1 = "EntryZone1";
+    private static final String ENTRY_ZONE_2 = "EntryZone2";
+    private static final String ENTRY_ZONE_3 = "EntryZone3";
 
     private static final int BASE_FARE = 2;
     private static final int ZONE_FARE = 1;
@@ -33,7 +35,9 @@ public class ItemIcCard extends Item implements TicketItem {
         }
 
         tag.putBoolean(ENTERED, true);
-        tag.putInt(ENTRY_ZONE, info.value());
+        tag.putInt(ENTRY_ZONE_1, info.value());
+        tag.putInt(ENTRY_ZONE_2, info.value2());
+        tag.putInt(ENTRY_ZONE_3, info.value3());
         String name = info.displayName() == null || info.displayName().isEmpty() ? ComponentHelper.translatable("block.fangsu.ticket_barrier").getString() : info.displayName();
         int balance = tag.getInt(BALANCE);
         player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticket.enter", name, balance), true);
@@ -50,7 +54,7 @@ public class ItemIcCard extends Item implements TicketItem {
 
         if (!tag.contains(BALANCE)) tag.putInt(BALANCE, 100);
         int balance = tag.getInt(BALANCE);
-        int fare = computeFare(tag.getInt(ENTRY_ZONE), info);
+        int fare = computeFare(tag, info);
         if (balance < fare) {
             player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", balance), true);
             return false;
@@ -58,7 +62,9 @@ public class ItemIcCard extends Item implements TicketItem {
 
         tag.putInt(BALANCE, balance - fare);
         tag.putBoolean(ENTERED, false);
-        tag.putInt(ENTRY_ZONE, 0);
+        tag.putInt(ENTRY_ZONE_1, 0);
+        tag.putInt(ENTRY_ZONE_2, 0);
+        tag.putInt(ENTRY_ZONE_3, 0);
         String name = info.displayName() == null || info.displayName().isEmpty() ? ComponentHelper.translatable("block.fangsu.ticket_barrier").getString() : info.displayName();
         player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticket.exit", name, fare, balance - fare), true);
         return true;
@@ -69,11 +75,20 @@ public class ItemIcCard extends Item implements TicketItem {
         return null;
     }
 
-    private int computeFare(int entryZone, FareInfo info) {
+    private int computeFare(CompoundTag tag, FareInfo info) {
         if (info.type() == FareType.FARE_ONCE) {
             return Math.max(0, info.value());
         }
-        int distance = Math.abs(entryZone - info.value());
-        return BASE_FARE + ZONE_FARE * distance;
+        int entryZone1 = tag.getInt(ENTRY_ZONE_1);
+        int entryZone2 = tag.getInt(ENTRY_ZONE_2);
+        int entryZone3 = tag.getInt(ENTRY_ZONE_3);
+        int exitZone1 = info.value();
+        int exitZone2 = info.value2();
+        int exitZone3 = info.value3();
+        return BASE_FARE + ZONE_FARE * (
+                Math.abs(entryZone1 - exitZone1) +
+                Math.abs(entryZone2 - exitZone2) +
+                Math.abs(entryZone3 - exitZone3)
+        );
     }
 }

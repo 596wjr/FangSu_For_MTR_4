@@ -215,7 +215,7 @@ public class MtrUtil {
     /**
      * 获取路线的终点站名称（优先使用 SimplifiedRoute 回退）。
      */
-    public static String getDestinationByRoute(Route route) {
+    public static String getDestinationByRouteMtr(Route route) {
         if (route == null) return "undefined";
         try {
             // 先从 SimplifiedRoute 获取终点站
@@ -351,8 +351,15 @@ public class MtrUtil {
                     }
                 }
 
+                // 将服务器时间戳转换为客户端本地时间戳
+                // JCM 的 ArrivalWrapper.arrivalTime() 做法：
+                //   arrivalResponse.getArrival() - ArrivalsCacheClient.INSTANCE.getMillisOffset()
+                // 这样得到的值才能与 System.currentTimeMillis() / Date.now() 正确做减法
+                final long millisOffset = ArrivalsCacheClient.INSTANCE.getMillisOffset();
+                final long arrivalClientTime = response.getArrival() - millisOffset;
+
                 arrivalInfoList.add(new PidsArrivalInfo(
-                        response.getArrival(),
+                        arrivalClientTime,
                         (int) response.getCarCount(),
                         routeId,
                         currentStationIndex,

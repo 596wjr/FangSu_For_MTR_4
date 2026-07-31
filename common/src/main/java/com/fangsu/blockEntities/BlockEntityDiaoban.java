@@ -66,6 +66,11 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
      * 路线颜色纹理是否已替换完成
      */
     private boolean stitchedLoaded = false;
+    /**
+     * stitched 模型就绪重试节流，避免模型未上传时每帧都执行昂贵的 createSolidColorGT
+     */
+    private long lastStitchedRetryTime = 0;
+    private static final long STITCHED_RETRY_INTERVAL_MS = 300;
     private DynamicModelHolder dmhDlOn, dmhDlOff;
     private ShapeCollection shapeLeft;
     private ShapeCollection shapeCenter;
@@ -275,15 +280,18 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
     public void whenRendering() {
         if (markedError) return;
 
+        boolean justInit = false;
         if (!scriptDone) {
             initDrawingAsync();
+            justInit = scriptDone; // 记录本次是否刚完成绘制注册
         } else if (shouldCheckDataChange()) {
             // 异步检测外部 MTR 数据变更（路线颜色等）
             triggerAsyncRouteReload(getExtraConfig("routes", "[]"));
         }
 
         // 检查异步重载结果
-        List<RouteSelectInfo> newRoutes = pollAsyncRoutes();
+        // 如果本帧刚完成绘制注册，跳过路线检查，避免新注册的绘制立即被路线变更 invalidate
+        List<RouteSelectInfo> newRoutes = justInit ? null : pollAsyncRoutes();
         if (newRoutes != null && !routesEqual(newRoutes, routes)) {
             routes = newRoutes;
             stitchedLoaded = false;
@@ -294,7 +302,16 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
         ObjBlockScriptContext ctx = this.scriptContext;
 
         // 首次获取到有效路线时，对预拼接模型进行一次颜色纹理替换
+        // 节流：模型未就绪时避免每帧重试（dmhStitched.uploadLater 可能尚未完成 GPU 上传）
+        boolean shouldTryStitched = false;
         if (!stitchedLoaded && !routes.isEmpty()) {
+            final long now = System.currentTimeMillis();
+            if (now - lastStitchedRetryTime >= STITCHED_RETRY_INTERVAL_MS) {
+                lastStitchedRetryTime = now;
+                shouldTryStitched = true;
+            }
+        }
+        if (shouldTryStitched) {
             ModelCluster currentStitched = dmhStitched.getUploadedModel();
             if (currentStitched != null) {
                 LocalRoute r1 = routes.get(0).route;
@@ -384,6 +401,7 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
                                     saveRoutes.add(List.of(info.route.id, info.plat.getId()));
                                 }
                                 extraConfigs.put("routes", Main.GSON.toJson(saveRoutes));
+                                resetDrawingState();
                                 sendUpdateC2S();
                             },
                             getBlockPos(), maxSelect
@@ -406,6 +424,7 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
                 (v) -> {
                     length = v.intValue();
                     extraConfigs.put("length", String.valueOf(v.intValue()));
+                    resetDrawingState();
                     sendUpdateC2S();
                 }
         ));
@@ -421,6 +440,7 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
                 (v) -> {
                     arrowDirection = v;
                     extraConfigs.put("arrowDirection", v.toString());
+                    resetDrawingState();
                     sendUpdateC2S();
                 }
         ));
@@ -431,6 +451,7 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
                 (v) -> {
                     withDoorlight = v;
                     extraConfigs.put("withDoorlight", v.toString());
+                    resetDrawingState();
                     sendUpdateC2S();
                 }
         ));

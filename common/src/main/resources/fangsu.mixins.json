@@ -3,7 +3,7 @@
     "package": "com.fangsu.mixin",
     "compatibilityLevel": "JAVA_17",
     "minVersion": "0.8",
-    "client": ["LevelRendererMixin"],
+    "client": ["LevelRendererMixin", "RenderVehiclesMixin"],
     "mixins": ["ClientDataMixin", "DataMixin", "InitAccessorMixin", "JcmScriptManagerMixin", "MainAccessorMixin", "TrainMixin"],
     "injectors": {
         "defaultRequire": 1

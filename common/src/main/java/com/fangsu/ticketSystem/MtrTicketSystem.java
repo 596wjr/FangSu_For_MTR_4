@@ -21,7 +21,9 @@ public class MtrTicketSystem {
     //TODO 交通卡系统
 
     public static final String BALANCE_OBJECTIVE = "mtr_balance";
-    protected static final String ENTRY_ZONE_OBJECTIVE = "mtr_entry_zone";
+    protected static final String ENTRY_ZONE_1_OBJECTIVE = "mtr_entry_zone_1";
+    protected static final String ENTRY_ZONE_2_OBJECTIVE = "mtr_entry_zone_2";
+    protected static final String ENTRY_ZONE_3_OBJECTIVE = "mtr_entry_zone_3";
 
     private static final int BASE_FARE = 2;
     private static final int ZONE_FARE = 1;
@@ -29,14 +31,16 @@ public class MtrTicketSystem {
 
     /* ===================== 公共入口 ===================== */
 
-    public static boolean enter(Level world, String dispName, int zone, Player player) {
+    public static boolean enter(Level world, String dispName, int zone1, int zone2, int zone3, Player player) {
         addObjectivesIfMissing(world);
 
         Score balance = getScore(world, player, BALANCE_OBJECTIVE);
-        Score entryZone = getScore(world, player, ENTRY_ZONE_OBJECTIVE);
+        Score entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
+        Score entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
+        Score entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
 
-        // 已入闸
-        if (entryZone.getScore() != 0) {
+        // 已入闸（三个 zone 都不为 0 才认为已进站，与 MTR 原版一致）
+        if (entryZone1.getScore() != 0 && entryZone2.getScore() != 0 && entryZone3.getScore() != 0) {
             player.displayClientMessage(ComponentHelper.translatable("gui.mtr.already_entered"), true);
             return false;
         }
@@ -47,7 +51,9 @@ public class MtrTicketSystem {
             return false;
         }
 
-        entryZone.setScore(encodeZone(zone));
+        entryZone1.setScore(encodeZone(zone1));
+        entryZone2.setScore(encodeZone(zone2));
+        entryZone3.setScore(encodeZone(zone3));
         player.displayClientMessage(
                 ComponentHelper.translatable(
                         "gui.mtr.enter_barrier",
@@ -59,27 +65,34 @@ public class MtrTicketSystem {
         return true;
     }
 
-    public static boolean exit(Level world, String dispName, int zone, Player player) {
+    public static boolean exit(Level world, String dispName, int zone1, int zone2, int zone3, Player player) {
 
         addObjectivesIfMissing(world);
 
         Score balance = getScore(world, player, BALANCE_OBJECTIVE);
-        Score entryZone = getScore(world, player, ENTRY_ZONE_OBJECTIVE);
+        Score entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
+        Score entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
+        Score entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
 
-        int entry = entryZone.getScore();
+        int entry1 = entryZone1.getScore();
+        int entry2 = entryZone2.getScore();
+        int entry3 = entryZone3.getScore();
+        boolean entered = entry1 != 0 && entry2 != 0 && entry3 != 0;
         int fare;
 
-        if (entry == 0) {
+        if (!entered) {
             // 逃票
             fare = EVASION_FINE;
         } else {
-            fare = calcFare(zone, decodeZone(entry));
+            fare = calcFare(zone1, zone2, zone3, decodeZone(entry1), decodeZone(entry2), decodeZone(entry3));
             if (isConcessionary(player)) {
                 fare = (int) Math.ceil(fare / 2F);
             }
         }
 
-        entryZone.setScore(0);
+        entryZone1.setScore(0);
+        entryZone2.setScore(0);
+        entryZone3.setScore(0);
         balance.add(-fare);
 
         player.displayClientMessage(
@@ -132,9 +145,29 @@ public class MtrTicketSystem {
 
         try {
             world.getScoreboard().addObjective(
-                    ENTRY_ZONE_OBJECTIVE,
+                    ENTRY_ZONE_1_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Component.literal("Entry Zone"),
+                    Component.literal("Entry Zone 1"),
+                    ObjectiveCriteria.RenderType.INTEGER
+            );
+        } catch (Exception ignored) {
+        }
+
+        try {
+            world.getScoreboard().addObjective(
+                    ENTRY_ZONE_2_OBJECTIVE,
+                    ObjectiveCriteria.DUMMY,
+                    Component.literal("Entry Zone 2"),
+                    ObjectiveCriteria.RenderType.INTEGER
+            );
+        } catch (Exception ignored) {
+        }
+
+        try {
+            world.getScoreboard().addObjective(
+                    ENTRY_ZONE_3_OBJECTIVE,
+                    ObjectiveCriteria.DUMMY,
+                    Component.literal("Entry Zone 3"),
                     ObjectiveCriteria.RenderType.INTEGER
             );
         } catch (Exception ignored) {
@@ -160,8 +193,19 @@ public class MtrTicketSystem {
         return zone > 0 ? zone - 1 : zone;
     }
 
-    public static int calcFare(int zone1, int zone2) {
-        int distance = Math.abs(zone1 - zone2);
+    public static int calcFare(int exitZone1, int exitZone2, int exitZone3, int entryZone1, int entryZone2, int entryZone3) {
+        return BASE_FARE + ZONE_FARE * (
+                Math.abs(exitZone1 - entryZone1) +
+                Math.abs(exitZone2 - entryZone2) +
+                Math.abs(exitZone3 - entryZone3)
+        );
+    }
+
+    /**
+     * 简化版：仅用 zone1 计算票价（用于售票机 UI 预估显示）
+     */
+    public static int calcFare(int currentZone, int targetZone) {
+        int distance = Math.abs(currentZone - targetZone);
         return BASE_FARE + ZONE_FARE * distance;
     }
 }

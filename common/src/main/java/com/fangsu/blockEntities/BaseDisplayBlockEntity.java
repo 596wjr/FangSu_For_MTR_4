@@ -19,9 +19,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
@@ -56,11 +58,11 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
     /**
      * 内容/模型是否已加载完成
      */
-    protected boolean firstInit = false;
+    protected volatile boolean firstInit = false;
     /**
      * 绘制是否已注册完成
      */
-    protected boolean scriptDone = false;
+    protected volatile boolean scriptDone = false;
     /**
      * 上一次注册的绘制标识，用于去重
      */
@@ -320,15 +322,20 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
     /**
      * 上一次替换的纹理标识，用于去重避免每帧 replaceAllTexture
      */
-    private ResourceLocation lastDispTextureId = null;
+    private volatile ResourceLocation lastDispTextureId = null;
     /**
      * 上一次渲染的显示模型实例，用于检测模型是否被重建（whenLoading 后 uploadLater 替换了模型）
      */
-    private ModelCluster lastDispModel = null;
+    private volatile ModelCluster lastDispModel = null;
+    /**
+     * 纹理获取重试节流时间戳，避免纹理未就绪时每帧都执行同步的 getBlockGraphics 调用
+     */
+    private long lastDispTexRetryTime = 0;
+    private static final long DISP_TEX_RETRY_INTERVAL_MS = 200;
     /**
      * 显示纹理是否已获取并可用，为 true 时跳过每帧的 synchronized 查询
      */
-    private boolean dispTextureReady = false;
+    private volatile boolean dispTextureReady = false;
     /**
      * 缓存方块 ID 字符串，避免每帧 String 分配
      */
@@ -454,12 +461,31 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             scriptDone = true;
             return true;
         }
-        // 如果方块已有已注册的绘制条目，仅替换绘制函数以保留旧纹理内容，
-        // 避免先 remove 再 add 导致重建纹理出现短暂黑色闪烁（旧纹理被销毁，新纹理为空）
-        // 使用 hasRegisteredGraphic 而非 hasDrawGraphic，覆盖纹理可用前（background draw 未完成）的情况
-        if (gtHelper.hasRegisteredGraphic(getBlockPos())) {
+        // 检查 drawInfoId 是否已被其他方块注册（同内容共享纹理）
+        if (gtHelper.hasDrawInfoId(drawInfoId)) {
+            final boolean sizeMatches = gtHelper.getRegisteredGraphicSizeByDrawInfoId(drawInfoId, w, h);
+            if (sizeMatches) {
+                // drawInfoId 已存在且尺寸匹配：只需绑定到已有纹理，不创建新纹理、不触发重绘
+                final String blockId = "block_" + getBlockPos().getX() + "_" + getBlockPos().getY() + "_" + getBlockPos().getZ();
+                gtHelper.bindToExistingDrawInfo(blockId, drawInfoId);
+                lastRegisteredDrawInfoId = drawInfoId;
+                scriptDone = true;
+                return true;
+            }
+            // 尺寸不匹配：退化到普通路径，允许重新创建
+        }
+
+        // 检测现有纹理尺寸是否匹配：如果尺寸变了（例如切换 subModel 导致 texSize 变化），
+        // 必须重建纹理而非仅替换绘制函数，否则分辨率不会更新
+        final boolean sizeMatches = gtHelper.getRegisteredGraphicSize(getBlockPos(), w, h);
+        if (gtHelper.hasRegisteredGraphic(getBlockPos()) && sizeMatches) {
+            // 尺寸匹配：仅替换绘制函数，保留旧纹理内容避免黑色闪烁
             gtHelper.replaceDrawFunction(getBlockPos(), drawCallback);
         } else {
+            // 尺寸不匹配或无注册条目：先清除旧绑定再创建新纹理（重建时会自动匹配新尺寸）
+            if (gtHelper.hasRegisteredGraphic(getBlockPos())) {
+                gtHelper.removeDrawGraphic(getBlockPos());
+            }
             gtHelper.addDrawGraphicWithGt(getBlockPos(),
                     new GraphicsTextureHelper.DrawInfo(drawInfoId, w, h, true, false),
                     drawCallback
@@ -501,6 +527,13 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             }
         }
 
+        // 节流：纹理未就绪时避免每帧都执行同步的 getBlockGraphics 调用
+        final long now = System.currentTimeMillis();
+        if (now - lastDispTexRetryTime < DISP_TEX_RETRY_INTERVAL_MS) {
+            return;
+        }
+        lastDispTexRetryTime = now;
+
         // 获取纹理并应用到模型
         GraphicsTexture tex = GraphicsTextureHelper.getInstance().getBlockGraphics(getBlockPos());
         if (tex != null && tex.isValid()) {
@@ -522,6 +555,17 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
         GraphicsTextureHelper.getInstance().removeDrawGraphic(getBlockPos());
     }
 
+    @Override
+    public void load(@NotNull CompoundTag tag) {
+        super.load(tag);
+        // load() 从服务端同步数据回来后，extraConfigs 已被 NBT 刷新。
+        // 必须在此重置绘制状态，确保 whenRendering 能基于最新配置重新初始化。
+        // 注意：super.load() 中的 triggerAsyncLoading() 会在后台执行 whenLoading，
+        // 而 whenLoading 末尾也会调用 resetDrawingState()，但那个调用在后台线程中，
+        // 主线程的 volatile 读取可能有时序窗口；此处的主线程调用确保立即生效。
+        resetDrawingState();
+    }
+
     /**
      * 重置绘制状态，使下次渲染时重新初始化。
      * 子类在配置变更时应调⽤此方法。
@@ -530,7 +574,9 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
         scriptDone = false;
         lastRegisteredDrawInfoId = "";
         lastDispTextureId = null;
+        lastDispModel = null;
         dispTextureReady = false;
+        lastDispTexRetryTime = 0;
         resetRetryTimer();
         // 清除待处理的异步任务结果，避免 UI 更新后过期数据覆盖正确路线
         cancelPendingAsyncTask();
