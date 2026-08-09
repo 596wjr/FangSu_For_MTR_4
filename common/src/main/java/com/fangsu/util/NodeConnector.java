@@ -9,14 +9,17 @@ import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
 import org.mtr.core.data.TransportMode;
 import org.mtr.core.tool.Angle;
+import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.mtr.mod.Init;
 import org.mtr.mod.block.BlockNode;
-import org.mtr.mod.client.CustomResourceLoader;
+import org.mtr.mod.data.RailType;
 import org.mtr.mod.packet.PacketUpdateData;
+import org.mtr.mod.packet.PacketUpdateLastRailStyles;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 万向节点连接几何与建轨工具。
@@ -27,12 +30,11 @@ import java.util.Map;
  *   <li>{@link #maxRadiusTangentAngle(BlockPos, double, BlockPos)} — 未绑定端点的最大半径圆弧切向角</li>
  *   <li>{@link #getDirectionDegrees(Level, BlockPos)} / {@link #isConnectedAt(Level, BlockPos)} — 读取节点状态</li>
  *   <li>{@link #findConnectedEndpoints(BlockPos)} — 客户端查找连接到节点位置的其他端点</li>
- *   <li>{@link #createAndSendRail} — 服务端用精确角度构建并派发铁轨</li>
+ *   <li>{@link #createAndSendRail} — 服务端按连接器类型（限速/单向/站台/侧线/折返）构建并派发铁轨</li>
+ *   <li>{@link #refreshNodeRail} — 服务端删除旧轨道并按旧轨道属性（限速/单向/类型/样式）重建</li>
  * </ul>
  */
 public final class NodeConnector {
-
-    private static final long SPEED_LIMIT = 80;
 
     private NodeConnector() {
     }
@@ -152,47 +154,24 @@ public final class NodeConnector {
     }
 
     /**
-     * 服务端：删除并重建连接 nodePos 与 otherPos 的单条轨道。
+     * 服务端：以两个端点位置 + 两个角度，按连接器类型构建一条铁轨并派发到服务端数据。
      * <p>
-     * nodePos 为万向节点且已绑定新方向 newDirection；otherPos 为另一端（万向节点或普通节点）。
-     * 删除旧轨道后，以新方向与另一端既有角度重建。
-     *
-     * @param level        服务端世界
-     * @param nodePos      万向节点位置（已绑定新方向）
-     * @param newDirection 万向节点新方向（度）
-     * @param otherPos     另一端位置
-     */
-    public static void refreshNodeRail(Level level, BlockPos nodePos, double newDirection, BlockPos otherPos) {
-        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return;
-        final org.mtr.mapping.holder.ServerWorld serverWorld = new org.mtr.mapping.holder.ServerWorld(serverLevel);
-
-        // 删除旧轨道（按两端位置 hexId）
-        final Position p1 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(nodePos));
-        final Position p2 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(otherPos));
-        org.mtr.mod.packet.PacketDeleteData.sendDirectlyToServerRailId(
-                serverWorld, org.mtr.core.data.TwoPositionsBase.getHexId(p1, p2));
-
-        // 另一端角度
-        final double otherAngle = getDirectionDegrees(level, otherPos);
-        // 本端为已绑定方向
-        createAndSendRail(serverWorld, nodePos, newDirection, otherPos, otherAngle);
-    }
-
-    /**
-     * 服务端：以两个端点位置 + 两个角度构建一条普通铁轨并派发到服务端数据。
-     * <p>
-     * 角度用 {@link com.fangsu.mtr.AngleExtra} 生成精确值，避免 22.5° 快照。调用需在服务端线程。
+     * 角度用 {@link AngleExtra} 生成精确值，避免 22.5° 快照。调用需在服务端线程。
      *
      * @param serverWorld 服务端世界（org.mtr.mapping.holder.ServerWorld）
      * @param pos1        端点 1
      * @param angle1      端点 1 角度（度）
      * @param pos2        端点 2
      * @param angle2      端点 2 角度（度）
+     * @param railType    连接器类型（限速/站台/侧线/折返等）
+     * @param isOneWay    是否单向（反向限速 0，渲染单向箭头）
+     * @param uuid        玩家 UUID，用于应用玩家最后使用的轨道样式（null 时用默认样式）
      */
     public static void createAndSendRail(
-            Object serverWorld,
+            org.mtr.mapping.holder.ServerWorld serverWorld,
             BlockPos pos1, double angle1,
-            BlockPos pos2, double angle2
+            BlockPos pos2, double angle2,
+            RailType railType, boolean isOneWay, UUID uuid
     ) {
         final Position p1 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos1));
         final Position p2 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos2));
@@ -206,22 +185,127 @@ public final class NodeConnector {
         final Angle a1 = AngleExtra.fromDegrees(deg1);
         final Angle a2 = AngleExtra.fromDegrees(deg2);
 
-        final Rail rail = Rail.newRail(
-                p1, a1, p2, a2,
-                Rail.Shape.QUADRATIC, 0,
-                // 使用 MTR 默认轨道贴图样式，否则轨道会以"无模型"渲染
-                org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList.of(
-                        org.mtr.mod.client.CustomResourceLoader.DEFAULT_RAIL_ID),
-                SPEED_LIMIT, SPEED_LIMIT,
-                false, false, false, false, false, TransportMode.TRAIN
-        );
-        com.fangsu.Main.LOGGER.info("[NodeConnector] createAndSendRail {}->{} a1={} a2={} rail={} valid={}", pos1, pos2, angle1, angle2, rail, rail == null ? "n/a" : rail.isValid());
+        final Rail rail = buildRail(p1, a1, p2, a2, new ObjectArrayList<>(), railType.railShape, railType, isOneWay);
         if (rail == null || !rail.isValid()) {
             return;
         }
-        if (serverWorld instanceof org.mtr.mapping.holder.ServerWorld sw) {
-            PacketUpdateData.sendDirectlyToServerRail(sw, rail);
-            com.fangsu.Main.LOGGER.info("[NodeConnector] sent rail to server hexId={}", rail.getHexId());
+        // 应用玩家最后使用的轨道样式：空样式会以"无模型"渲染（RenderRails 对空 styles 不绘制），
+        // getRailWithLastStyles 会补上默认样式（CustomResourceLoader.DEFAULT_RAIL_ID），与原版
+        // ItemRailModifier.createRail 行为一致。
+        final Rail styledRail;
+        if (uuid == null) {
+            styledRail = Rail.copy(rail, ObjectArrayList.of(org.mtr.mod.client.CustomResourceLoader.DEFAULT_RAIL_ID));
+        } else {
+            styledRail = PacketUpdateLastRailStyles.SERVER_CACHE.getRailWithLastStyles(uuid, rail);
         }
+        com.fangsu.Main.LOGGER.info("[NodeConnector] createAndSendRail {}->{} a1={} a2={} type={} oneWay={} rail={} valid={}", pos1, pos2, angle1, angle2, railType, isOneWay, styledRail, styledRail == null ? "n/a" : styledRail.isValid());
+        PacketUpdateData.sendDirectlyToServerRail(serverWorld, styledRail);
+        com.fangsu.Main.LOGGER.info("[NodeConnector] sent rail to server hexId={}", styledRail.getHexId());
+    }
+
+    /**
+     * 按连接器类型构建轨道（照抄原版 {@code ItemRailModifier.createRail} 的 TRAIN 分支）。
+     * <ul>
+     *   <li>PLATFORM/SIDING/TURN_BACK → 对应工厂方法（限速、站台/侧线/折返语义由 core 内部处理）</li>
+     *   <li>其他 → {@link Rail#newRail}，单向时反向限速 0，RUNWAY 允许远程连接</li>
+     * </ul>
+     *
+     * @param styles 轨道样式列表（空列表即可，发送前由调用方经 getRailWithLastStyles 补默认样式）
+     */
+    private static Rail buildRail(Position p1, Angle a1, Position p2, Angle a2, ObjectArrayList<String> styles, Rail.Shape shape, RailType railType, boolean isOneWay) {
+        final boolean isPlatform = railType == RailType.PLATFORM;
+        final boolean isSiding = railType == RailType.SIDING;
+        final boolean canTurnBack = railType == RailType.TURN_BACK;
+        if (isPlatform) {
+            return Rail.newPlatformRail(p1, a1, p2, a2, shape, 0, styles, TransportMode.TRAIN);
+        }
+        if (isSiding) {
+            return Rail.newSidingRail(p1, a1, p2, a2, shape, 0, styles, TransportMode.TRAIN);
+        }
+        if (canTurnBack) {
+            return Rail.newTurnBackRail(p1, a1, p2, a2, shape, 0, styles, TransportMode.TRAIN);
+        }
+        return Rail.newRail(
+                p1, a1, p2, a2,
+                shape, 0, styles,
+                isOneWay ? 0 : railType.speedLimit, railType.speedLimit,
+                false, false, railType.canAccelerate,
+                railType == RailType.RUNWAY, railType.hasSignal,
+                TransportMode.TRAIN
+        );
+    }
+
+    /**
+     * 刷新重建一条轨道所需的属性（客户端从旧轨道读取，经网络包传到服务端）。
+     */
+    public record RailAttrs(
+            long speedLimitAtNode,
+            long speedLimitAtOther,
+            Rail.Shape shape,
+            boolean isPlatform,
+            boolean isSiding,
+            boolean canTurnBack,
+            boolean canAccelerate,
+            boolean canConnectRemotely,
+            List<String> styles
+    ) {
+    }
+
+    /**
+     * 服务端：删除并重建连接 nodePos 与 otherPos 的单条轨道。
+     * <p>
+     * nodePos 为万向节点且已绑定新方向 newDirection；otherPos 为另一端（万向节点或普通节点）。
+     * 删除旧轨道后，以新方向与另一端既有角度，按旧轨道属性（限速/单向/类型/样式）重建，
+     * 保证角度调整后轨道外观与功能不丢失。
+     *
+     * @param level        服务端世界
+     * @param nodePos      万向节点位置（已绑定新方向）
+     * @param newDirection 万向节点新方向（度）
+     * @param otherPos     另一端位置
+     * @param attrs        旧轨道属性（速度按端点位置对号入座，单向轨的 0 限速端跟随位置）
+     */
+    public static void refreshNodeRail(Level level, BlockPos nodePos, double newDirection, BlockPos otherPos, RailAttrs attrs) {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return;
+        final org.mtr.mapping.holder.ServerWorld serverWorld = new org.mtr.mapping.holder.ServerWorld(serverLevel);
+
+        // 删除旧轨道（按两端位置 hexId）
+        final Position p1 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(nodePos));
+        final Position p2 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(otherPos));
+        org.mtr.mod.packet.PacketDeleteData.sendDirectlyToServerRailId(
+                serverWorld, org.mtr.core.data.TwoPositionsBase.getHexId(p1, p2));
+
+        // 另一端角度
+        final double otherAngle = getDirectionDegrees(level, otherPos);
+        // 本端为已绑定方向
+        final ObjectArrayList<String> styles = new ObjectArrayList<>(attrs.styles());
+        final double angleDifference = Math.toDegrees(Math.atan2(p2.getZ() - p1.getZ(), p2.getX() - p1.getX()));
+        final double deg1 = normalizeDegrees(newDirection + (Angle.similarFacing((float) angleDifference, (float) newDirection) ? 0 : 180));
+        final double deg2 = normalizeDegrees(otherAngle + (Angle.similarFacing((float) angleDifference, (float) otherAngle) ? 180 : 0));
+        final Angle a1 = AngleExtra.fromDegrees(deg1);
+        final Angle a2 = AngleExtra.fromDegrees(deg2);
+
+        final Rail rail;
+        if (attrs.isPlatform()) {
+            rail = Rail.newPlatformRail(p1, a1, p2, a2, attrs.shape(), 0, styles, TransportMode.TRAIN);
+        } else if (attrs.isSiding()) {
+            rail = Rail.newSidingRail(p1, a1, p2, a2, attrs.shape(), 0, styles, TransportMode.TRAIN);
+        } else if (attrs.canTurnBack()) {
+            rail = Rail.newTurnBackRail(p1, a1, p2, a2, attrs.shape(), 0, styles, TransportMode.TRAIN);
+        } else {
+            // 普通轨：限速按端点位置对号入座（单向轨 0 限速端跟随位置），hasSignal 由 RUNWAY 标志推断
+            rail = Rail.newRail(
+                    p1, a1, p2, a2,
+                    attrs.shape(), 0, styles,
+                    attrs.speedLimitAtNode(), attrs.speedLimitAtOther(),
+                    false, false, attrs.canAccelerate(),
+                    attrs.canConnectRemotely(), !attrs.canConnectRemotely(),
+                    TransportMode.TRAIN
+            );
+        }
+        if (rail == null || !rail.isValid()) {
+            return;
+        }
+        PacketUpdateData.sendDirectlyToServerRail(serverWorld, rail);
+        com.fangsu.Main.LOGGER.info("[NodeConnector] refreshed rail {}->{} hexId={}", nodePos, otherPos, rail.getHexId());
     }
 }

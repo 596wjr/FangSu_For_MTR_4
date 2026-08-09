@@ -98,7 +98,21 @@ public class ModNetwork {
             node.setConnected(true);
 
             for (BlockPos otherPos : others) {
-                com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos);
+                // 解析客户端打包的旧轨道属性，重建时保持限速/单向/类型/样式
+                long speedAtNode = buf.readLong();
+                long speedAtOther = buf.readLong();
+                org.mtr.core.data.Rail.Shape shape = org.mtr.core.data.Rail.Shape.values()[buf.readInt()];
+                int flags = buf.readByte();
+                int styleCount = buf.readInt();
+                java.util.List<String> styles = new java.util.ArrayList<>(styleCount);
+                for (int i = 0; i < styleCount; i++) {
+                    styles.add(buf.readUtf());
+                }
+                com.fangsu.util.NodeConnector.RailAttrs attrs = new com.fangsu.util.NodeConnector.RailAttrs(
+                        speedAtNode, speedAtOther, shape,
+                        (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0,
+                        styles);
+                com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrs);
             }
         });
     }

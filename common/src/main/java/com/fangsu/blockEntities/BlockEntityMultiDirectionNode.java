@@ -132,12 +132,39 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         final java.util.List<net.minecraft.core.BlockPos> others = com.fangsu.util.NodeConnector.findConnectedEndpoints(worldPosition);
         if (others.isEmpty()) return;
 
+        // 从客户端 MTR 数据读取连接到本节点的轨道，只保留数据已同步的端点；
+        // 每个端点打包限速/形状/类型/样式属性，服务端据此按原属性重建（角度调整后外观与功能不丢失）
+        final org.mtr.core.data.Position nodePosition = org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(worldPosition));
+        final var connections = org.mtr.mod.client.MinecraftClientData.getInstance().positionsToRail.get(nodePosition);
+        final java.util.List<net.minecraft.core.BlockPos> connected = new java.util.ArrayList<>();
+        if (connections != null) {
+            for (net.minecraft.core.BlockPos o : others) {
+                if (connections.containsKey(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o)))) {
+                    connected.add(o);
+                }
+            }
+        }
+        if (connected.isEmpty()) return;
+
         final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(worldPosition);
         buf.writeDouble(direction);
-        buf.writeInt(others.size());
-        for (net.minecraft.core.BlockPos o : others) {
+        buf.writeInt(connected.size());
+        for (net.minecraft.core.BlockPos o : connected) {
             buf.writeBlockPos(o);
+            final org.mtr.core.data.Rail rail = connections.get(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o)));
+            // 限速：m/ms × 3600 → km/h；按端点位置对号入座（单向轨 0 限速端跟随位置，core 内部处理 reversePositions）
+            buf.writeLong(Math.round(rail.getSpeedLimitMetersPerMillisecond(nodePosition) * 3600));
+            buf.writeLong(Math.round(rail.getSpeedLimitMetersPerMillisecond(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o))) * 3600));
+            buf.writeInt(rail.railMath.getShape().ordinal());
+            final int flags = (rail.isPlatform() ? 1 : 0) | (rail.isSiding() ? 2 : 0) | (rail.canTurnBack() ? 4 : 0)
+                    | (rail.canAccelerate() ? 8 : 0) | (rail.canConnectRemotely() ? 16 : 0);
+            buf.writeByte(flags);
+            final org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectImmutableList<String> styles = rail.getStyles();
+            buf.writeInt(styles.size());
+            for (String style : styles) {
+                buf.writeUtf(style);
+            }
         }
         dev.architectury.networking.NetworkManager.sendToServer(com.fangsu.network.ModNetwork.NODE_REFRESH_RAIL, buf);
     }
@@ -360,6 +387,9 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     @Override
     public void clearRemoved() {
         super.clearRemoved();
+        // 仅客户端需要模型：服务端同步加载 OBJ（文件 IO + 解析）会阻塞主线程，
+        // 放置大量节点（如 20×20×20）时导致服务器严重卡顿
+        if (level == null || !level.isClientSide) return;
         ensureModelReady();
     }
 

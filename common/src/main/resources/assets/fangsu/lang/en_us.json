@@ -154,6 +154,7 @@
     "ui.fangsu.multi_direction_node.m22": "-22.5°",
     "ui.fangsu.multi_direction_node.p22": "+22.5°",
     "ui.fangsu.multi_direction_node.bind_and_save": "Bind & Save",
+    "ui.fangsu.multi_direction_node.radius": "Radius",
     "item.fangsu.rail_model_tool": "Rail Model Tool",
     "ui.fangsu.rail_model_tool.title": "Select Rail Model",
     "ui.fangsu.rail_model_tool.default": "Default (No Model)",

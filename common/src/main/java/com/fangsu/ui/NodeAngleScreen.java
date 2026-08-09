@@ -43,6 +43,12 @@ public class NodeAngleScreen extends Screen {
     private final double maxRadius;
 
     private EditBox angleInput;
+    // 半径编辑行（仅 TWO_RADII 形状时创建，复刻原版 RailModifierScreen）
+    private EditBox radiusInput;
+    private Button[] radiusButtons;
+    private static final String[] RADIUS_BUTTON_LABELS = {"-10", "-1", "-0.1", "+0.1", "+1", "+10"};
+    private static final double[] RADIUS_BUTTON_STEPS = {-10, -1, -0.1, 0.1, 1, 10};
+
     private final Consumer<Double> onSave;
 
     public NodeAngleScreen(BlockEntityMultiDirectionNode node, @Nullable Rail rail, Consumer<Double> onSave) {
@@ -98,6 +104,32 @@ public class NodeAngleScreen extends Screen {
         final Button buttonFlip = Button.builder(TranslationProvider.GUI_MTR_FLIP_STYLES.getMutableText().data, b -> flipStyles()).bounds(centerX + 4, railY + 28, 77, 20).build();
         buttonFlip.active = hasRail;
         this.addRenderableWidget(buttonFlip);
+
+        // ---- 半径编辑行（仅"两个半径"形状时创建，复刻原版 RailModifierScreen 的 update 逻辑）----
+        final boolean showRadius = hasRail && shape == Rail.Shape.TWO_RADII;
+        radiusInput = new EditBox(this.font, centerX - 80, railY + 56, 160, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"));
+        radiusInput.setValue(String.valueOf(radius));
+        radiusInput.setResponder(text -> {
+            try {
+                updateRadius(Double.parseDouble(text), true);
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        radiusInput.visible = showRadius;
+        this.addRenderableWidget(radiusInput);
+
+        radiusButtons = new Button[RADIUS_BUTTON_LABELS.length];
+        for (int i = 0; i < RADIUS_BUTTON_LABELS.length; i++) {
+            final int index = i;
+            final Button radiusButton = Button.builder(Component.literal(RADIUS_BUTTON_LABELS[i]), b -> updateRadius(radius + RADIUS_BUTTON_STEPS[index], true))
+                    .bounds(centerX - 80 + i * 27, railY + 80, 25, 20)
+                    .build();
+            radiusButton.visible = showRadius;
+            // 减按钮仅在 radius > 0 时可用，加按钮仅在 radius < maxRadius 时可用（与原版一致）
+            radiusButton.active = RADIUS_BUTTON_STEPS[i] < 0 ? radius > 0 : radius < maxRadius;
+            radiusButtons[i] = radiusButton;
+            this.addRenderableWidget(radiusButton);
+        }
         //#else
         //$$ angleInput = new EditBox(this.font, centerX - 80, yBase - 10, 160, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.angle"));
         //$$ angleInput.setValue(String.valueOf((float) angle));
@@ -182,6 +214,41 @@ public class NodeAngleScreen extends Screen {
         InitClient.REGISTRY_CLIENT.sendPacketToServer(
                 new PacketUpdateData(new UpdateDataRequest(MinecraftClientData.getInstance()).addRail(updatedRail))
         );
+    }
+
+    /**
+     * 更新半径并（可选）发送轨道更新包。复刻原版 RailModifierScreen.update 的 clamp/回写/发包逻辑。
+     */
+    private void updateRadius(double newRadius, boolean sendPacket) {
+        if (rail == null) return;
+        radius = Utilities.clamp(Utilities.round(newRadius, 2), 0, maxRadius);
+        // 同步输入框文本（仅当值不一致时回写，避免触发 responder 死循环）
+        if (radiusInput != null) {
+            try {
+                if (Double.parseDouble(radiusInput.getValue()) != radius) {
+                    radiusInput.setValue(String.valueOf(radius));
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        // 按钮可用性随边界变化：减按钮 radius > 0，加按钮 radius < maxRadius
+        if (radiusButtons != null) {
+            for (int i = 0; i < radiusButtons.length; i++) {
+                radiusButtons[i].active = RADIUS_BUTTON_STEPS[i] < 0 ? radius > 0 : radius < maxRadius;
+            }
+        }
+        if (sendPacket) {
+            sendRailPacket(Rail.copy(rail, shape, radius));
+        }
+    }
+
+    @Override
+    public void render(net.minecraft.client.gui.GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.render(graphics, mouseX, mouseY, partialTick);
+        // 半径输入框标签（MTR4 版固定 1.20.1，GuiGraphics 可用）
+        if (radiusInput != null && radiusInput.visible) {
+            graphics.drawString(this.font, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.getX(), radiusInput.getY() - 10, 0xFFFFFF);
+        }
     }
 
     private static double normalize(double v) {
