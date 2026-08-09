@@ -1,5 +1,6 @@
 package com.fangsu.render.scripting.util;
 
+import com.fangsu.Main;
 import com.fangsu.MainClient;
 import com.fangsu.render.sowcer.util.GlStateTracker;
 import com.fangsu.render.sowcerext.model.ModelCluster;
@@ -15,12 +16,16 @@ public class DynamicModelHolder {
         RawModel finalRawModel = rawModel.copyForMaterialChanges();
         finalRawModel.sourceLocation = null;
         RenderSystem.recordRenderCall(() -> {
-            boolean needProtection = !GlStateTracker.isStateProtected;
-            if (needProtection) GlStateTracker.capture();
-            ModelCluster lastUploadedModel = uploadedModel;
-            uploadedModel = new ModelCluster(finalRawModel, ModelManager.DEFAULT_MAPPING, MainClient.modelManager);
-            if (lastUploadedModel != null) lastUploadedModel.close();
-            if (needProtection) GlStateTracker.restore();
+            try {
+                boolean needProtection = !GlStateTracker.isStateProtected;
+                if (needProtection) GlStateTracker.capture();
+                ModelCluster lastUploadedModel = uploadedModel;
+                uploadedModel = new ModelCluster(finalRawModel, ModelManager.DEFAULT_MAPPING, MainClient.modelManager);
+                if (lastUploadedModel != null) lastUploadedModel.close();
+                if (needProtection) GlStateTracker.restore();
+            } catch (Exception e) {
+                Main.LOGGER.error("[FangSu] DynamicModelHolder upload failed", e);
+            }
         });
     }
 

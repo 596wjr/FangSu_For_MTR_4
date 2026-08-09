@@ -27,6 +27,15 @@ public class LcdDrawManager {
     /** 每节车厢的世界坐标旋转（由 RenderVehiclesMixin 更新） */
     private final Map<Long, float[]> carWorldYaw;
 
+    /** 每列车的 JS 脚本持久状态 Map（跨帧） */
+    private final Map<Long, Map<String, Object>> stateForVehicle;
+
+    /** 每列车的 VehicleExtension 引用（每帧刷新，防止闭包捕获旧实例） */
+    private final Map<Long, VehicleExtension> vehicleForVehicle;
+
+    /** 最近一帧遍历过的车辆 id（用于检测消失的车辆并清理） */
+    private final java.util.Set<Long> seenVehicleIds = new java.util.HashSet<>();
+
     private static final LcdDrawManager INSTANCE = new LcdDrawManager();
     public static LcdDrawManager getInstance() {return INSTANCE;}
 
@@ -37,6 +46,8 @@ public class LcdDrawManager {
         lcdInfoForVehicle = new HashMap<>();
         carWorldPositions = new HashMap<>();
         carWorldYaw = new HashMap<>();
+        stateForVehicle = new HashMap<>();
+        vehicleForVehicle = new HashMap<>();
     }
 
     public void reset(){
@@ -45,6 +56,9 @@ public class LcdDrawManager {
         lcdInfoForVehicle.clear();
         carWorldPositions.clear();
         carWorldYaw.clear();
+        stateForVehicle.clear();
+        vehicleForVehicle.clear();
+        seenVehicleIds.clear();
         dhForVehicle.forEach((id, dh)->{dh.close();});
         dhForVehicle.clear();
     }
@@ -103,8 +117,36 @@ public class LcdDrawManager {
         return carWorldYaw.get(vehicleId);
     }
 
+    /** 每列车的 JS 脚本持久状态 Map（跨帧） */
+    public void putState(long vehicleId, Map<String, Object> state) {
+        stateForVehicle.put(vehicleId, state);
+    }
+
+    public Map<String, Object> getState(long vehicleId) {
+        return stateForVehicle.get(vehicleId);
+    }
+
+    /** 每帧刷新车辆引用（防止绘制函数闭包捕获旧 VehicleExtension 实例） */
+    public void putVehicle(long vehicleId, VehicleExtension vehicle) {
+        vehicleForVehicle.put(vehicleId, vehicle);
+    }
+
+    public VehicleExtension getVehicle(long vehicleId) {
+        return vehicleForVehicle.get(vehicleId);
+    }
+
+    /** 最近一帧遍历过的车辆 id（由 RenderVehiclesMixin 维护，用于消失车辆检测） */
+    public java.util.Set<Long> getSeenVehicleIds() {
+        return seenVehicleIds;
+    }
+
+    public void setSeenVehicleIds(java.util.Set<Long> ids) {
+        seenVehicleIds.clear();
+        seenVehicleIds.addAll(ids);
+    }
+
     /**
-     * 根据车辆 ID 移除所有相关数据。
+     * 根据车辆 ID 移除所有相关数据（列车消失时由 RenderVehiclesMixin 调用）。
      */
     public void removeVehicle(long vehicleId) {
         lcdForVehicle.remove(vehicleId);
@@ -112,6 +154,8 @@ public class LcdDrawManager {
         lcdInfoForVehicle.remove(vehicleId);
         carWorldPositions.remove(vehicleId);
         carWorldYaw.remove(vehicleId);
+        stateForVehicle.remove(vehicleId);
+        vehicleForVehicle.remove(vehicleId);
         DisplayHelper dh = dhForVehicle.remove(vehicleId);
         if (dh != null) {
             dh.close();

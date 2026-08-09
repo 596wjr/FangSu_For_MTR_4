@@ -89,6 +89,21 @@ public class TrainStatus {
         }
     }
 
+    /**
+     * MTR4 无逐车厢门侧数据，用车辆级 doorValue 近似填充两侧（0~1，>0.01 视为开）。
+     * 如需精确逐侧状态，可后续从 immutablePath + 站台方位推导。
+     */
+    public void updateDoorState(double doorValue) {
+        final boolean open = doorValue > 0.01;
+        java.util.Arrays.fill(doorLeftOpen, open);
+        java.util.Arrays.fill(doorRightOpen, open);
+    }
+
+    @SuppressWarnings("unused")
+    public int maxManualSpeed() {
+        return train == null ? 0 : (int) train.getMaxManualSpeed();
+    }
+
     public void updateRoute() {
         final List<VehicleWrapper.Stop> allPlatforms = train.getAllPlatforms();
         final int nextIndex = train.getAllPlatformsNextIndex();

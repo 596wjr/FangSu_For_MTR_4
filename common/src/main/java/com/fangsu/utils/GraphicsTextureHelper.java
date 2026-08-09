@@ -136,7 +136,7 @@ public class GraphicsTextureHelper {
                             info.available = true;
                             info.needsUpload = true;
                             info.retryCount = 0; // 成功绘制后重置重试计数
-                        }, drawExecutor).orTimeout(200, TimeUnit.MILLISECONDS)
+                        }, drawExecutor).orTimeout(1000, TimeUnit.MILLISECONDS)
                         .exceptionally(t -> {
                             // 超时或报错：重置 flameCompleted 使下次 tick 可重试
                             info.flameCompleted = true;

@@ -24,6 +24,9 @@ public class DrawScheduler {
 
     private final List<ClusterDrawCall> drawCalls = new LinkedList<>();
 
+    // 调试字段（LCD 搁置中，见 deliverables/mtr4-vehicle-lcd-notes.md）
+    // private static boolean diagPrinted = false;
+
     public void reloadShaders(ResourceManager resourceManager) throws IOException {
         shaderManager.reloadShaders(resourceManager);
     }
@@ -34,6 +37,13 @@ public class DrawScheduler {
     }
 
     public void commit(BufferSourceProxy vertexConsumers, DrawContext drawContext) {
+        // 调试日志（LCD 搁置中，见 deliverables/mtr4-vehicle-lcd-notes.md）：
+        // 一次性确认 LCD 等自定义 drawCall 是否到达 commit（本帧 flush 的绘制请求数）
+        // if (!diagPrinted) {
+        //     diagPrinted = true;
+        //     com.fangsu.Main.LOGGER.info("[FangSu] DrawScheduler.commit: drawCalls={}, batches={}, drawWithBlaze={}, nte={}",
+        //             drawCalls.size(), batchManager.batches.size(), drawContext.drawWithBlaze, MainClient.is_nte_loaded);
+        // }
         // ===== 兼容模式：使用私有 Immediate BufferSource =====
         if (MainClient.is_nte_loaded) {
             // 1. 创建私有的 Immediate BufferSource

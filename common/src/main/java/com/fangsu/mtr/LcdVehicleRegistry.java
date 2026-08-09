@@ -4,15 +4,15 @@ import com.fangsu.Main;
 import com.fangsu.train.LcdInfo;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * 管理车型 ID → LCD 配置的映射。
- * 从所有资源包的 mtr:mtr_custom_resources.json 中读取 custom_trains 条目，
- * 自动为每个有 lcd 配置的车型推导 MTR4 生成的 4 个变体 ID。
+ * 从 fangsu:custom_trains.json 读取 custom_trains 条目（MTR4 版方速自定义车型已移出
+ * mtr:mtr_custom_resources.json，由 {@link CustomTrainRegister} 自行注册车辆），
+ * 自动为每个有 lcd 配置的车型推导 4 个变体 ID。
  */
 public class LcdVehicleRegistry {
 
@@ -20,24 +20,22 @@ public class LcdVehicleRegistry {
 
     /**
      * 在资源重载时调用。
-     * 从所有资源包的 mtr:mtr_custom_resources.json 的 custom_trains 读取 LCD 配置。
+     * 从 fangsu:custom_trains.json 的 custom_trains 读取 LCD 配置。
      */
     public static void load() {
         VEHICLE_LCD_MAP.clear();
 
         try {
-            // loadAsJSON 使用 getResourceStack 读取所有资源包并合并，
-            // 这样方速的 custom_trains 会合并到 MTR 的 vehicles 旁，互不干扰
             final JsonElement jsonElement = com.fangsu.utils.ResourceUtil.loadAsJSON(
-                    new net.minecraft.resources.ResourceLocation("mtr", "mtr_custom_resources.json"));
+                    new net.minecraft.resources.ResourceLocation("fangsu", "custom_trains.json"));
             if (jsonElement == null || !jsonElement.isJsonObject()) {
-                Main.LOGGER.warn("[FangSu LCD] mtr:mtr_custom_resources.json not found");
+                Main.LOGGER.warn("[FangSu LCD] fangsu:custom_trains.json not found");
                 return;
             }
 
             final JsonObject root = jsonElement.getAsJsonObject();
             if (!root.has("custom_trains")) {
-                Main.LOGGER.info("[FangSu LCD] No custom_trains section in mtr:mtr_custom_resources.json");
+                Main.LOGGER.info("[FangSu LCD] No custom_trains section in fangsu:custom_trains.json");
                 return;
             }
 
@@ -62,6 +60,9 @@ public class LcdVehicleRegistry {
                     final JsonObject extra = new JsonObject();
                     extra.addProperty("id", lcdId);
                     if (slotsPath != null) extra.addProperty("slots", slotsPath);
+                    // 透传 JS 脚本配置（lcd.script / lcd.extraConfig），供 LcdInfo.hasScript() 判定
+                    if (lcdObj.has("script")) extra.addProperty("script", lcdObj.get("script").getAsString());
+                    if (lcdObj.has("extraConfig")) extra.add("extraConfig", lcdObj.get("extraConfig"));
 
                     final LcdInfo lcdInfo = LcdInfo.lazyFromJson(extra);
                     if (lcdInfo != null) {
@@ -110,6 +111,11 @@ public class LcdVehicleRegistry {
 
     public static void markVehicleInitialized(long vehicleId) {
         initializedVehiclesSet.add(vehicleId);
+    }
+
+    /** 车辆消失时调用，使该车下次出现时重新初始化 */
+    public static void unmarkVehicleInitialized(long vehicleId) {
+        initializedVehiclesSet.remove(vehicleId);
     }
 
     public static void printRegistered() {

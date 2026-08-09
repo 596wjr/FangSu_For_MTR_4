@@ -15,6 +15,7 @@ import com.fangsu.drawing.diaoban.DiaobanDrawManager;
 import com.fangsu.drawing.pids.PidsDrawManager;
 import com.fangsu.drawing.ris.RisDrawManager;
 import com.fangsu.drawing.sis.SisDrawManager;
+import com.fangsu.mtr.CustomTrainRegister;
 import com.fangsu.mtr.LcdVehicleRegistry;
 import com.fangsu.train.LcdDrawManager;
 import com.fangsu.train.LcdManager;
@@ -43,6 +44,7 @@ public class MainClient {
     public static List<Runnable> resourceInitRunnables = new ArrayList<>();
 
     public static void initClient() {
+        CustomTrainRegister.initTickHook();
         ModBlocks.initClient();
         ModMenus.initClient();
         ShadersModHandler.init();
@@ -123,6 +125,13 @@ public class MainClient {
             } catch (Exception e) {
                 Main.LOGGER.error("[FangSu] LcdVehicleRegistry init failed", e);
             }
+
+            // 方速 custom_trains 车辆注册进 MTR 可选车型。
+            // 实测 MTR 的 CustomResourceLoader.reload() 在本 listener 之后才执行，
+            // reload() 开头会清空 VEHICLES，直接注册会被清掉；且 Minecraft.execute 在渲染线程
+            // 是同步立即执行，同样来不及。故只置标志，由 CustomTrainRegister 的 tick 轮询在
+            // MTR reload 完成后再注册（每次资源重载自动重新排队，注册后验证生效才结束）
+            CustomTrainRegister.markNeedsRegister();
 
             for (Runnable runnable : resourceInitRunnables) {
                 try {

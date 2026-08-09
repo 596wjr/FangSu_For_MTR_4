@@ -38,11 +38,11 @@ public class MtrLcd extends LcdBase {
         final Font nonCjkFont = getNonCjkFont();
 
         if (status.currentRoute == null || status.drawableRoute == null) {
-            g.setColor(Color.RED);
-            g.fillRect(x, y, w, h);
             g.setColor(Color.WHITE);
-            g.setFont(cjkFont.deriveFont((float) h / 4));
-            g.drawString("LCD TEST", x + 10, y + h / 2);
+            g.fillRect(x, y, w, h);
+            g.setColor(Color.BLACK);
+            drawStationNameCenter(g, x, y, w, h, "无线路信息", "No route loaded", cjkFont, nonCjkFont);
+            drawMindTheGap(g, x, y, w, h, cjkFont, nonCjkFont);
             callback.run();
             return;
         }
