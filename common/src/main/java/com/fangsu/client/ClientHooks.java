@@ -51,6 +51,10 @@ public final class ClientHooks {
             = be -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
+    public static Consumer<com.fangsu.blockEntities.BlockEntityRotatingRail> OPEN_ROTATING_RAIL_MODEL_SELECT_SCREEN
+            = be -> {
+                Main.LOGGER.error("打开方法没有被替换!");
+            };
     public static BiConsumer<com.fangsu.blockEntities.BlockEntityMultiDirectionNode, Rail> OPEN_NODE_ANGLE_SCREEN
             = (be, rail) -> {
                 Main.LOGGER.error("打开方法没有被替换!");
@@ -87,6 +91,10 @@ public final class ClientHooks {
 
     public static void openRotatingRailConfigScreen(BaseObjBlockEntity be) {
         OPEN_ROTATING_RAIL_CONFIG_SCREEN.accept(be);
+    }
+
+    public static void openRotatingRailModelSelectScreen(com.fangsu.blockEntities.BlockEntityRotatingRail be) {
+        OPEN_ROTATING_RAIL_MODEL_SELECT_SCREEN.accept(be);
     }
 
     /** 打开角度配置界面（无轨道信息，如扳手右键）。 */

@@ -11,11 +11,9 @@ import com.fangsu.network.ModNetwork;
 import com.fangsu.render.scripting.util.DynamicModelHolder;
 import com.fangsu.render.sowcer.math.Matrices;
 import com.fangsu.render.sowcerext.model.RawModel;
-import com.fangsu.ui.ModelSelectScreen;
 import com.fangsu.utils.ResourceUtil;
 import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -685,28 +683,11 @@ public class BlockEntityRotatingRail extends BaseObjBlockEntity implements Synca
         ).setSaveOnChange(true));
 
         // 轨道模型选择：使用 ModelSelectScreen 打开（从 NteRailManager 中选择 NteRail）
+        // 通过 ClientHooks 间接打开，避免在公共类中直接引用客户端 Screen（会导致服务端启动崩溃）
         configs.add(new RunnableConfig(
                 ComponentHelper.translatable("ui.fangsu.rotating_rail.rail"),
                 new ConfigSpec("func"),
-                () -> Minecraft.getInstance().setScreen(new ModelSelectScreen(
-                        ComponentHelper.translatable("ui.fangsu.rotating_rail.rail"),
-                        BlockEntityRotatingRail.this,
-                        NteRailManager.getInstance().getRails(),
-                        target -> (target instanceof BlockEntityRotatingRail)
-                                ? ((BlockEntityRotatingRail) target).getExtraConfig("railId", DEFAULT_RAIL_ID)
-                                : DEFAULT_RAIL_ID,
-                        (target, value) -> {
-                            if (target instanceof BlockEntityRotatingRail) {
-                                BlockEntityRotatingRail rail = (BlockEntityRotatingRail) target;
-                                rail.setExtraConfig("railId", value);
-                                if (rail == BlockEntityRotatingRail.this) {
-                                    rail.reloadModel();
-                                }
-                            }
-                        },
-                        Minecraft.getInstance().screen,
-                        this::reloadModel
-                ))
+                () -> ClientHooks.openRotatingRailModelSelectScreen(BlockEntityRotatingRail.this)
         ).setButtonText(ComponentHelper.translatable("ui.fangsu.rotating_rail.rail_select")));
 
         String currentMode = extra.getOrDefault("mode", MODE_F);
@@ -819,7 +800,7 @@ public class BlockEntityRotatingRail extends BaseObjBlockEntity implements Synca
         sendUpdateC2S();
     }
 
-    private void reloadModel() {
+    public void reloadModel() {
         if (trackModelHolder != null) {
             trackModelHolder.close();
             trackModelHolder = null;
