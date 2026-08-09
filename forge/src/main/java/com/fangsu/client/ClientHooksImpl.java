@@ -9,6 +9,8 @@ import com.fangsu.ui.ticketMachine.TicketMachineMainScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
+import org.mtr.core.data.Rail;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +34,10 @@ public final class ClientHooksImpl {
         Minecraft.getInstance().setScreen(
                 new ConfigScreen(com.fangsu.mappings.ComponentHelper.translatable("ui.fangsu.block.extras"), ((com.fangsu.blockEntities.BlockEntityRotatingRail) be).getConfigs())
         );
+    }
+
+    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be, @Nullable Rail rail) {
+        Minecraft.getInstance().setScreen(new NodeAngleScreen(be, rail, angle -> be.refreshConnectedRailsIfNeeded()));
     }
 
     public static void openSignConfigScreen(

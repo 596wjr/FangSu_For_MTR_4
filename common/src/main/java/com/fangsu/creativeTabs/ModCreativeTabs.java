@@ -8,12 +8,13 @@ import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.world.item.CreativeModeTab;
 
 public class ModCreativeTabs {
-    //#if MC_VERSION >= 12000
+    //#if MC_VERSION >= 11904
     public static final RegistrySupplier<CreativeModeTab> FANGSU_MAIN = RegisterUtil.addCreativeTab(
             "main",
             ComponentHelper.translatable("tab.fangsu.main").getString(),
             ModBlocks.ITEM_TICKET_BARRIER,
             ModItems.ITEM_WRENCH,
+            ModItems.ITEM_RAIL_MODEL_TOOL,
             ModBlocks.ITEM_TICKET_BARRIER,
             ModBlocks.ITEM_SCREENDOOR,
             ModBlocks.ITEM_SCREENDOOR_GLASS,
@@ -27,8 +28,8 @@ public class ModCreativeTabs {
             ModBlocks.ITEM_SIS,
             ModBlocks.ITEM_ADV_BOARD,
             ModBlocks.ITEM_SCREENDOOR_CENTRAL_CONTROL,
-//            ModBlocks.ITEM_ROTATING_RAIL,
-            ModBlocks.ITEM_COLLISION_COMPENSATOR
+            ModBlocks.ITEM_COLLISION_COMPENSATOR,
+            ModBlocks.ITEM_MULTI_DIRECTION_NODE
     );
     //#elseif MC_VERSION >= 11903
     //$$ public static final CreativeModeTab FANGSU_MAIN = RegisterUtil.addCreativeTab(
@@ -36,6 +37,7 @@ public class ModCreativeTabs {
     //$$         ComponentHelper.translatable("tab.fangsu.main").getString(),
     //$$         ModBlocks.ITEM_TICKET_BARRIER,
     //$$         ModItems.ITEM_WRENCH,
+    //$$         ModItems.ITEM_RAIL_MODEL_TOOL,
     //$$         ModBlocks.ITEM_TICKET_BARRIER,
     //$$         ModBlocks.ITEM_SCREENDOOR,
     //$$         ModBlocks.ITEM_SCREENDOOR_GLASS,
@@ -49,7 +51,6 @@ public class ModCreativeTabs {
     //$$         ModBlocks.ITEM_SIS,
     //$$         ModBlocks.ITEM_ADV_BOARD,
     //$$         ModBlocks.ITEM_SCREENDOOR_CENTRAL_CONTROL,
-    //         ModBlocks.ITEM_ROTATING_RAIL,
     //$$         ModBlocks.ITEM_COLLISION_COMPENSATOR
     //$$ );
     //#else

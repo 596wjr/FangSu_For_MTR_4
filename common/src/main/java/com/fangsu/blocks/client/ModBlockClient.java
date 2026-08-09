@@ -8,6 +8,14 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 public class ModBlockClient {
     public static void initClient() {
         BlockEntityRendererRegistry.register(
+                ModBlocks.BLOCK_ENTITY_ROTATING_RAIL.get(),
+                ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
+        );
+        BlockEntityRendererRegistry.register(
+                ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE.get(),
+                ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
+        );
+        BlockEntityRendererRegistry.register(
                 ModBlocks.BLOCK_ENTITY_TICKET_BARRIER.get(),
                 ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
         );
@@ -49,10 +57,6 @@ public class ModBlockClient {
         );
         BlockEntityRendererRegistry.register(
                 ModBlocks.BLOCK_ENTITY_SIS.get(),
-                ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
-        );
-        BlockEntityRendererRegistry.register(
-                ModBlocks.BLOCK_ENTITY_ROTATING_RAIL.get(),
                 ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
         );
     }

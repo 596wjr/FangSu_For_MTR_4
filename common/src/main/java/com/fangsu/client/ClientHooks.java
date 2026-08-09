@@ -8,9 +8,12 @@ import com.fangsu.drawing.sign.SignItem;
 import com.fangsu.ui.RouteSelectInfo;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
+import org.mtr.core.data.Rail;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public final class ClientHooks {
@@ -48,6 +51,10 @@ public final class ClientHooks {
             = be -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
+    public static BiConsumer<com.fangsu.blockEntities.BlockEntityMultiDirectionNode, Rail> OPEN_NODE_ANGLE_SCREEN
+            = (be, rail) -> {
+                Main.LOGGER.error("打开方法没有被替换!");
+            };
 
     private ClientHooks() {
     }
@@ -80,6 +87,16 @@ public final class ClientHooks {
 
     public static void openRotatingRailConfigScreen(BaseObjBlockEntity be) {
         OPEN_ROTATING_RAIL_CONFIG_SCREEN.accept(be);
+    }
+
+    /** 打开角度配置界面（无轨道信息，如扳手右键）。 */
+    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be) {
+        OPEN_NODE_ANGLE_SCREEN.accept(be, null);
+    }
+
+    /** 打开角度配置界面（含轨道信息，如刷子右键）。 */
+    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be, @Nullable Rail rail) {
+        OPEN_NODE_ANGLE_SCREEN.accept(be, rail);
     }
 
     @FunctionalInterface

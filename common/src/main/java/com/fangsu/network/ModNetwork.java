@@ -36,12 +36,19 @@ public class ModNetwork {
             new ResourceLocation("fangsu", "central_control_sync");
     public static final ResourceLocation TICKET_BARRIER_SYNC =
             new ResourceLocation("fangsu", "ticket_barrier_sync");
+    public static final ResourceLocation NODE_REFRESH_RAIL =
+            new ResourceLocation("fangsu", "node_refresh_rail");
 
     public static void init() {
         NetworkManager.registerReceiver(
                 NetworkManager.Side.C2S,
                 BE_SYNC,
                 ModNetwork::handleBeSync
+        );
+        NetworkManager.registerReceiver(
+                NetworkManager.Side.C2S,
+                NODE_REFRESH_RAIL,
+                ModNetwork::handleNodeRefreshRail
         );
         NetworkManager.registerReceiver(
                 NetworkManager.Side.C2S,
@@ -58,6 +65,42 @@ public class ModNetwork {
                 TICKET_BARRIER_SYNC,
                 ModNetwork::handleTicketBarrierSync
         );
+    }
+
+    /**
+     * 服务端：万向节点方向改变后刷新重建连接到该节点的轨道。
+     * 收到客户端 [nodePos, newDirection, otherPos...]，对每个其他端点删除旧轨道并以新方向重建。
+     */
+    private static void handleNodeRefreshRail(
+            FriendlyByteBuf buf,
+            NetworkManager.PacketContext ctx
+    ) {
+        ctx.queue(() -> {
+            ServerPlayer player = (ServerPlayer) ctx.getPlayer();
+            if (player == null) return;
+            //#if MC_VERSION >= 12000
+            Level level = player.level();
+            //#else
+            //$$ Level level = player.level;
+            //#endif
+            BlockPos nodePos = buf.readBlockPos();
+            double newDirection = buf.readDouble();
+            int count = buf.readInt();
+            java.util.List<BlockPos> others = new java.util.ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                others.add(buf.readBlockPos());
+            }
+
+            BlockEntity be = level.getBlockEntity(nodePos);
+            if (!(be instanceof com.fangsu.blockEntities.BlockEntityMultiDirectionNode node)) return;
+            // 应用新的绑定方向
+            node.setDirectionBonded(newDirection);
+            node.setConnected(true);
+
+            for (BlockPos otherPos : others) {
+                com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos);
+            }
+        });
     }
 
     private static void handleBeSync(
