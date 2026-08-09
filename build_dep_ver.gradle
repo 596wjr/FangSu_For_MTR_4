@@ -44,7 +44,7 @@ def is120 = minecraft_version == "1.20" || minecraft_version == "1.20.1"
 // Pack format（数据包格式版本）
 def packFormats = [
 //        "1.18.2": 7, "1.19.2": 9, "1.19.3": 12, "1.19.4": 13,
-        "1.20.1": 15
+        "1.20.1": 15, "1.20.4": 15
 ]
 def packFormat = packFormats[minecraft_version] ?: 15
 
@@ -52,7 +52,7 @@ def packFormat = packFormats[minecraft_version] ?: 15
 def forgeVersions = [
 //        "1.18.2": "40.2.0", "1.19.2": "43.3.0", "1.19.3": "44.1.0",
 //        "1.19.4": "45.2.0",
-        "1.20.1": "47.2.0"
+        "1.20.1": "47.2.0", "1.20.4": "49.2.0"
 ]
 def forgeVer = minecraft_version + "-" + (forgeVersions[minecraft_version] ?: "47.2.0")
 def forgeMajorVer = (forgeVersions[minecraft_version] ?: "47").split("[.-]")[0] as int
@@ -62,7 +62,7 @@ def fabricLoaderVer = "0.16.14"
 def fabricApiVersions = [
 //        "1.18.2": "0.77.0+1.18.2",
 //        "1.19.2": "0.77.0+1.19.2", "1.19.3": "0.76.1+1.19.3", "1.19.4": "0.87.2+1.19.4",
-        "1.20.1": "0.92.3+1.20.1"
+        "1.20.1": "0.92.3+1.20.1", "1.20.4": "0.97.0+1.20.4"
 ]
 def fabricApiVer = fabricApiVersions[minecraft_version] ?: fabricLoaderVer
 
@@ -70,7 +70,7 @@ def fabricApiVer = fabricApiVersions[minecraft_version] ?: fabricLoaderVer
 def archVersions = [
 //        "1.18.2": "4.11.93",
 //        "1.19.2": "6.5.85", "1.19.3": "7.1.86", "1.19.4": "8.2.89",
-        "1.20.1": "9.1.12"
+        "1.20.1": "9.1.12", "1.20.4":"11.0.12"
 ]
 def archApiVer = archVersions[minecraft_version] ?: archVersions.values().first()
 
@@ -80,18 +80,19 @@ def mtrFabricVersions = [
 //        "1.19.2": "FABRIC-1.19.2-3.2.2-hotfix-1",
 //        "1.19.3": "FABRIC-1.19.3-3.2.2-hotfix-1",
 //        "1.19.4": "FABRIC-1.19.4-3.2.2-hotfix-1",
-        "1.20.1": "FABRIC-4.0.5+1.20.1"
+        "1.20.1": "FABRIC-4.0.5+1.20.1",
+        "1.20.4": "FABRIC-4.0.5+1.20.4"
 ]
 def mtrForgeVersions = [
 //        "1.18.2": "FORGE-1.18.2-3.2.2-hotfix-1",
 //        "1.19.2": "FORGE-1.19.2-3.2.2-hotfix-1",
 //        "1.19.3": "FORGE-1.19.3-3.2.2-hotfix-1",
 //        "1.19.4": "FORGE-1.19.4-3.2.2-hotfix-1",
-        "1.20.1": "FORGE-4.0.5+1.20.1"
+        "1.20.1": "FORGE-4.0.5+1.20.1",
+        "1.20.4": "FORGE-4.0.5+1.20.4"
 ]
 def mtrFabric = mtrFabricVersions[minecraft_version] ?: mtrFabricVersions["1.20.1"]
 def mtrForge = mtrForgeVersions[minecraft_version] ?: mtrForgeVersions["1.20.1"]
-
 
 def jcm_version_forge="KaGitmYA"
 def jcm_version_fabric="v2.2.2+1.20.1"
@@ -99,17 +100,19 @@ def jcm_version_fabric="v2.2.2+1.20.1"
 def supportsVer = [
 //        "1.18.2": "1.18.x",
 //        "1.19.2": "1.19.2", "1.19.3": "1.19.3", "1.19.4": "1.19.4",
-        "1.20.1": "1.20.x"
+        "1.20.1": "1.20.1",
+        "1.20.4": "1.20.4"
 ][minecraft_version] ?: "1.20.x"
 def supportsVerRange = [
 //        "1.18.2": "[1.18, 1.19)",
 //        "1.19.2": "1.19.2", "1.19.3": "1.19.3", "1.19.4": "1.19.4",
-        "1.20.1": "[1.20, 1.21)"
+        "1.20.1": "[1.20, 1.21)",
+        "1.20.4":"[1.20,1.21)"
 ][minecraft_version] ?: "[1.20, 1.21)"
 def parchmentVer = [
 //        "1.18.2": "2022.11.06",
 //        "1.19.2": "2022.11.27", "1.19.3": "2023.06.25", "1.19.4": "2023.06.26",
-        "1.20.1": "2023.09.03"
+        "1.20.1": "2023.09.03","1.20.4": "2023.09.03"
 ][minecraft_version] ?: "2023.09.03"
 
 // ========== 传播到所有项目 ==========
@@ -143,7 +146,8 @@ def mtrMinVersions = [
         "1.19.2": "1.19.2-0",
         "1.19.3": "1.19.3-0",
         "1.19.4": "1.19.4-0",
-        "1.20.1": "0"
+        "1.20.1": "0",
+        "1.20.4":"0"
 ]
 rootProject.ext.mtr_min_version = mtrMinVersions[minecraft_version] ?: "0"
 rootProject.ext.mtr_min_version = mtrMinVersions[minecraft_version]
