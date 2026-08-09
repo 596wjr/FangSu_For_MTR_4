@@ -6,6 +6,7 @@ import net.minecraft.client.Minecraft;
 import org.mtr.libraries.it.unimi.dsi.fastutil.longs.LongAVLTreeSet;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectAVLTreeSet;
 import org.mtr.mod.block.BlockNode;
+import org.mtr.mod.Init;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Vec3i;
@@ -114,6 +115,33 @@ public class MtrUtil {
     }
 
     /**
+     * 获取指定方块坐标处的轨道节点信息。
+     *
+     * @param x 方块 X 坐标
+     * @param y 方块 Y 坐标
+     * @param z 方块 Z 坐标
+     * @return 该坐标处的节点信息；若该坐标不是节点方块或世界不可用，则返回 connected=false 的节点
+     */
+    public static MtrNode getMtrNode(int x, int y, int z) {
+        final BlockPos pos = new BlockPos(x, y, z);
+        final BlockGetter world = Minecraft.getInstance().level;
+        if (world == null) {
+            return new MtrNode(0, x, y, z, false);
+        }
+        final BlockState state = world.getBlockState(pos);
+        if (!(state.getBlock() instanceof BlockNode)) {
+            return new MtrNode(0, x, y, z, false);
+        }
+        final float angle = BlockNode.getAngle(new org.mtr.mapping.holder.BlockState(state));
+        final boolean connected = MinecraftClientData.getInstance().positionsToRail.containsKey(Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos)));
+        return new MtrNode(angle, x, y, z, connected);
+    }
+
+    /** 轨道节点信息（角度、坐标、是否已连接）。 */
+    public static record MtrNode(float angle, int x, int y, int z, boolean connected) {
+    }
+
+    /**
      * 根据站台 ID 查找站台。
      */
     @Nullable
@@ -147,6 +175,18 @@ public class MtrUtil {
         if (route != null) return new LocalRoute(route);
         final SimplifiedRoute simplifiedRoute = MinecraftClientData.getInstance().simplifiedRouteIdMap.get(routeId);
         return simplifiedRoute != null ? new LocalRoute(simplifiedRoute) : null;
+    }
+
+    /**
+     * 判断客户端是否已加载了任何路线数据。
+     * <p>
+     * 用于区分"MTR 数据尚未同步完成"与"指定线路确实不存在"：
+     * 若客户端完全没有路线数据，通常意味着数据同步尚未开始；
+     * 若已有路线数据却仍查不到指定 id，则可视为该线路不存在或已超出同步范围。
+     */
+    public static boolean hasAnyRouteData() {
+        return !MinecraftClientData.getInstance().routes.isEmpty()
+                || !MinecraftClientData.getInstance().simplifiedRoutes.isEmpty();
     }
 
     public static List<LocalRoute> getRouteByName(String routeName) {
@@ -280,6 +320,7 @@ public class MtrUtil {
 
     public static boolean isDestination(LocalRoute route, Platform platform) {
         if (route == null || platform == null) return false;
+        if (route.platformIds == null || route.platformIds.isEmpty()) return false;
         return route.platformIds.get(route.platformIds.size() - 1).platformId == platform.getId();
     }
 

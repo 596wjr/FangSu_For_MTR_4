@@ -66,6 +66,52 @@ public class BlockEntitySignOnWall extends FunctionalObjBlockEntity {
 
     private Map<String, List<SignItem>> items;
 
+    /**
+     * 重试节流：当路线等 MTR 数据尚未同步（item isReady()==false）导致绘制未完成时，
+     * 避免每一帧都重建纹理，只有距上次重试足够久（{@link #REDRAW_RETRY_INTERVAL_MS}）才重试。
+     */
+    private static final long REDRAW_RETRY_INTERVAL_MS = 200;
+    private long lastRedrawAttemptTime = 0;
+
+    /**
+     * 是否允许执行重绘。数据未就绪时进行节流，避免每帧重建纹理造成性能开销。
+     */
+    private boolean shouldAttemptRedraw() {
+        final long now = System.currentTimeMillis();
+        if (now - lastRedrawAttemptTime >= REDRAW_RETRY_INTERVAL_MS) {
+            lastRedrawAttemptTime = now;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 检查一个 lane 中所有 item 是否都已就绪（可用于绘制）。
+     */
+    private boolean checkAllReady(Graphics2D g, float unit, List<SignItem> items) {
+        boolean allReady = true;
+        for (SignItem item : items) {
+            item.getWidth(g, unit);
+            allReady &= item.isReady();
+        }
+        return allReady;
+    }
+
+    /**
+     * 检查所有 item 是否都已绘制完成。
+     */
+    private boolean checkCompleted(Map<String, List<SignItem>> items) {
+        if (items == null) return true;
+        boolean completed = true;
+        for (List<SignItem> item : items.values()) {
+            if (item == null) continue;
+            for (SignItem i : item) {
+                completed &= i.isCompleted();
+            }
+        }
+        return completed;
+    }
+
     public BlockEntitySignOnWall(BlockPos pos, BlockState state) {
         super(BLOCK_ENTITY_SIGN_ON_WALL.get(), pos, state);
     }
@@ -154,7 +200,7 @@ public class BlockEntitySignOnWall extends FunctionalObjBlockEntity {
     @Override
     public void whenRendering() {
         ObjBlockScriptContext ctx = this.scriptContext;
-        if (requiresRedraw) {
+        if (requiresRedraw && shouldAttemptRedraw()) {
             items = initItems(extraConfigs.get("items"));
 
             if (gtFront != null) gtFront.closeLater();
@@ -167,16 +213,24 @@ public class BlockEntitySignOnWall extends FunctionalObjBlockEntity {
                 g.fillRect(0, 0, gtFront.width, gtFront.height);   // 濉厖鏁翠釜鍖哄煙
                 g.setComposite(AlphaComposite.SrcOver); // 鎭㈠榛樿娣峰悎妯″紡
                 if (items != null) {
+                    // 线路等数据未同步（item 未就绪）时跳过绘制，等待重绘，避免提前绘制"未命名"
                     if (items.containsKey("left"))
-                        drawLane(gtFront, items.get("left"), 0, gtFront.height * 0.1f, 0, gtFront.height * 0.8f);
+                        if (checkAllReady(gtFront.graphics, gtFront.height * 0.8f, items.get("left")))
+                            drawLane(gtFront, items.get("left"), 0, gtFront.height * 0.1f, 0, gtFront.height * 0.8f);
                     if (items.containsKey("right"))
-                        drawLane(gtFront, items.get("right"), gtFront.width, gtFront.height * 0.1f, 2, gtFront.height * 0.8f);
+                        if (checkAllReady(gtFront.graphics, gtFront.height * 0.8f, items.get("right")))
+                            drawLane(gtFront, items.get("right"), gtFront.width, gtFront.height * 0.1f, 2, gtFront.height * 0.8f);
                     if (items.containsKey("center"))
-                        drawLane(gtFront, items.get("center"), gtFront.width * 0.5f, gtFront.height * 0.1f, 1, gtFront.height * 0.8f);
+                        if (checkAllReady(gtFront.graphics, gtFront.height * 0.8f, items.get("center")))
+                            drawLane(gtFront, items.get("center"), gtFront.width * 0.5f, gtFront.height * 0.1f, 1, gtFront.height * 0.8f);
                 }
-                gtFront.upload();
             }
-            requiresRedraw = false;
+            // 所有 item 绘制完成才上传并结束重绘；数据未就绪时保持 requiresRedraw 以继续等待同步
+            boolean completed = checkCompleted(items);
+            if (completed) {
+                if (gtFront != null && !gtFront.isClosed.get()) gtFront.upload();
+                requiresRedraw = false;
+            }
         }
         if (dmhDispFront != null && dmhDispFront.getUploadedModel() != null) {
             dmhDispFront.getUploadedModel().replaceAllTexture(gtFront.identifier);

@@ -74,4 +74,29 @@ public abstract class LayoutItem extends SignItem {
             drawX += w + laneUnit * 0.1f;
         }
     }
+
+    /**
+     * 布局容器自身始终被视为"已创建"，但它的就绪/完成状态应取决于其所有子 item。
+     * 这样当子项（例如路线项）因 MTR 数据未同步而未就绪时，容器整体也不应被视为就绪，
+     * 从而避免提前绘制"未命名"线路。
+     */
+    @Override
+    public boolean isReady() {
+        for (List<SignItem> lane : childLanes.values()) {
+            for (SignItem item : lane) {
+                if (!item.isReady()) return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public boolean isCompleted() {
+        for (List<SignItem> lane : childLanes.values()) {
+            for (SignItem item : lane) {
+                if (!item.isCompleted()) return false;
+            }
+        }
+        return true;
+    }
 }

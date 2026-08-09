@@ -70,6 +70,40 @@ public class RouteItemB extends SignItem {
     }
 
     @Override
+    public boolean isReady() {
+        return resolveRouteIfNeeded();
+    }
+
+    @Override
+    public boolean isCompleted() {
+        return isReady();
+    }
+
+    /**
+     * 若选择了线路（routeId != -1）但线路对象尚未就绪（MTR 数据可能未同步），
+     * 则尝试重新解析。返回该线路当前是否可用于绘制。
+     * <p>
+     * - 未选择线路（routeId == -1）：视为就绪，绘制"未命名"；
+     * - 选择了线路且已解析成功：就绪；
+     * - 选择了线路但客户端尚无任何路线数据（可能尚未同步）：未就绪，等待重绘；
+     * - 选择了线路但客户端已有路线数据却仍查不到（线路不存在）：视为就绪，绘制"未命名"。
+     */
+    private boolean resolveRouteIfNeeded() {
+        if (route != null) return true;
+        if (routeId == -1) return true; // 未选择线路，属正常"未命名"
+        // 重新尝试解析（MTR 数据可能刚刚同步）
+        final LocalRoute resolved = MtrUtil.getRouteById(routeId);
+        if (resolved != null) {
+            route = resolved;
+            return true;
+        }
+        // 客户端尚无任何路线数据：可能尚未同步，继续等待重绘
+        if (!MtrUtil.hasAnyRouteData()) return false;
+        // 已存在其他路线却查不到指定 id：视为线路不存在，绘制"未命名"
+        return true;
+    }
+
+    @Override
     public void draw(SignDrawContext ctx) {
         Graphics2D g = ctx.graphics();
         float u = ctx.unit();

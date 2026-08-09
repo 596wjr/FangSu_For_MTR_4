@@ -73,6 +73,25 @@ public class BlockEntitySign extends FunctionalObjBlockEntity {
     private Map<String, List<SignItem>> itemsFront, itemsBack;
     private boolean frontReady, frontCompleted, backReady, backCompleted;
 
+    /**
+     * 重试节流：当路线等 MTR 数据尚未同步（item isReady()==false）导致绘制未完成时，
+     * 避免每一帧都重建纹理，只有距上次重试足够久（{@link #REDRAW_RETRY_INTERVAL_MS}）才重试。
+     */
+    private static final long REDRAW_RETRY_INTERVAL_MS = 200;
+    private long lastRedrawAttemptTime = 0;
+
+    /**
+     * 是否允许执行重绘。数据未就绪时进行节流，避免每帧重建纹理造成性能开销。
+     */
+    private boolean shouldAttemptRedraw() {
+        final long now = System.currentTimeMillis();
+        if (now - lastRedrawAttemptTime >= REDRAW_RETRY_INTERVAL_MS) {
+            lastRedrawAttemptTime = now;
+            return true;
+        }
+        return false;
+    }
+
     public BlockEntitySign(BlockPos pos, BlockState state) {
         super(BLOCK_ENTITY_SIGN.get(), pos, state);
     }
@@ -199,7 +218,7 @@ public class BlockEntitySign extends FunctionalObjBlockEntity {
     @Override
     public void whenRendering() {
         ObjBlockScriptContext ctx = this.scriptContext;
-        if (requiresRedraw) {
+        if (requiresRedraw && shouldAttemptRedraw()) {
             itemsFront = initItems(extraConfigs.get("itemsFront"));
             itemsBack = initItems(extraConfigs.get("itemsBack"));
 
