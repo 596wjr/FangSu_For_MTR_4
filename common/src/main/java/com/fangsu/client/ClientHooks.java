@@ -8,6 +8,8 @@ import com.fangsu.drawing.sign.SignItem;
 import com.fangsu.ui.RouteSelectInfo;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.mtr.core.data.Rail;
 
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public final class ClientHooks {
 
@@ -60,7 +63,26 @@ public final class ClientHooks {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
 
+    /** 获取本地玩家（仅客户端注入；服务器端或未注入时返回 null）。 */
+    public static Supplier<Player> GET_LOCAL_PLAYER = () -> null;
+
+    /** 打开轨道模型选择界面（仅客户端注入；服务器端或未注入时报错提示）。 */
+    public static Consumer<ItemStack> OPEN_RAIL_MODEL_SELECT_SCREEN
+            = stack -> {
+                Main.LOGGER.error("打开方法没有被替换!");
+            };
+
     private ClientHooks() {
+    }
+
+    /** 获取本地玩家（仅客户端注入；服务器端或未注入时返回 null）。 */
+    public static Player getLocalPlayer() {
+        return GET_LOCAL_PLAYER.get();
+    }
+
+    /** 打开轨道模型选择界面（仅客户端有效）。 */
+    public static void openRailModelSelectScreen(ItemStack stack) {
+        OPEN_RAIL_MODEL_SELECT_SCREEN.accept(stack);
     }
 
     public static void openObjBlockConfigScreen(FunctionalObjBlockEntity blockEntity) {

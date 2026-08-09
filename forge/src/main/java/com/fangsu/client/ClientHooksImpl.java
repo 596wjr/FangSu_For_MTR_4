@@ -9,6 +9,7 @@ import com.fangsu.ui.ticketMachine.TicketMachineMainScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.mtr.core.data.Rail;
 
@@ -99,5 +100,9 @@ public final class ClientHooksImpl {
         Minecraft.getInstance().execute(() -> {
             Minecraft.getInstance().setScreen(new ScreendoorCentralControlScreen(ctrl));
         });
+    }
+
+    public static void openRailModelSelectScreen(ItemStack stack) {
+        Minecraft.getInstance().setScreen(new RailModelSelectScreen(stack));
     }
 }

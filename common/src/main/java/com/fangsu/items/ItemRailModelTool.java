@@ -1,9 +1,8 @@
 package com.fangsu.items;
 
 import com.fangsu.blocks.BlockMultiDirectionNode;
+import com.fangsu.client.ClientHooks;
 import com.fangsu.mappings.ComponentHelper;
-import com.fangsu.ui.RailModelSelectScreen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -100,7 +99,9 @@ public class ItemRailModelTool extends Item {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (level.isClientSide()) {
-            Minecraft.getInstance().setScreen(new RailModelSelectScreen(stack));
+            // 通过 ClientHooks 打开界面：此类会被服务器加载（ModItems 静态注册），
+            // 直接引用 net.minecraft.client.Minecraft 会导致服务器端类加载崩溃
+            ClientHooks.openRailModelSelectScreen(stack);
             return InteractionResultHolder.success(stack);
         }
         return InteractionResultHolder.pass(stack);

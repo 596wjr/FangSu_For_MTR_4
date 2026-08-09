@@ -29,6 +29,8 @@ public class MainForgeClient {
             ClientHooks.OPEN_ROTATING_RAIL_CONFIG_SCREEN = ClientHooksImpl::openRotatingRailConfigScreen;
             ClientHooks.OPEN_ROTATING_RAIL_MODEL_SELECT_SCREEN = ClientHooksImpl::openRotatingRailModelSelectScreen;
             ClientHooks.OPEN_NODE_ANGLE_SCREEN = ClientHooksImpl::openNodeAngleScreen;
+            ClientHooks.OPEN_RAIL_MODEL_SELECT_SCREEN = ClientHooksImpl::openRailModelSelectScreen;
+            ClientHooks.GET_LOCAL_PLAYER = () -> net.minecraft.client.Minecraft.getInstance().player;
             hooksInitialized = true;
         }
     }

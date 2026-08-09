@@ -19,7 +19,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -315,8 +314,10 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         // 已连接时：默认隐藏模型，仅手持轨道连接器/刷子/节点方块时显示 node_connected.obj
         if (connected) {
             if (level != null && level.isClientSide) {
-                final net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-                if (mc.player != null && isHoldingRailRelated(mc.player)) {
+                // 通过 ClientHooks 获取本地玩家：此类会被服务器加载（ModBlocks 静态注册），
+                // 直接引用 net.minecraft.client.Minecraft 会导致服务器端类加载崩溃
+                final Player player = ClientHooks.getLocalPlayer();
+                if (player != null && isHoldingRailRelated(player)) {
                     // 手持轨道相关物品 → 显示已连接模型
                     final DynamicModelHolder holder = connectedModelHolder;
                     if (holder != null && holder.getUploadedModel() != null) {
