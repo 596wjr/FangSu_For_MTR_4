@@ -318,13 +318,21 @@ public class ResourceSelectionScreen extends Screen {
 
         if (previewMode) {
             buildPreviewTexture();
+            //#if MC_VERSION < 12003
             renderBackground(guiGraphics);
+            //#else
+            //$$ renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+            //#endif
             renderPreview(g);
             super.render(guiGraphics, mouseX, mouseY, partialTick);
             return;
         }
 
+        //#if MC_VERSION < 12003
         renderBackground(guiGraphics);
+        //#else
+        //$$ renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        //#endif
         //#else
         //$$ @Override
         //$$ public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
@@ -648,8 +656,13 @@ public class ResourceSelectionScreen extends Screen {
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         final int listTop = PATH_BAR_HEIGHT + PATH_BAR_HEIGHT;
         final int listBottom = height - BOTTOM_BAR_HEIGHT;
         final int listHeight = listBottom - listTop;

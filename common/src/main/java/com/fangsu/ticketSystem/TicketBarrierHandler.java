@@ -10,7 +10,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.scores.Score;
 import org.mtr.core.data.Station;
 
 import java.util.Map;
@@ -86,14 +85,14 @@ public final class TicketBarrierHandler {
             case 1:
                 if (stack.isEmpty() || !(stack.getItem() instanceof TicketItem ticket)) {
                     MtrTicketSystem.addObjectivesIfMissing(level);
-                    Score balance = MtrTicketSystem.getScore(level, player, MtrTicketSystem.BALANCE_OBJECTIVE);
+                    var balance = MtrTicketSystem.getScore(level, player, MtrTicketSystem.BALANCE_OBJECTIVE);
                     int val = Integer.parseInt(extraConfigs.getOrDefault("fareVal", "10"));
-                    if (balance.getScore() < val) {
-                        player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", balance.getScore()), true);
+                    if (MtrTicketSystem.getScoreValue(balance) < val) {
+                        player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", MtrTicketSystem.getScoreValue(balance)), true);
                         return false;
                     }
-                    balance.add(-val);
-                    player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticketbarrier.fareOnce", val, balance.getScore()), true);
+                    MtrTicketSystem.addScoreValue(balance, -val);
+                    player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticketbarrier.fareOnce", val, MtrTicketSystem.getScoreValue(balance)), true);
                     extraConfigs.put("isOpen", "true");
                     sendUpdateC2S.run();
                     return true;

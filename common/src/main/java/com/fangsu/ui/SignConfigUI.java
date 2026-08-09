@@ -70,7 +70,11 @@ public class SignConfigUI extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         GraphicContext g = GraphicContext.of(graphics);
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
         //#else
         //$$ @Override
         //$$ public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
@@ -566,8 +570,13 @@ public class SignConfigUI extends Screen {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         if (modeFlag == 0) {
             int rowHeight = (height - 12) / ROW_COUNT;
             for (int i = 0; i < ROW_COUNT; i++) {
@@ -587,7 +596,11 @@ public class SignConfigUI extends Screen {
                 return true;
             }
         }
+        //#if MC_VERSION < 12003
         return super.mouseScrolled(mouseX, mouseY, delta);
+        //#else
+        //$$ return super.mouseScrolled(mouseX, mouseY, delta, horizontalAmount);
+        //#endif
     }
 
     @Override

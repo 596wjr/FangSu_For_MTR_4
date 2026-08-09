@@ -486,8 +486,13 @@ public abstract class BaseSelectionScreen extends Screen {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         mouseScrollInfo = new MouseScrollInfo(mouseX, mouseY, delta);
         // 检查是否在任意列区域内，返回true以消耗事件
         int columnWidth = calcColumnWidth();
@@ -499,7 +504,11 @@ public abstract class BaseSelectionScreen extends Screen {
                 return true;
             }
         }
+        //#if MC_VERSION < 12003
         return super.mouseScrolled(mouseX, mouseY, delta);
+        //#else
+        //$$ return super.mouseScrolled(mouseX, mouseY, delta, horizontalAmount);
+        //#endif
     }
 
     /* ===================== 抽象 ===================== */

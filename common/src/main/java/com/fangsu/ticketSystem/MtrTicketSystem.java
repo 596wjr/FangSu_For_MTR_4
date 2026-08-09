@@ -9,7 +9,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+//#if MC_VERSION < 12002
 import net.minecraft.world.scores.Score;
+//#else
+//$$ import net.minecraft.network.chat.numbers.BlankFormat;
+//$$ import net.minecraft.world.scores.ScoreAccess;
+//$$ import net.minecraft.world.scores.ScoreHolder;
+//#endif
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import org.mtr.core.Main;
 import org.mtr.core.data.Position;
@@ -34,31 +40,31 @@ public class MtrTicketSystem {
     public static boolean enter(Level world, String dispName, int zone1, int zone2, int zone3, Player player) {
         addObjectivesIfMissing(world);
 
-        Score balance = getScore(world, player, BALANCE_OBJECTIVE);
-        Score entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
-        Score entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
-        Score entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
+        var balance = getScore(world, player, BALANCE_OBJECTIVE);
+        var entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
+        var entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
+        var entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
 
         // 已入闸（三个 zone 都不为 0 才认为已进站，与 MTR 原版一致）
-        if (entryZone1.getScore() != 0 && entryZone2.getScore() != 0 && entryZone3.getScore() != 0) {
+        if (getScoreValue(entryZone1) != 0 && getScoreValue(entryZone2) != 0 && getScoreValue(entryZone3) != 0) {
             player.displayClientMessage(ComponentHelper.translatable("gui.mtr.already_entered"), true);
             return false;
         }
 
         // 余额不足
-        if (balance.getScore() < 0) {
-            player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", balance.getScore()), true);
+        if (getScoreValue(balance) < 0) {
+            player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", getScoreValue(balance)), true);
             return false;
         }
 
-        entryZone1.setScore(encodeZone(zone1));
-        entryZone2.setScore(encodeZone(zone2));
-        entryZone3.setScore(encodeZone(zone3));
+        setScoreValue(entryZone1, encodeZone(zone1));
+        setScoreValue(entryZone2, encodeZone(zone2));
+        setScoreValue(entryZone3, encodeZone(zone3));
         player.displayClientMessage(
                 ComponentHelper.translatable(
                         "gui.mtr.enter_barrier",
                         dispName.replace('|', ' '),
-                        balance.getScore()
+                        getScoreValue(balance)
                 ),
                 true
         );
@@ -69,14 +75,14 @@ public class MtrTicketSystem {
 
         addObjectivesIfMissing(world);
 
-        Score balance = getScore(world, player, BALANCE_OBJECTIVE);
-        Score entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
-        Score entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
-        Score entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
+        var balance = getScore(world, player, BALANCE_OBJECTIVE);
+        var entryZone1 = getScore(world, player, ENTRY_ZONE_1_OBJECTIVE);
+        var entryZone2 = getScore(world, player, ENTRY_ZONE_2_OBJECTIVE);
+        var entryZone3 = getScore(world, player, ENTRY_ZONE_3_OBJECTIVE);
 
-        int entry1 = entryZone1.getScore();
-        int entry2 = entryZone2.getScore();
-        int entry3 = entryZone3.getScore();
+        int entry1 = getScoreValue(entryZone1);
+        int entry2 = getScoreValue(entryZone2);
+        int entry3 = getScoreValue(entryZone3);
         boolean entered = entry1 != 0 && entry2 != 0 && entry3 != 0;
         int fare;
 
@@ -90,17 +96,17 @@ public class MtrTicketSystem {
             }
         }
 
-        entryZone1.setScore(0);
-        entryZone2.setScore(0);
-        entryZone3.setScore(0);
-        balance.add(-fare);
+        setScoreValue(entryZone1, 0);
+        setScoreValue(entryZone2, 0);
+        setScoreValue(entryZone3, 0);
+        addScoreValue(balance, -fare);
 
         player.displayClientMessage(
                 ComponentHelper.translatable(
                         "gui.mtr.exit_barrier",
                         dispName.replace('|', ' '),
                         fare,
-                        balance.getScore()
+                        getScoreValue(balance)
                 ),
                 true
         );
@@ -139,6 +145,11 @@ public class MtrTicketSystem {
                     ObjectiveCriteria.DUMMY,
                     Component.literal("Balance"),
                     ObjectiveCriteria.RenderType.INTEGER
+                    //#if MC_VERSION < 12002
+                    // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
+                    //#else
+                    //$$ , true, BlankFormat.INSTANCE
+                    //#endif
             );
         } catch (Exception ignored) {
         }
@@ -149,6 +160,11 @@ public class MtrTicketSystem {
                     ObjectiveCriteria.DUMMY,
                     Component.literal("Entry Zone 1"),
                     ObjectiveCriteria.RenderType.INTEGER
+                    //#if MC_VERSION < 12002
+                    // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
+                    //#else
+                    //$$ , true, BlankFormat.INSTANCE
+                    //#endif
             );
         } catch (Exception ignored) {
         }
@@ -159,6 +175,11 @@ public class MtrTicketSystem {
                     ObjectiveCriteria.DUMMY,
                     Component.literal("Entry Zone 2"),
                     ObjectiveCriteria.RenderType.INTEGER
+                    //#if MC_VERSION < 12002
+                    // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
+                    //#else
+                    //$$ , true, BlankFormat.INSTANCE
+                    //#endif
             );
         } catch (Exception ignored) {
         }
@@ -169,17 +190,58 @@ public class MtrTicketSystem {
                     ObjectiveCriteria.DUMMY,
                     Component.literal("Entry Zone 3"),
                     ObjectiveCriteria.RenderType.INTEGER
+                    //#if MC_VERSION < 12002
+                    // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
+                    //#else
+                    //$$ , true, BlankFormat.INSTANCE
+                    //#endif
             );
         } catch (Exception ignored) {
         }
     }
 
+    //#if MC_VERSION < 12002
     public static Score getScore(Level world, Player player, String name) {
         return world.getScoreboard().getOrCreatePlayerScore(
                 player.getGameProfile().getName(),
                 world.getScoreboard().getObjective(name)
         );
     }
+    //#else
+    //$$ public static ScoreAccess getScore(Level world, Player player, String name) {
+    //$$     return world.getScoreboard().getOrCreatePlayerScore(
+    //$$             ScoreHolder.forNameOnly(player.getGameProfile().getName()),
+    //$$             world.getScoreboard().getObjective(name)
+    //$$     );
+    //$$ }
+    //#endif
+
+    /** 读取/写入/增减积分（1.20.2+ 用 ScoreAccess，旧版用 Score），屏蔽版本差异 */
+    //#if MC_VERSION < 12002
+    protected static int getScoreValue(Score score) {
+        return score.getScore();
+    }
+
+    protected static void setScoreValue(Score score, int value) {
+        score.setScore(value);
+    }
+
+    protected static void addScoreValue(Score score, int delta) {
+        score.add(delta);
+    }
+    //#else
+    //$$ protected static int getScoreValue(ScoreAccess score) {
+    //$$     return score.get();
+    //$$ }
+    //$$
+    //$$ protected static void setScoreValue(ScoreAccess score, int value) {
+    //$$     score.set(value);
+    //$$ }
+    //$$
+    //$$ protected static void addScoreValue(ScoreAccess score, int delta) {
+    //$$     score.add(delta);
+    //$$ }
+    //#endif
 
     private static boolean isConcessionary(Player player) {
         return player.isCreative();

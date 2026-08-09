@@ -453,8 +453,13 @@ public class ModelSelectScreen extends Screen {
         return true;
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         if (isPointInside(mouseX, mouseY, getListLeft(), getContentTop(), getListRight(), getContentBottom())) {
             return scrollList(delta);
         }

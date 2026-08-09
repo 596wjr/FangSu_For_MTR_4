@@ -525,8 +525,13 @@ public class TicketMachineMainScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         if (selectedRoute != null) {
             List<StationFareInfo> stations = new ArrayList<>(selectedRoute.stations());
             int maxScroll = Math.max(0, stations.size() - STATION_LIST_VISIBLE_ROWS);
@@ -535,7 +540,11 @@ public class TicketMachineMainScreen extends Screen {
             if (stationScroll > maxScroll) stationScroll = maxScroll;
             return true;
         }
+        //#if MC_VERSION < 12003
         return super.mouseScrolled(mouseX, mouseY, delta);
+        //#else
+        //$$ return super.mouseScrolled(mouseX, mouseY, delta, horizontalAmount);
+        //#endif
     }
 
     private record MouseClickInfo(double mouseX, double mouseY, int button) {

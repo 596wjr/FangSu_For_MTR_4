@@ -138,7 +138,11 @@ public class ScreendoorCentralControlScreen extends Screen {
     //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
         int centerX = this.width / 2;
         graphics.drawString(this.font, this.title, centerX - this.font.width(this.title) / 2, 10, 0xFFFFFF, false);
         graphics.drawString(this.font, ComponentHelper.translatable("ui.fangsu.screendoor.centralControl.startPositions"),

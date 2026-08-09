@@ -189,10 +189,10 @@ public abstract class BasicConfigScreen extends Screen {
             clearWidgets();
             init();
         }
-        //#if MC_VERSION >= 12000
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
         //#else
-        //$$ renderBackground(poseStack);
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
         //#endif
 
         renderPanelBackground(g);
@@ -305,8 +305,13 @@ public abstract class BasicConfigScreen extends Screen {
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double mouseX, double mouseY, double delta, double horizontalAmount) {
+    //#endif
         int maxScroll = getMaxScroll();
 
         if (maxScroll <= 0) {

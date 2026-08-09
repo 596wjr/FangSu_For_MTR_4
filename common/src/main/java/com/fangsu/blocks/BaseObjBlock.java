@@ -2,6 +2,7 @@ package com.fangsu.blocks;
 
 import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.items.ModItems;
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -83,6 +84,16 @@ public abstract class BaseObjBlock extends HorizontalDirectionalBlock implements
         }
         return InteractionResult.PASS;
     }
+
+    //#if MC_VERSION < 12004
+    // 1.20.4+ 的 HorizontalDirectionalBlock 要求实现 codec()。本项目方块仅通过
+    // ModBlocks 注册使用，不参与数据包/命令的方块状态序列化，返回 null 即可。
+    //#else
+    //$$ @Override
+    //$$ public MapCodec<? extends HorizontalDirectionalBlock> codec() {
+    //$$     return null;
+    //$$ }
+    //#endif
 
     @Override
     public @NotNull RenderShape getRenderShape(@NotNull BlockState blockState) {

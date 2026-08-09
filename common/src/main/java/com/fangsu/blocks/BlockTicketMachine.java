@@ -87,15 +87,24 @@ public class BlockTicketMachine extends Block {
         return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
     }
 
+    //#if MC_VERSION < 12004
     @Override
     public void playerWillDestroy(Level level, BlockPos pos, BlockState state, net.minecraft.world.entity.player.Player player) {
+    //#else
+    //$$ @Override
+    //$$ public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, net.minecraft.world.entity.player.Player player) {
+    //#endif
         DoubleBlockHalf half = state.getValue(HALF);
         BlockPos otherPos = half == DoubleBlockHalf.LOWER ? pos.above() : pos.below();
         BlockState otherState = level.getBlockState(otherPos);
         if (otherState.is(this) && otherState.getValue(HALF) != half) {
             level.setBlock(otherPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 35);
         }
+        //#if MC_VERSION < 12004
         super.playerWillDestroy(level, pos, state, player);
+        //#else
+        //$$ return super.playerWillDestroy(level, pos, state, player);
+        //#endif
     }
 
     @Override

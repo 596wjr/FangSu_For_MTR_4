@@ -38,7 +38,11 @@ public class PackDependencyScreen extends Screen {
     //#if MC_VERSION >= 12000
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        //#if MC_VERSION < 12003
         renderBackground(g);
+        //#else
+        //$$ renderBackground(g, mouseX, mouseY, partialTick);
+        //#endif
         //#else
         //$$@Override
         //$$public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
