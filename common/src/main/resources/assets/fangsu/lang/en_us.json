@@ -32,6 +32,7 @@
     "msg.fangsu.ticketbarrier.brushFlip": "Barrier Facing: %s",
     "msg.fangsu.ticketbarrier.entrance": "Entrance",
     "msg.fangsu.ticketbarrier.exit": "Exit",
+    "msg.fangsu.ticketbarrier.noStationArea": "No MTR station area found! Define the station area in the MTR station editor and ensure the barrier is inside it.",
     "ui.fangsu.screendoor.doorSide": "Door Opening Side",
     "ui.fangsu.screendoor.doorSideLeft": "Left",
     "ui.fangsu.screendoor.doorSideRight": "Right",

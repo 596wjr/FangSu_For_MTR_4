@@ -90,6 +90,7 @@
     "msg.fangsu.ticketbarrier.brushFlip": "闸机朝向: %s",
     "msg.fangsu.ticketbarrier.entrance": "入口",
     "msg.fangsu.ticketbarrier.exit": "出口",
+    "msg.fangsu.ticketbarrier.noStationArea": "未找到 MTR 车站区域！请在 MTR 车站编辑界面中为车站划定区域，并确保闸机位于区域内",
     "msg.fangsu.ticket.requireCard": "请手持单程票或IC卡刷卡",
     "msg.fangsu.ticket.enter": "入闸 %s - 余额 %s",
     "msg.fangsu.ticket.enter1": "入闸 %s",

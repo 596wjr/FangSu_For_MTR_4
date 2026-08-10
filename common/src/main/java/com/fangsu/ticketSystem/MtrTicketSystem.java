@@ -3,7 +3,6 @@ package com.fangsu.ticketSystem;
 import com.fangsu.items.TicketItem;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.mixin.InitAccessorMixin;
-import com.fangsu.mixin.MainAccessorMixin;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
@@ -18,10 +17,13 @@ import net.minecraft.world.scores.Score;
 //#endif
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import org.mtr.core.Main;
+import org.mtr.core.data.Data;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Station;
 import org.mtr.core.simulation.Simulator;
 import org.mtr.mod.Init;
+
+import java.lang.reflect.Field;
 
 public class MtrTicketSystem {
     //TODO 交通卡系统
@@ -116,6 +118,30 @@ public class MtrTicketSystem {
     /* ===================== 内部工具 ===================== */
 
     /**
+     * Main.simulators / Data.stations 的字段类型是 fastutil 集合（ObjectImmutableList / ObjectArraySet）。
+     * 编译期引用的 MTR jar（Modrinth maven）中 fastutil 被 relocate 为 org.mtr.libraries.it.unimi.dsi.fastutil.*，
+     * 而运行时加载的 MTR/TSC（Modrinth 发布物或独立 TSC jar）中是原版 it.unimi.dsi.fastutil.* ——
+     * mixin accessor 的返回类型只能匹配其中一种，另一种环境下注入失败。因此改用反射按 Object 访问，
+     * 以 Iterable 遍历，可同时兼容两种包名。
+     */
+    private static final Field SIMULATORS_FIELD;
+    private static final Field STATIONS_FIELD;
+
+    static {
+        Field simulatorsField = null;
+        Field stationsField = null;
+        try {
+            simulatorsField = Main.class.getDeclaredField("simulators");
+            simulatorsField.setAccessible(true);
+            stationsField = Data.class.getField("stations");
+        } catch (Exception e) {
+            com.fangsu.Main.LOGGER.warn("Failed to init MTR station fields: {}", e.toString());
+        }
+        SIMULATORS_FIELD = simulatorsField;
+        STATIONS_FIELD = stationsField;
+    }
+
+    /**
      * 通过 Mixin 访问器获取 MTR4 服务端 Simulator，按位置查找车站。
      */
     protected static Station getStation(Level world, BlockPos pos) {
@@ -124,16 +150,20 @@ public class MtrTicketSystem {
             final String dimensionId = Init.getWorldId(new org.mtr.mapping.holder.World(world));
             final Position position = new Position(pos.getX(), pos.getY(), pos.getZ());
 
-            for (final Simulator simulator : ((MainAccessorMixin) main).getSimulators()) {
+            for (final Object simulatorObj : (Iterable<?>) SIMULATORS_FIELD.get(main)) {
+                final Simulator simulator = (Simulator) simulatorObj;
                 if (simulator.dimension.equals(dimensionId)) {
-                    for (final Station station : simulator.stations) {
+                    for (final Object stationObj : (Iterable<?>) STATIONS_FIELD.get(simulator)) {
+                        final Station station = (Station) stationObj;
                         if (station.inArea(position)) {
                             return station;
                         }
                     }
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // 记录异常便于排查 mixin 注入失败或 MTR API 变动等问题，避免静默失败
+            com.fangsu.Main.LOGGER.warn("Failed to get MTR station at {}: {}", pos, e.toString());
         }
         return null;
     }
