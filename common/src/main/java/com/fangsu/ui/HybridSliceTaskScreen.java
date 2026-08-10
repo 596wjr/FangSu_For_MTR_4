@@ -55,19 +55,32 @@ public class HybridSliceTaskScreen extends Screen {
     protected int tx = 0;
     protected int ty = 0;
 
-    private final Button btnReturn = Button.builder(Component.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
+    //#if MC_VERSION >= 11903
+    private final Button btnReturn = Button.builder(ComponentHelper.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
     private final Button btnEnterConfig = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen()).bounds(0, 0, 20, 20).build();
+    //#else
+    //$$ private final Button btnReturn = Button.builder("X", button -> onClose()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnEnterConfig = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen()).bounds(0, 0, 20, 20).build();
+    //#endif
     /** 懒创建：Screen.minecraft 在 init() 后才非 null，字段初始化器里用会 NPE */
     private EditBox nameField;
     private final Button btnAddWidth;
     private final Button btnSubWidth;
     private final Button btnAddHeight;
     private final Button btnSubHeight;
-    private final Button btnSubTX = Button.builder(Component.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnAddTX = Button.builder(Component.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnSubTY = Button.builder(Component.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnAddTY = Button.builder(Component.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnCenter = Button.builder(Component.literal("▣"), button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
+    //#if MC_VERSION >= 11903
+    private final Button btnSubTX = Button.builder(ComponentHelper.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    private final Button btnAddTX = Button.builder(ComponentHelper.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    private final Button btnSubTY = Button.builder(ComponentHelper.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    private final Button btnAddTY = Button.builder(ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    private final Button btnCenter = Button.builder(ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
+    //#else
+    //$$ private final Button btnSubTX = Button.builder("◁", button -> setTX(tx + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnAddTX = Button.builder("▷", button -> setTX(tx - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnSubTY = Button.builder("▲", button -> setTY(ty + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnAddTY = Button.builder("▼", button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnCenter = Button.builder("▣", button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
+    //#endif
 
     private final List<Square> canvas = new ArrayList<>();
     private final Inventory inventory = new Inventory();
@@ -77,15 +90,22 @@ public class HybridSliceTaskScreen extends Screen {
     private int scissorX, scissorY, scissorW, scissorH;
 
     public HybridSliceTaskScreen(HybridSliceTask task, String key, Screen parent) {
-        super(Component.literal(""));
+        super(ComponentHelper.literal(""));
         this.task = task;
         this.key = key;
         this.parent = parent;
         // 按钮 lambda 引用 task 字段，必须在 task 赋值后初始化（字段初始化器顺序在前会报「可能尚未初始化」）
-        btnAddWidth = Button.builder(Component.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height)).bounds(0, 0, 20, 20).build();
-        btnSubWidth = Button.builder(Component.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height)).bounds(0, 0, 20, 20).build();
-        btnAddHeight = Button.builder(Component.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
-        btnSubHeight = Button.builder(Component.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
+        //#if MC_VERSION >= 11903
+        btnAddWidth = Button.builder(ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height)).bounds(0, 0, 20, 20).build();
+        btnSubWidth = Button.builder(ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height)).bounds(0, 0, 20, 20).build();
+        btnAddHeight = Button.builder(ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
+        btnSubHeight = Button.builder(ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
+        //#else
+        //$$ btnAddWidth = Button.builder("+", button -> setWidthAndHeight(task.width + 2, task.height)).bounds(0, 0, 20, 20).build();
+        //$$ btnSubWidth = Button.builder("-", button -> setWidthAndHeight(task.width - 2, task.height)).bounds(0, 0, 20, 20).build();
+        //$$ btnAddHeight = Button.builder("+", button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
+        //$$ btnSubHeight = Button.builder("-", button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
+        //#endif
         reload();
     }
 
@@ -146,10 +166,10 @@ public class HybridSliceTaskScreen extends Screen {
     @Override
     protected void init() {
         // minecraft 在 init(Minecraft, int, int) 里才被赋值，所有依赖字体的 widget 必须在这里创建
-        nameField = new EditBox(minecraft.font, 0, 0, 0, 16, Component.literal(""));
+        nameField = new EditBox(minecraft.font, 0, 0, 0, 16, ComponentHelper.literal(""));
         nameField.setValue(task.name);
         //#if MC_VERSION >= 12003
-        nameField.moveCursorToStart(true);
+        //$$ nameField.moveCursorToStart(true);
         //#else
         nameField.moveCursorToStart();
         //#endif
@@ -313,7 +333,11 @@ public class HybridSliceTaskScreen extends Screen {
 
     private void updateWidgetPosition() {
         placeButton(btnReturn, 10, 10, 20);
+        //#if MC_VERSION >= 11903
         nameField.setPosition(40, 10);
+        //#else
+        //$$ nameField.x = 40; nameField.y = 10; // 1.19.2 及以下 AbstractWidget 无 setPosition，x/y 为 public 字段
+        //#endif
         nameField.setWidth(90);
         placeButton(btnEnterConfig, 140, 10, 40);
 
@@ -331,7 +355,11 @@ public class HybridSliceTaskScreen extends Screen {
     }
 
     private static void placeButton(Button button, int x, int y, int width) {
+        //#if MC_VERSION >= 11903
         button.setPosition(x, y);
+        //#else
+        //$$ button.x = x; button.y = y; // 1.19.2 及以下 AbstractWidget 无 setPosition，x/y 为 public 字段
+        //#endif
         button.setWidth(width);
     }
 
@@ -473,8 +501,12 @@ public class HybridSliceTaskScreen extends Screen {
     //$$     poseStack.pushPose();
     //$$     poseStack.translate(x, y + 16, 0);
     //$$     poseStack.scale(15.5F, -15.5F, 15.5F);
-    //$$     // 1.19.2 及以下无 com.mojang.math.Axis，用 Vector3f 的旋转辅助方法
+    //$$     // 1.19.3 起用 com.mojang.math.Axis（Vector3f 在 1.19.4 已移除），旧版用 Vector3f
+    //$$     //#if MC_VERSION >= 11903
+    //$$     poseStack.mulPose(Axis.XP.rotationDegrees(3));
+    //$$     //#else
     //$$     poseStack.mulPose(com.mojang.math.Vector3f.XP.rotationDegrees(3));
+    //$$     //#endif
     //$$
     //$$     final MultiBufferSource.BufferSource buffer = MultiBufferSource.immediate(Tesselator.getInstance().getBuilder());
     //$$     RenderSystem.enableDepthTest();
@@ -555,10 +587,10 @@ public class HybridSliceTaskScreen extends Screen {
             // 1.20.1 的 renderTooltip 只收 List<FormattedCharSequence>，逐条转
             final List<FormattedCharSequence> lines = new ArrayList<>();
             if (state != null) {
-                lines.add(Component.literal("Replacement: " + replacement).getVisualOrderText());
+                lines.add(ComponentHelper.literal("Replacement: " + replacement).getVisualOrderText());
                 lines.add(state.getBlock().getName().getVisualOrderText());
                 for (var property : state.getBlock().getStateDefinition().getProperties()) {
-                    lines.add(Component.literal(property.getName() + ": " + state.getValue(property)).getVisualOrderText());
+                    lines.add(ComponentHelper.literal(property.getName() + ": " + state.getValue(property)).getVisualOrderText());
                 }
             } else {
                 lines.add(ComponentHelper.translatable("ui.fangsu.hybrid_creator.empty").getVisualOrderText());
@@ -570,16 +602,17 @@ public class HybridSliceTaskScreen extends Screen {
         //$$     // 旧版渲染接口只收 List<FormattedCharSequence>，逐条转
         //$$     final List<FormattedCharSequence> lines = new ArrayList<>();
         //$$     if (state != null) {
-        //$$         lines.add(Component.literal("Replacement: " + replacement).getVisualOrderText());
+        //$$         lines.add(ComponentHelper.literal("Replacement: " + replacement).getVisualOrderText());
         //$$         lines.add(state.getBlock().getName().getVisualOrderText());
         //$$         for (var property : state.getBlock().getStateDefinition().getProperties()) {
-        //$$             lines.add(Component.literal(property.getName() + ": " + state.getValue(property)).getVisualOrderText());
+        //$$             lines.add(ComponentHelper.literal(property.getName() + ": " + state.getValue(property)).getVisualOrderText());
         //$$         }
         //$$     } else {
         //$$         lines.add(ComponentHelper.translatable("ui.fangsu.hybrid_creator.empty").getVisualOrderText());
         //$$     }
-        //$$     // 内部类直接调用外层 Screen 的 renderTooltip(PoseStack, List, int, int)
-        //$$     renderTooltip(poseStack, lines, mouseX, mouseY);
+        //$$     // 内部类不继承外层 Screen 方法，且自身同名方法会遮蔽外层；
+        //$$     // 必须显式引用外层 HybridSliceTaskScreen.this.renderTooltip(PoseStack, List, int, int)
+        //$$     HybridSliceTaskScreen.this.renderTooltip(poseStack, lines, mouseX, mouseY);
         //$$ }
         //#endif
 
@@ -608,12 +641,16 @@ public class HybridSliceTaskScreen extends Screen {
             return true;
         }
 
+        //#if MC_VERSION >= 11903
         @Override
+        //#endif
         public boolean isFocused() {
             return false;
         }
 
+        //#if MC_VERSION >= 11903
         @Override
+        //#endif
         public void setFocused(boolean focused) {
         }
     }
@@ -659,9 +696,9 @@ public class HybridSliceTaskScreen extends Screen {
         }
 
         public void initSearchField() {
-            searchField = new EditBox(minecraft.font, 0, 1, WIDTH - 3, 15, Component.literal(""));
+            searchField = new EditBox(minecraft.font, 0, 1, WIDTH - 3, 15, ComponentHelper.literal(""));
             //#if MC_VERSION >= 12003
-            searchField.moveCursorToStart(true);
+            //$$ searchField.moveCursorToStart(true);
             //#else
             searchField.moveCursorToStart();
             //#endif
@@ -707,7 +744,11 @@ public class HybridSliceTaskScreen extends Screen {
             final int sx = width - WIDTH;
             g.fill(sx, 0, sx + WIDTH, height, 0xff212121);
             g.fill(sx, 0, sx + 1, height, mouseX >= sx ? 0xfff2f7eb : 0xffafb3aa);
+            //#if MC_VERSION >= 11903
             searchField.setPosition(sx + 3, 1);
+            //#else
+            //$$ searchField.x = sx + 3; searchField.y = 1; // 1.19.2 及以下 AbstractWidget 无 setPosition，x/y 为 public 字段
+            //#endif
             searchField.setWidth(WIDTH - 3);
             searchField.render(matrices, mouseX, mouseY, partialTick);
 
@@ -833,12 +874,16 @@ public class HybridSliceTaskScreen extends Screen {
             scroll = temp;
         }
 
+        //#if MC_VERSION >= 11903
         @Override
+        //#endif
         public boolean isFocused() {
             return false;
         }
 
+        //#if MC_VERSION >= 11903
         @Override
+        //#endif
         public void setFocused(boolean focused) {
         }
     }

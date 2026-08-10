@@ -63,7 +63,7 @@ public class HybridSliceConfigScreen extends BasicConfigScreen {
     private void addDoubleInput(ContentLayout layout, Component label, String initial, java.util.function.Consumer<Double> setter, boolean positive, boolean allowEmpty) {
         final TextLabel lbl = createTextLabel(layout.areaLeft, layout.y, label, TextLabel.Align.LEFT, 0xFFFFFF, false);
         addEntry(lbl, layout.y);
-        final EditBox box = new EditBox(this.font, layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, Component.empty());
+        final EditBox box = new EditBox(this.font, layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, ComponentHelper.empty());
         box.setValue(initial);
         box.setResponder(text -> {
             if (text.trim().isEmpty()) {
@@ -98,7 +98,7 @@ public class HybridSliceConfigScreen extends BasicConfigScreen {
     private void addOddIntInput(ContentLayout layout, Component label, String initial, java.util.function.Consumer<Integer> setter) {
         final TextLabel lbl = createTextLabel(layout.areaLeft, layout.y, label, TextLabel.Align.LEFT, 0xFFFFFF, false);
         addEntry(lbl, layout.y);
-        final EditBox box = new EditBox(this.font, layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, Component.empty());
+        final EditBox box = new EditBox(this.font, layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, ComponentHelper.empty());
         box.setValue(initial);
         box.setResponder(text -> {
             final Integer v = parseOddInt(text);

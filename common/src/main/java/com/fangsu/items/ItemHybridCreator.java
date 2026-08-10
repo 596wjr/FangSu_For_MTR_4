@@ -123,7 +123,9 @@ public class ItemHybridCreator extends ItemNodeModifierSelectableBlockBase {
         }
         tasks.sort(Comparator.comparingInt(task -> task.order));
 
-        final ServerWorld serverWorld = new ServerWorld((net.minecraft.server.level.ServerLevel) serverPlayerEntity.data.level());
+        // getServerWorld() 为 MTR mapping 全版本 API（照 ItemBridgeCreator 写法），
+        // 不用 vanilla 的 Entity.level()（1.20.2 才引入）/ level 字段（旧版可见性随版本变）
+        final ServerWorld serverWorld = serverPlayerEntity.getServerWorld();
         for (HybridSliceTask task : tasks) {
             // 逐个挂载；RailActionModule.tick() 一次只处理队头，按 order 串行执行
             HybridSliceAction.attach(serverWorld, new HybridSliceAction(serverWorld, serverPlayerEntity, rail, task, reverse));

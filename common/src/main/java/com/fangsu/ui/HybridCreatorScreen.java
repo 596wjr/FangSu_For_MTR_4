@@ -51,18 +51,30 @@ public class HybridCreatorScreen extends Screen {
     private int scroll = 0;
     private int scissorX, scissorY, scissorW, scissorH;
 
-    private final Button btnAdd = Button.builder(Component.literal("+"), button -> addEntry()).bounds(0, 0, 20, 20).build();
-    private final Button btnRemove = Button.builder(Component.literal("-"), button -> removeEntry()).bounds(0, 0, 20, 20).build();
+    //#if MC_VERSION >= 11903
+    private final Button btnAdd = Button.builder(ComponentHelper.literal("+"), button -> addEntry()).bounds(0, 0, 20, 20).build();
+    private final Button btnRemove = Button.builder(ComponentHelper.literal("-"), button -> removeEntry()).bounds(0, 0, 20, 20).build();
     private final Button btnCopy = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.copy"), button -> copyEntry()).bounds(0, 0, 20, 20).build();
     private final Button btnClear = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.clear"), button -> clearEntries()).bounds(0, 0, 20, 20).build();
     private final Button btnExport = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.export"), button -> exportJson()).bounds(0, 0, 20, 20).build();
     private final Button btnImport = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"), button -> importJson()).bounds(0, 0, 20, 20).build();
     private final Button btnExportPreset = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset"), button -> exportPresetJson()).bounds(0, 0, 20, 20).build();
     private final Button btnImportPreset = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import_preset"), button -> importPresetJson()).bounds(0, 0, 20, 20).build();
-    private final Button btnClose = Button.builder(Component.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
+    private final Button btnClose = Button.builder(ComponentHelper.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
+    //#else
+    //$$ private final Button btnAdd = Button.builder("+", button -> addEntry()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnRemove = Button.builder("-", button -> removeEntry()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnCopy = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.copy"), button -> copyEntry()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnClear = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.clear"), button -> clearEntries()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnExport = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export"), button -> exportJson()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnImport = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.import"), button -> importJson()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnExportPreset = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export_preset"), button -> exportPresetJson()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnImportPreset = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.import_preset"), button -> importPresetJson()).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnClose = Button.builder("X", button -> onClose()).bounds(0, 0, 20, 20).build();
+    //#endif
 
     private HybridCreatorScreen(Screen parent) {
-        super(Component.literal(""));
+        super(ComponentHelper.literal(""));
         this.parent = parent;
     }
 
@@ -276,8 +288,14 @@ public class HybridCreatorScreen extends Screen {
     }
 
     private static void placeButton(Button button, int x, int y, int width) {
+        //#if MC_VERSION >= 11903
         button.setPosition(x, y);
         button.setWidth(width);
+        //#else
+        //$$ button.x = x; // 1.19.2 及以下无 setPosition/setY，x/y 为 public 字段
+        //$$ button.y = y;
+        //$$ button.setWidth(width);
+        //#endif
     }
 
     /* ===================== 滚动 ===================== */
@@ -400,9 +418,15 @@ public class HybridCreatorScreen extends Screen {
 
         /** 懒创建：minecraft 在 init() 后才非 null，而 Entry 可能在 load()（屏幕未 init）时创建 */
         private EditBox nameField;
+        //#if MC_VERSION >= 11903
         private final Button enter = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.enter"), button -> enter()).bounds(0, 0, 20, 20).build();
-        private final Button up = Button.builder(Component.literal("▲"), button -> moveUp()).bounds(0, 0, 20, 20).build();
-        private final Button down = Button.builder(Component.literal("▼"), button -> moveDown()).bounds(0, 0, 20, 20).build();
+        private final Button up = Button.builder(ComponentHelper.literal("▲"), button -> moveUp()).bounds(0, 0, 20, 20).build();
+        private final Button down = Button.builder(ComponentHelper.literal("▼"), button -> moveDown()).bounds(0, 0, 20, 20).build();
+        //#else
+        //$$ private final Button enter = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.enter"), button -> enter()).bounds(0, 0, 20, 20).build();
+        //$$ private final Button up = Button.builder("▲", button -> moveUp()).bounds(0, 0, 20, 20).build();
+        //$$ private final Button down = Button.builder("▼", button -> moveDown()).bounds(0, 0, 20, 20).build();
+        //#endif
 
         public Entry(HybridSliceTask task, String key) {
             this.task = task;
@@ -412,10 +436,10 @@ public class HybridCreatorScreen extends Screen {
 
         private EditBox nameField() {
             if (nameField == null) {
-                nameField = new EditBox(minecraft.font, 0, 0, 0, 16, Component.literal(""));
+                nameField = new EditBox(minecraft.font, 0, 0, 0, 16, ComponentHelper.literal(""));
                 nameField.setValue(task.name);
                 //#if MC_VERSION >= 12003
-                nameField.moveCursorToStart(true);
+                //$$ nameField.moveCursorToStart(true);
                 //#else
                 nameField.moveCursorToStart();
                 //#endif
@@ -489,16 +513,36 @@ public class HybridCreatorScreen extends Screen {
             y += 2;
             final int count = width() / 20;
             int x = 20;
+            //#if MC_VERSION >= 11903
             nameField().setPosition(x, y);
+            //#else
+            //$$ nameField().x = x; // 1.19.2 及以下无 setPosition，x/y 为 public 字段
+            //$$ nameField().y = y;
+            //#endif
             nameField().setWidth(count * 7);
             x += count * 8;
+            //#if MC_VERSION >= 11903
             enter.setPosition(x, y);
+            //#else
+            //$$ enter.x = x;
+            //$$ enter.y = y;
+            //#endif
             enter.setWidth(count * 6);
             x += count * 7;
+            //#if MC_VERSION >= 11903
             up.setPosition(x, y);
+            //#else
+            //$$ up.x = x;
+            //$$ up.y = y;
+            //#endif
             up.setWidth(count * 2);
             x += count * 3;
+            //#if MC_VERSION >= 11903
             down.setPosition(x, y);
+            //#else
+            //$$ down.x = x;
+            //$$ down.y = y;
+            //#endif
             down.setWidth(count * 2);
             nameField().render(graphics, mouseX, mouseY, partialTick);
             enter.render(graphics, mouseX, mouseY, partialTick);
@@ -532,6 +576,7 @@ public class HybridCreatorScreen extends Screen {
             return false;
         }
 
+        //#if MC_VERSION >= 11903
         @Override
         public boolean isFocused() {
             return false;
@@ -540,5 +585,13 @@ public class HybridCreatorScreen extends Screen {
         @Override
         public void setFocused(boolean focused) {
         }
+        //#else
+        //$$ public boolean isFocused() {
+        //$$     return false;
+        //$$ }
+        //$$
+        //$$ public void setFocused(boolean focused) {
+        //$$ }
+        //#endif
     }
 }

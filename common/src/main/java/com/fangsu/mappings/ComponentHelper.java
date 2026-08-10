@@ -40,9 +40,9 @@ public class ComponentHelper {
         //#endif
     }
 
-    /** 等效于 Component.literal(str) — 1.18.2 不存在该静态方法 */
+    /** 等效于 Component.literal(str) — 1.19.3 才引入该静态方法（1.19.0 只有 translatable/empty） */
     public static MutableComponent literal(String str) {
-        //#if MC_VERSION >= 11900
+        //#if MC_VERSION >= 11903
         return Component.literal(str);
         //#else
         //$$ return new net.minecraft.network.chat.TextComponent(str);

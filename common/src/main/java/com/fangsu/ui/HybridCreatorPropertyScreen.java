@@ -36,7 +36,7 @@ public class HybridCreatorPropertyScreen extends BasicConfigScreen {
         // 替换模式开关
         final TextLabel replLabel = createTextLabel(layout.areaLeft, layout.y, ComponentHelper.translatable("ui.fangsu.hybrid_creator.replacement"), TextLabel.Align.LEFT, 0xFFFFFF, false);
         addEntry(replLabel, layout.y);
-        addEntry(addButton(layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, Component.literal(String.valueOf(replacement)), btn -> {
+        addEntry(addButton(layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, ComponentHelper.literal(String.valueOf(replacement)), btn -> {
             replacement = !replacement;
             requestRebuild();
         }), layout.y);
@@ -55,10 +55,10 @@ public class HybridCreatorPropertyScreen extends BasicConfigScreen {
         for (T value : property.getPossibleValues()) {
             values.add(property.getName(value));
         }
-        final TextLabel label = createTextLabel(layout.areaLeft, layout.y, Component.literal(property.getName()), TextLabel.Align.LEFT, 0xFFFFFF, false);
+        final TextLabel label = createTextLabel(layout.areaLeft, layout.y, ComponentHelper.literal(property.getName()), TextLabel.Align.LEFT, 0xFFFFFF, false);
         addEntry(label, layout.y);
         // 读取当前值用 baseState.getValue(property)：1.20.1 的 Property 没有 getValue(BlockState)
-        addEntry(addButton(layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, Component.literal(property.getName(baseState.getValue(property))), btn -> {
+        addEntry(addButton(layout.areaLeft + layout.labelWidth, layout.y, layout.fieldWidth, 20, ComponentHelper.literal(property.getName(baseState.getValue(property))), btn -> {
             final int next = (values.indexOf(property.getName(baseState.getValue(property))) + 1) % values.size();
             baseState = baseState.setValue(property, property.getValue(values.get(next)).get());
             requestRebuild();

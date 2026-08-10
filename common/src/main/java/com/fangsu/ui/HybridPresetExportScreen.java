@@ -31,15 +31,27 @@ public class HybridPresetExportScreen extends Screen {
 
     @Override
     protected void init() {
-        nameField = new EditBox(minecraft.font, (width - 200) / 2, 64, 200, 20, Component.empty());
+        nameField = new EditBox(minecraft.font, (width - 200) / 2, 64, 200, 20, ComponentHelper.empty());
         nameField.setMaxLength(48);
+        //#if MC_VERSION >= 11903
         nameField.setHint(ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset.name_hint"));
+        //#else
+        //$$ nameField.setSuggestion(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export_preset.name_hint"));
+        //#endif
         addRenderableWidget(nameField);
+        //#if MC_VERSION >= 11903
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.export"),
                         button -> exportPreset())
                 .bounds((width - 220) / 2, height - 60, 100, 20).build());
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
                 button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
+        //#else
+        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export"),
+        //$$                 button -> exportPreset())
+        //$$         .bounds((width - 220) / 2, height - 60, 100, 20).build());
+        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.block.cancel"),
+        //$$         button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
+        //#endif
         setInitialFocus(nameField);
     }
 

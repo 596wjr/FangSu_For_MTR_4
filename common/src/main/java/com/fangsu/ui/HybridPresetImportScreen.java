@@ -50,13 +50,23 @@ public class HybridPresetImportScreen extends Screen {
         }
         for (int i = 0; i < files.size(); i++) {
             final String fileName = files.get(i);
-            final Button button = Button.builder(Component.literal(fileName), btn -> importPreset(fileName))
+            //#if MC_VERSION >= 11903
+            final Button button = Button.builder(ComponentHelper.literal(fileName), btn -> importPreset(fileName))
                     .bounds(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18).build();
+            //#else
+            //$$ final Button button = Button.builder(fileName, btn -> importPreset(fileName))
+            //$$         .bounds(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18).build();
+            //#endif
             buttons.add(button);
             addRenderableWidget(button);
         }
+        //#if MC_VERSION >= 11903
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
                 button -> minecraft.setScreen(parent)).bounds(width / 2 - 50, height - 40, 100, 20).build());
+        //#else
+        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.block.cancel"),
+        //$$         button -> minecraft.setScreen(parent)).bounds(width / 2 - 50, height - 40, 100, 20).build());
+        //#endif
     }
 
     private void importPreset(String fileName) {
@@ -108,7 +118,11 @@ public class HybridPresetImportScreen extends Screen {
             final Button button = buttons.get(i);
             final int y = LIST_TOP + i * ROW_H + scroll;
             if (y + ROW_H < LIST_TOP || y > bottom) continue; // 不可见行跳过
+            //#if MC_VERSION >= 11903
             button.setY(y);
+            //#else
+            //$$ button.y = y; // 1.19.2 及以下 AbstractWidget 无 setY，x/y 为 public 字段
+            //#endif
             button.render(graphics, mouseX, mouseY, partialTick);
         }
         g.disableScissor();
@@ -135,7 +149,11 @@ public class HybridPresetImportScreen extends Screen {
     //$$         final Button button = buttons.get(i);
     //$$         final int y = LIST_TOP + i * ROW_H + scroll;
     //$$         if (y + ROW_H < LIST_TOP || y > bottom) continue; // 不可见行跳过
+    //$$         //#if MC_VERSION >= 11903
     //$$         button.setY(y);
+    //$$         //#else
+    //$$         //$$ button.y = y; // 1.19.2 及以下 AbstractWidget 无 setY，x/y 为 public 字段
+    //$$         //#endif
     //$$         button.render(poseStack, mouseX, mouseY, partialTick);
     //$$     }
     //$$     g.disableScissor();

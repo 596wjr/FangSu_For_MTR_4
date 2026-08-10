@@ -42,11 +42,19 @@ public class HybridImportScreen extends Screen {
         input.setCharacterLimit(1024 * 64);
         //#endif
         addRenderableWidget(input);
+        //#if MC_VERSION >= 11903
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"),
                         button -> importText())
                 .bounds((width - 220) / 2, height - 60, 100, 20).build());
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
                 button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
+        //#else
+        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.import"),
+        //$$                 button -> importText())
+        //$$         .bounds((width - 220) / 2, height - 60, 100, 20).build());
+        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.block.cancel"),
+        //$$         button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
+        //#endif
     }
 
     private void importText() {

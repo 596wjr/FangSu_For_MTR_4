@@ -194,12 +194,8 @@ public class HybridSliceTask {
                     boolean hasBlockState = dis.readBoolean();
                     BlockState blockState = null;
                     if (hasBlockState) {
-                        // 读取：1.19.4+ 为 Block.stateById，1.18.2/1.19.2 为 Block.byId
-                        //#if MC_VERSION >= 11904
+                        // 读取：1.18.2~1.20.4 均有 Block.stateById（与写方向 Block.getId 对称），无需 #if
                         blockState = Block.stateById(dis.readInt());
-                        //#else
-                        //$$ blockState = Block.byId(dis.readInt());
-                        //#endif
                     }
                     boolean replacement = dis.readBoolean();
                     lumps.add(new HybridCreatorLump(blockState, replacement));
