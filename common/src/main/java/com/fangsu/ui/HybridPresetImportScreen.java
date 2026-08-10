@@ -50,23 +50,13 @@ public class HybridPresetImportScreen extends Screen {
         }
         for (int i = 0; i < files.size(); i++) {
             final String fileName = files.get(i);
-            //#if MC_VERSION >= 11903
-            final Button button = Button.builder(ComponentHelper.literal(fileName), btn -> importPreset(fileName))
-                    .bounds(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18).build();
-            //#else
-            //$$ final Button button = new Button(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18,
-            //$$         ComponentHelper.literal(fileName), btn -> importPreset(fileName));
-            //#endif
+            final Button button = ComponentHelper.button(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18,
+                    ComponentHelper.literal(fileName), btn -> importPreset(fileName));
             buttons.add(button);
             addRenderableWidget(button);
         }
-        //#if MC_VERSION >= 11903
-        addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
-                button -> minecraft.setScreen(parent)).bounds(width / 2 - 50, height - 40, 100, 20).build());
-        //#else
-        //$$ addRenderableWidget(new Button(width / 2 - 50, height - 40, 100, 20,
-        //$$         ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
-        //#endif
+        addRenderableWidget(ComponentHelper.button(width / 2 - 50, height - 40, 100, 20,
+                ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
     }
 
     private void importPreset(String fileName) {

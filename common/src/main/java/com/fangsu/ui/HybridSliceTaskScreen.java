@@ -55,33 +55,20 @@ public class HybridSliceTaskScreen extends Screen {
     protected int tx = 0;
     protected int ty = 0;
 
-    //#if MC_VERSION >= 11903
-    private final Button btnReturn = Button.builder(ComponentHelper.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
-    private final Button btnEnterConfig = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen()).bounds(0, 0, 20, 20).build();
-    //#else
-    //$$ // 1.19.2 及以下无 Button.builder，用构造器（照 MTR3 版 BasicConfigScreen.addButton；位置由 placeButton 设置）
-    //$$ private final Button btnReturn = new Button(0, 0, 20, 20, ComponentHelper.literal("X"), button -> onClose());
-    //$$ private final Button btnEnterConfig = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen());
-    //#endif
+    // 按钮创建统一走 ComponentHelper.button（内部处理 builder/构造器版本差异），位置由 placeButton 设置
+    private final Button btnReturn = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("X"), button -> onClose());
+    private final Button btnEnterConfig = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen());
     /** 懒创建：Screen.minecraft 在 init() 后才非 null，字段初始化器里用会 NPE */
     private EditBox nameField;
     private final Button btnAddWidth;
     private final Button btnSubWidth;
     private final Button btnAddHeight;
     private final Button btnSubHeight;
-    //#if MC_VERSION >= 11903
-    private final Button btnSubTX = Button.builder(ComponentHelper.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnAddTX = Button.builder(ComponentHelper.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnSubTY = Button.builder(ComponentHelper.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnAddTY = Button.builder(ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    private final Button btnCenter = Button.builder(ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
-    //#else
-    //$$ private final Button btnSubTX = new Button(0, 0, 20, 20, ComponentHelper.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH));
-    //$$ private final Button btnAddTX = new Button(0, 0, 20, 20, ComponentHelper.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH));
-    //$$ private final Button btnSubTY = new Button(0, 0, 20, 20, ComponentHelper.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH));
-    //$$ private final Button btnAddTY = new Button(0, 0, 20, 20, ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH));
-    //$$ private final Button btnCenter = new Button(0, 0, 20, 20, ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; });
-    //#endif
+    private final Button btnSubTX = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH));
+    private final Button btnAddTX = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH));
+    private final Button btnSubTY = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH));
+    private final Button btnAddTY = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH));
+    private final Button btnCenter = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; });
 
     private final List<Square> canvas = new ArrayList<>();
     private final Inventory inventory = new Inventory();
@@ -96,17 +83,10 @@ public class HybridSliceTaskScreen extends Screen {
         this.key = key;
         this.parent = parent;
         // 按钮 lambda 引用 task 字段，必须在 task 赋值后初始化（字段初始化器顺序在前会报「可能尚未初始化」）
-        //#if MC_VERSION >= 11903
-        btnAddWidth = Button.builder(ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height)).bounds(0, 0, 20, 20).build();
-        btnSubWidth = Button.builder(ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height)).bounds(0, 0, 20, 20).build();
-        btnAddHeight = Button.builder(ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
-        btnSubHeight = Button.builder(ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
-        //#else
-        //$$ btnAddWidth = new Button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height));
-        //$$ btnSubWidth = new Button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height));
-        //$$ btnAddHeight = new Button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2));
-        //$$ btnSubHeight = new Button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2));
-        //#endif
+        btnAddWidth = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height));
+        btnSubWidth = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height));
+        btnAddHeight = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2));
+        btnSubHeight = ComponentHelper.button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2));
         reload();
     }
 

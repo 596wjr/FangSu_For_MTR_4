@@ -7,7 +7,6 @@ import com.fangsu.utils.GraphicContext;
 //#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
 //#endif
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -42,18 +41,10 @@ public class HybridImportScreen extends Screen {
         input.setCharacterLimit(1024 * 64);
         //#endif
         addRenderableWidget(input);
-        //#if MC_VERSION >= 11903
-        addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"),
-                        button -> importText())
-                .bounds((width - 220) / 2, height - 60, 100, 20).build());
-        addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
-                button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
-        //#else
-        //$$ addRenderableWidget(new Button((width - 220) / 2, height - 60, 100, 20,
-        //$$         ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"), button -> importText()));
-        //$$ addRenderableWidget(new Button((width + 20) / 2, height - 60, 100, 20,
-        //$$         ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
-        //#endif
+        addRenderableWidget(ComponentHelper.button((width - 220) / 2, height - 60, 100, 20,
+                ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"), button -> importText()));
+        addRenderableWidget(ComponentHelper.button((width + 20) / 2, height - 60, 100, 20,
+                ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
     }
 
     private void importText() {
