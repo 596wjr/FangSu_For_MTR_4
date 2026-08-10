@@ -40,9 +40,13 @@ public class ComponentHelper {
         //#endif
     }
 
-    /** 等效于 Component.literal(str) — 1.19.3 才引入该静态方法（1.19.0 只有 translatable/empty） */
+    /**
+     * 等效于 Component.literal(str) — 1.19.0 才引入该静态方法；
+     * 1.18.2 无静态工厂，用 new TextComponent（MTR 官方 Minecraft-Mappings-rewrite
+     * 1.18.2-mapping TextHelper 同款：TextComponent 只存在于 1.18.2，1.19.2 起改名）
+     */
     public static MutableComponent literal(String str) {
-        //#if MC_VERSION >= 11903
+        //#if MC_VERSION >= 11900
         return Component.literal(str);
         //#else
         //$$ return new net.minecraft.network.chat.TextComponent(str);

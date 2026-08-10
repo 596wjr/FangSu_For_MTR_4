@@ -46,11 +46,10 @@ public class HybridPresetExportScreen extends Screen {
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
                 button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
         //#else
-        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export"),
-        //$$                 button -> exportPreset())
-        //$$         .bounds((width - 220) / 2, height - 60, 100, 20).build());
-        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.block.cancel"),
-        //$$         button -> minecraft.setScreen(parent)).bounds((width + 20) / 2, height - 60, 100, 20).build());
+        //$$ addRenderableWidget(new Button((width - 220) / 2, height - 60, 100, 20,
+        //$$         ComponentHelper.translatable("ui.fangsu.hybrid_creator.export"), button -> exportPreset()));
+        //$$ addRenderableWidget(new Button((width + 20) / 2, height - 60, 100, 20,
+        //$$         ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
         //#endif
         setInitialFocus(nameField);
     }

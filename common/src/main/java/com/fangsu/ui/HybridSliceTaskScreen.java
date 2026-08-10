@@ -59,8 +59,9 @@ public class HybridSliceTaskScreen extends Screen {
     private final Button btnReturn = Button.builder(ComponentHelper.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
     private final Button btnEnterConfig = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen()).bounds(0, 0, 20, 20).build();
     //#else
-    //$$ private final Button btnReturn = Button.builder("X", button -> onClose()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnEnterConfig = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen()).bounds(0, 0, 20, 20).build();
+    //$$ // 1.19.2 及以下无 Button.builder，用构造器（照 MTR3 版 BasicConfigScreen.addButton；位置由 placeButton 设置）
+    //$$ private final Button btnReturn = new Button(0, 0, 20, 20, ComponentHelper.literal("X"), button -> onClose());
+    //$$ private final Button btnEnterConfig = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.config.title"), button -> setConfigScreen());
     //#endif
     /** 懒创建：Screen.minecraft 在 init() 后才非 null，字段初始化器里用会 NPE */
     private EditBox nameField;
@@ -75,11 +76,11 @@ public class HybridSliceTaskScreen extends Screen {
     private final Button btnAddTY = Button.builder(ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
     private final Button btnCenter = Button.builder(ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
     //#else
-    //$$ private final Button btnSubTX = Button.builder("◁", button -> setTX(tx + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnAddTX = Button.builder("▷", button -> setTX(tx - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnSubTY = Button.builder("▲", button -> setTY(ty + 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnAddTY = Button.builder("▼", button -> setTY(ty - 4 * Square.LENGTH)).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnCenter = Button.builder("▣", button -> { tx = 0; ty = 0; }).bounds(0, 0, 20, 20).build();
+    //$$ private final Button btnSubTX = new Button(0, 0, 20, 20, ComponentHelper.literal("◁"), button -> setTX(tx + 4 * Square.LENGTH));
+    //$$ private final Button btnAddTX = new Button(0, 0, 20, 20, ComponentHelper.literal("▷"), button -> setTX(tx - 4 * Square.LENGTH));
+    //$$ private final Button btnSubTY = new Button(0, 0, 20, 20, ComponentHelper.literal("▲"), button -> setTY(ty + 4 * Square.LENGTH));
+    //$$ private final Button btnAddTY = new Button(0, 0, 20, 20, ComponentHelper.literal("▼"), button -> setTY(ty - 4 * Square.LENGTH));
+    //$$ private final Button btnCenter = new Button(0, 0, 20, 20, ComponentHelper.literal("▣"), button -> { tx = 0; ty = 0; });
     //#endif
 
     private final List<Square> canvas = new ArrayList<>();
@@ -101,10 +102,10 @@ public class HybridSliceTaskScreen extends Screen {
         btnAddHeight = Button.builder(ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
         btnSubHeight = Button.builder(ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
         //#else
-        //$$ btnAddWidth = Button.builder("+", button -> setWidthAndHeight(task.width + 2, task.height)).bounds(0, 0, 20, 20).build();
-        //$$ btnSubWidth = Button.builder("-", button -> setWidthAndHeight(task.width - 2, task.height)).bounds(0, 0, 20, 20).build();
-        //$$ btnAddHeight = Button.builder("+", button -> setWidthAndHeight(task.width, task.height + 2)).bounds(0, 0, 20, 20).build();
-        //$$ btnSubHeight = Button.builder("-", button -> setWidthAndHeight(task.width, task.height - 2)).bounds(0, 0, 20, 20).build();
+        //$$ btnAddWidth = new Button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width + 2, task.height));
+        //$$ btnSubWidth = new Button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width - 2, task.height));
+        //$$ btnAddHeight = new Button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> setWidthAndHeight(task.width, task.height + 2));
+        //$$ btnSubHeight = new Button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> setWidthAndHeight(task.width, task.height - 2));
         //#endif
         reload();
     }
@@ -501,12 +502,13 @@ public class HybridSliceTaskScreen extends Screen {
     //$$     poseStack.pushPose();
     //$$     poseStack.translate(x, y + 16, 0);
     //$$     poseStack.scale(15.5F, -15.5F, 15.5F);
-    //$$     // 1.19.3 起用 com.mojang.math.Axis（Vector3f 在 1.19.4 已移除），旧版用 Vector3f
-    //$$     //#if MC_VERSION >= 11903
+    //$$     // 1.19.3 起用 com.mojang.math.Axis（Vector3f 在 1.19.4 已移除），旧版用 Vector3f；
+    //$$     // 注意：//$$ 块内嵌套 #if 指令行不能带 //$$ 前缀，否则指令不生效（两分支都会输出）
+    //#if MC_VERSION >= 11903
     //$$     poseStack.mulPose(Axis.XP.rotationDegrees(3));
-    //$$     //#else
+    //#else
     //$$     poseStack.mulPose(com.mojang.math.Vector3f.XP.rotationDegrees(3));
-    //$$     //#endif
+    //#endif
     //$$
     //$$     final MultiBufferSource.BufferSource buffer = MultiBufferSource.immediate(Tesselator.getInstance().getBuilder());
     //$$     RenderSystem.enableDepthTest();

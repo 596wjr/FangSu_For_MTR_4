@@ -54,8 +54,8 @@ public class HybridPresetImportScreen extends Screen {
             final Button button = Button.builder(ComponentHelper.literal(fileName), btn -> importPreset(fileName))
                     .bounds(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18).build();
             //#else
-            //$$ final Button button = Button.builder(fileName, btn -> importPreset(fileName))
-            //$$         .bounds(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18).build();
+            //$$ final Button button = new Button(40, LIST_TOP + i * ROW_H, Math.min(360, width - 80), 18,
+            //$$         ComponentHelper.literal(fileName), btn -> importPreset(fileName));
             //#endif
             buttons.add(button);
             addRenderableWidget(button);
@@ -64,8 +64,8 @@ public class HybridPresetImportScreen extends Screen {
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.block.cancel"),
                 button -> minecraft.setScreen(parent)).bounds(width / 2 - 50, height - 40, 100, 20).build());
         //#else
-        //$$ addRenderableWidget(Button.builder(ComponentHelper.translatableString("ui.fangsu.block.cancel"),
-        //$$         button -> minecraft.setScreen(parent)).bounds(width / 2 - 50, height - 40, 100, 20).build());
+        //$$ addRenderableWidget(new Button(width / 2 - 50, height - 40, 100, 20,
+        //$$         ComponentHelper.translatable("ui.fangsu.block.cancel"), button -> minecraft.setScreen(parent)));
         //#endif
     }
 
@@ -149,11 +149,12 @@ public class HybridPresetImportScreen extends Screen {
     //$$         final Button button = buttons.get(i);
     //$$         final int y = LIST_TOP + i * ROW_H + scroll;
     //$$         if (y + ROW_H < LIST_TOP || y > bottom) continue; // 不可见行跳过
-    //$$         //#if MC_VERSION >= 11903
+    //$$         // 注意：//$$ 块内嵌套 #if 指令行不能带 //$$ 前缀，否则指令不生效（两分支都会输出）
+    //#if MC_VERSION >= 11903
     //$$         button.setY(y);
-    //$$         //#else
-    //$$         //$$ button.y = y; // 1.19.2 及以下 AbstractWidget 无 setY，x/y 为 public 字段
-    //$$         //#endif
+    //#else
+    //$$         button.y = y; // 1.19.2 及以下 AbstractWidget 无 setY，x/y 为 public 字段
+    //#endif
     //$$         button.render(poseStack, mouseX, mouseY, partialTick);
     //$$     }
     //$$     g.disableScissor();

@@ -62,15 +62,16 @@ public class HybridCreatorScreen extends Screen {
     private final Button btnImportPreset = Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import_preset"), button -> importPresetJson()).bounds(0, 0, 20, 20).build();
     private final Button btnClose = Button.builder(ComponentHelper.literal("X"), button -> onClose()).bounds(0, 0, 20, 20).build();
     //#else
-    //$$ private final Button btnAdd = Button.builder("+", button -> addEntry()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnRemove = Button.builder("-", button -> removeEntry()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnCopy = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.copy"), button -> copyEntry()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnClear = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.clear"), button -> clearEntries()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnExport = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export"), button -> exportJson()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnImport = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.import"), button -> importJson()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnExportPreset = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.export_preset"), button -> exportPresetJson()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnImportPreset = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.import_preset"), button -> importPresetJson()).bounds(0, 0, 20, 20).build();
-    //$$ private final Button btnClose = Button.builder("X", button -> onClose()).bounds(0, 0, 20, 20).build();
+    //$$ // 1.19.2 及以下无 Button.builder，用构造器（照 MTR3 版 BasicConfigScreen.addButton；位置由 placeButton 设置）
+    //$$ private final Button btnAdd = new Button(0, 0, 20, 20, ComponentHelper.literal("+"), button -> addEntry());
+    //$$ private final Button btnRemove = new Button(0, 0, 20, 20, ComponentHelper.literal("-"), button -> removeEntry());
+    //$$ private final Button btnCopy = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.copy"), button -> copyEntry());
+    //$$ private final Button btnClear = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.clear"), button -> clearEntries());
+    //$$ private final Button btnExport = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export"), button -> exportJson());
+    //$$ private final Button btnImport = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"), button -> importJson());
+    //$$ private final Button btnExportPreset = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset"), button -> exportPresetJson());
+    //$$ private final Button btnImportPreset = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import_preset"), button -> importPresetJson());
+    //$$ private final Button btnClose = new Button(0, 0, 20, 20, ComponentHelper.literal("X"), button -> onClose());
     //#endif
 
     private HybridCreatorScreen(Screen parent) {
@@ -423,9 +424,9 @@ public class HybridCreatorScreen extends Screen {
         private final Button up = Button.builder(ComponentHelper.literal("▲"), button -> moveUp()).bounds(0, 0, 20, 20).build();
         private final Button down = Button.builder(ComponentHelper.literal("▼"), button -> moveDown()).bounds(0, 0, 20, 20).build();
         //#else
-        //$$ private final Button enter = Button.builder(ComponentHelper.translatableString("ui.fangsu.hybrid_creator.enter"), button -> enter()).bounds(0, 0, 20, 20).build();
-        //$$ private final Button up = Button.builder("▲", button -> moveUp()).bounds(0, 0, 20, 20).build();
-        //$$ private final Button down = Button.builder("▼", button -> moveDown()).bounds(0, 0, 20, 20).build();
+        //$$ private final Button enter = new Button(0, 0, 20, 20, ComponentHelper.translatable("ui.fangsu.hybrid_creator.enter"), button -> enter());
+        //$$ private final Button up = new Button(0, 0, 20, 20, ComponentHelper.literal("▲"), button -> moveUp());
+        //$$ private final Button down = new Button(0, 0, 20, 20, ComponentHelper.literal("▼"), button -> moveDown());
         //#endif
 
         public Entry(HybridSliceTask task, String key) {
