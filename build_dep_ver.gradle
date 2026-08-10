@@ -78,7 +78,7 @@ def archApiVer = archVersions[minecraft_version] ?: archVersions.values().first(
 def mtrFabricVersions = [
         "1.18.2": "FABRIC-4.0.5+1.18.2",
         "1.19.2": "FABRIC-4.0.5+1.19.2",
-        "1.19.3": "FABRIC-4.0.5+1.19.3",
+//        "1.19.3": "FABRIC-4.0.5+1.19.3",
         "1.19.4": "FABRIC-4.0.5+1.19.4",
         "1.20.1": "FABRIC-4.0.5+1.20.1",
         "1.20.4": "FABRIC-4.0.5+1.20.4"
@@ -86,7 +86,7 @@ def mtrFabricVersions = [
 def mtrForgeVersions = [
         "1.18.2": "FORGE-4.0.5+1.18.2",
         "1.19.2": "FORGE-4.0.5+1.19.2",
-        "1.19.3": "FORGE-4.0.5+1.19.3",
+//        "1.19.3": "FORGE-4.0.5+1.19.3",
         "1.19.4": "FORGE-4.0.5+1.19.4",
         "1.20.1": "FORGE-4.0.5+1.20.1",
         "1.20.4": "FORGE-4.0.5+1.20.4"
