@@ -259,11 +259,30 @@ public class RenderVehiclesMixin {
                 // 此前 bug 链：T(世界) → 加 R(q) 但未减相机 → T(rel) 特定视角正确 →
                 // R(q)×T(rel)×R_y×R_x(裸pitch) 全错 → 本版：R(q) × T(rel) × R_y(yaw+PI) × R_x(pitch+PI)
                 final net.minecraft.client.Camera camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
+                // 相机旋转四元数：1.19.3+ 用 org.joml；1.19.2 用 com.mojang.math.Quaternionf；1.18.2 用 Quaternion（仅静态 fromYXZ）
+                //#if MC_VERSION >= 11903
                 final org.joml.Quaternionf camRot = new org.joml.Quaternionf().rotationYXZ(
                         (float) Math.toRadians(-camera.getYRot()),
                         (float) Math.toRadians(camera.getXRot()),
                         0);
-                final Matrix4f mvMatrix = new Matrix4f(new org.joml.Matrix4f().rotation(camRot));
+                //#elseif MC_VERSION >= 11902
+                //$$ final com.mojang.math.Quaternionf camRot = new com.mojang.math.Quaternionf().rotationYXZ(
+                //$$         (float) Math.toRadians(-camera.getYRot()),
+                //$$         (float) Math.toRadians(camera.getXRot()),
+                //$$         0);
+                //#else
+                //$$ final com.mojang.math.Quaternion camRot = com.mojang.math.Quaternion.fromYXZ(
+                //$$         (float) Math.toRadians(-camera.getYRot()),
+                //$$         (float) Math.toRadians(camera.getXRot()),
+                //$$         0);
+                //#endif
+                // 1.19.3+ 的 MC 直接使用 org.joml.Matrix4f；1.19.2- 为独立类（1.18.2 有 Quaternion 构造器）
+                final Matrix4f mvMatrix = new Matrix4f(
+                        //#if MC_VERSION >= 11903
+                        new org.joml.Matrix4f().rotation(camRot));
+                        //#else
+                        //$$ new com.mojang.math.Matrix4f(camRot));
+                        //#endif
                 mvMatrix.translate((float) (carPos.x() - camera.getPosition().x),
                         (float) (carPos.y() - camera.getPosition().y),
                         (float) (carPos.z() - camera.getPosition().z));

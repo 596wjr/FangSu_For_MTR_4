@@ -189,10 +189,12 @@ public abstract class BasicConfigScreen extends Screen {
             clearWidgets();
             init();
         }
-        //#if MC_VERSION < 12003
+        //#if MC_VERSION >= 12003
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#elseif MC_VERSION >= 12000
         renderBackground(graphics);
         //#else
-        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //$$ renderBackground(poseStack);
         //#endif
 
         renderPanelBackground(g);

@@ -133,10 +133,10 @@ public class NodeAngleScreen extends Screen {
         //#else
         //$$ angleInput = new EditBox(this.font, centerX - 80, yBase - 10, 160, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.angle"));
         //$$ angleInput.setValue(String.valueOf((float) angle));
-        //$$ this.addWidget(angleInput);
-        //$$ this.addButton(new Button(centerX - 80, yBase + 20, 77, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.m22"), b -> step(-22.5)));
-        //$$ this.addButton(new Button(centerX + 4, yBase + 20, 77, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.p22"), b -> step(22.5)));
-        //$$ this.addButton(new Button(centerX - 80, yBase + 48, 160, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.bind_and_save"), b -> saveAndClose()));
+        //$$ this.addRenderableWidget(angleInput);
+        //$$ this.addRenderableWidget(new Button(centerX - 80, yBase + 20, 77, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.m22"), b -> step(-22.5)));
+        //$$ this.addRenderableWidget(new Button(centerX + 4, yBase + 20, 77, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.p22"), b -> step(22.5)));
+        //$$ this.addRenderableWidget(new Button(centerX - 80, yBase + 48, 160, 20, ComponentHelper.translatable("ui.fangsu.multi_direction_node.bind_and_save"), b -> saveAndClose()));
         //$$
         //$$ final int railY = yBase + 76;
         //$$ final boolean hasRail = rail != null;
@@ -145,13 +145,13 @@ public class NodeAngleScreen extends Screen {
         //$$         : TranslationProvider.GUI_MTR_RAIL_SHAPE_QUADRATIC.getMutableText().data;
         //$$ final Button buttonShape = new Button(centerX - 80, railY, 160, 20, shapeLabel, b -> toggleRailShape());
         //$$ buttonShape.active = hasRail;
-        //$$ this.addButton(buttonShape);
+        //$$ this.addRenderableWidget(buttonShape);
         //$$ final Button buttonStyles = new Button(centerX - 80, railY + 28, 77, 20, TranslationProvider.GUI_MTR_RAIL_STYLES.getMutableText().data, b -> openStyleSelector());
         //$$ buttonStyles.active = hasRail;
-        //$$ this.addButton(buttonStyles);
+        //$$ this.addRenderableWidget(buttonStyles);
         //$$ final Button buttonFlip = new Button(centerX + 4, railY + 28, 77, 20, TranslationProvider.GUI_MTR_FLIP_STYLES.getMutableText().data, b -> flipStyles());
         //$$ buttonFlip.active = hasRail;
-        //$$ this.addButton(buttonFlip);
+        //$$ this.addRenderableWidget(buttonFlip);
         //#endif
     }
 
@@ -251,12 +251,14 @@ public class NodeAngleScreen extends Screen {
         //$$public void render(com.mojang.blaze3d.vertex.PoseStack graphics, int mouseX, int mouseY, float partialTick) {
         //$$    super.render(graphics, mouseX, mouseY, partialTick);
         //#endif
-        // 半径输入框标签（1.19.4 及以下 Screen.render 为 PoseStack 签名）
+        // 半径输入框标签（1.19.4 及以下 Screen.render 为 PoseStack 签名；1.19.2- 无 getX()/getY()，用公开字段 x/y）
         if (radiusInput != null && radiusInput.visible) {
             //#if MC_VERSION >= 12000
             graphics.drawString(this.font, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.getX(), radiusInput.getY() - 10, 0xFFFFFF);
-            //#else
+            //#elseif MC_VERSION >= 11903
             //$$this.font.draw(graphics, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.getX(), radiusInput.getY() - 10, 0xFFFFFF);
+            //#else
+            //$$this.font.draw(graphics, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.x, radiusInput.y - 10, 0xFFFFFF);
             //#endif
         }
     }

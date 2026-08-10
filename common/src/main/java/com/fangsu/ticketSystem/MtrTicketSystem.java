@@ -143,7 +143,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     BALANCE_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Component.literal("Balance"),
+                    ComponentHelper.literal("Balance"),
                     ObjectiveCriteria.RenderType.INTEGER
                     //#if MC_VERSION < 12002
                     // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
@@ -158,7 +158,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     ENTRY_ZONE_1_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Component.literal("Entry Zone 1"),
+                    ComponentHelper.literal("Entry Zone 1"),
                     ObjectiveCriteria.RenderType.INTEGER
                     //#if MC_VERSION < 12002
                     // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
@@ -173,7 +173,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     ENTRY_ZONE_2_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Component.literal("Entry Zone 2"),
+                    ComponentHelper.literal("Entry Zone 2"),
                     ObjectiveCriteria.RenderType.INTEGER
                     //#if MC_VERSION < 12002
                     // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）
@@ -188,7 +188,7 @@ public class MtrTicketSystem {
             world.getScoreboard().addObjective(
                     ENTRY_ZONE_3_OBJECTIVE,
                     ObjectiveCriteria.DUMMY,
-                    Component.literal("Entry Zone 3"),
+                    ComponentHelper.literal("Entry Zone 3"),
                     ObjectiveCriteria.RenderType.INTEGER
                     //#if MC_VERSION < 12002
                     // 1.20.2+ 的 addObjective 多两个参数（NumberFormat 等）

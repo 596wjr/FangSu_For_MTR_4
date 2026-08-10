@@ -45,7 +45,8 @@ public class MinecraftClientUtil {
         final Player player = Minecraft.getInstance().player;
         if (player != null) {
             Minecraft.getInstance().execute(() -> {
-                player.displayClientMessage(net.minecraft.network.chat.Component.literal(message), actionBar);
+                // 1.18.2/1.19.2 无 Component.literal，走 ComponentHelper 映射（内部按版本切换 TextComponent/literal）
+                player.displayClientMessage(com.fangsu.mappings.ComponentHelper.literal(message), actionBar);
             });
         }
     }
