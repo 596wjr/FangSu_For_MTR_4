@@ -14,6 +14,12 @@ dependencies {
     // mixin/TrainMixin（MTR4 RenderVehicleHelper）引用了 org.joml.Vector3d。
     // 1.19.4+ 的 loom 编译环境自带 JOML；1.18.2/1.19.2 不暴露，需显式声明（仅编译期，运行时由 MC 自带提供）
     compileOnly "org.joml:joml:1.10.5"
+
+    // MTR（RailAction 等）类头带 JSR-305 注解（javax.annotation.Nullable/ParametersAreNonnullByDefault）。
+    // MixinAP 验证 @Accessor/@Invoker 目标（RailActionModuleAccessorMixin）时会解析这些注解，
+    // classpath 缺 JSR-305 则报「无法访问ParametersAreNonnullByDefault」（javax.annotation-api 是
+    // JSR-250，不含这些类；必须用 jsr305）。仅编译期，运行时不需要。
+    compileOnly "com.google.code.findbugs:jsr305:3.0.2"
 }
 
 loom {

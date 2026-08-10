@@ -4,7 +4,7 @@
     "compatibilityLevel": "JAVA_17",
     "minVersion": "0.8",
     "client": ["LevelRendererMixin", "RenderRailsMixin", "RenderVehiclesMixin"],
-    "mixins": ["ClientDataMixin", "DataMixin", "InitAccessorMixin", "AngleMixin", "EnumHelperMixin", "ItemNodeModifierBaseMixin", "ItemRailModifierAccessorMixin", "TrainMixin", "BlockNodeMixin", "PathDataMixin"],
+    "mixins": ["ClientDataMixin", "DataMixin", "InitAccessorMixin", "AngleMixin", "EnumHelperMixin", "ItemNodeModifierBaseMixin", "ItemRailModifierAccessorMixin", "TrainMixin", "BlockNodeMixin", "PathDataMixin", "RailActionModuleAccessorMixin"],
     "injectors": {
         "defaultRequire": 1
     },

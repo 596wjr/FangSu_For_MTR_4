@@ -142,6 +142,8 @@ subprojects {
         minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
         mappings loom.officialMojangMappings()
 
+        compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
+
 //        if (rootProject.require_nte == true) {
 //            if (rootProject.build_for_ante == true) {
 //                modImplementation "maven.modrinth:mtr-ante:$rootProject.ante_version"
