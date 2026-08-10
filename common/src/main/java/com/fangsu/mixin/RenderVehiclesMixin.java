@@ -259,17 +259,13 @@ public class RenderVehiclesMixin {
                 // 此前 bug 链：T(世界) → 加 R(q) 但未减相机 → T(rel) 特定视角正确 →
                 // R(q)×T(rel)×R_y×R_x(裸pitch) 全错 → 本版：R(q) × T(rel) × R_y(yaw+PI) × R_x(pitch+PI)
                 final net.minecraft.client.Camera camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera();
-                // 相机旋转四元数：1.19.3+ 用 org.joml；1.19.2 用 com.mojang.math.Quaternionf；1.18.2 用 Quaternion（仅静态 fromYXZ）
+                // 相机旋转四元数：1.19.3+ 用 org.joml（该版本移除了 com.mojang.math 包）；
+                // 1.18.2/1.19.2 用 com.mojang.math.Quaternion（仅静态 fromYXZ；1.19.2 尚未改名 Quaternionf）
                 //#if MC_VERSION >= 11903
                 final org.joml.Quaternionf camRot = new org.joml.Quaternionf().rotationYXZ(
                         (float) Math.toRadians(-camera.getYRot()),
                         (float) Math.toRadians(camera.getXRot()),
                         0);
-                //#elseif MC_VERSION >= 11902
-                //$$ final com.mojang.math.Quaternionf camRot = new com.mojang.math.Quaternionf().rotationYXZ(
-                //$$         (float) Math.toRadians(-camera.getYRot()),
-                //$$         (float) Math.toRadians(camera.getXRot()),
-                //$$         0);
                 //#else
                 //$$ final com.mojang.math.Quaternion camRot = com.mojang.math.Quaternion.fromYXZ(
                 //$$         (float) Math.toRadians(-camera.getYRot()),
