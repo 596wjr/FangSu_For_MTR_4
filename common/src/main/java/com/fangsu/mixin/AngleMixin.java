@@ -51,27 +51,56 @@ public abstract class AngleMixin implements AngleExtra {
     /**
      * 幻影实例缓存：相同角度（float 精度）复用同一实例（缓存本体在 {@link AngleExtra}）。
      * <p>
-     * MTR core 的倾斜角传播（{@code Rail.getUpdatedRailTiltAngles}）用 {@code ==} 引用比较
-     * Angle，缓存保证同一角度比较成立；同时避免反复创建实例。
+     * MTR core 的寻路（{@code SidingPathFinder} 中 {@code node.angle == rail.getStartAngle(...)}）
+     * 与倾斜角传播（{@code Rail.getUpdatedRailTiltAngles}）都用 {@code ==} 引用比较 Angle，
+     * 缓存保证同一角度（同一 float32 键）复用同一实例，比较才能成立；同时避免反复创建实例。
      */
+    /** 将度数归一化到 [0,360)（double 精度运算，最后一次性 float 化）。 */
+    private static float fangsu$normalizeDegreesTo360(double degrees) {
+        double normalized = degrees % 360.0;
+        if (normalized < 0) {
+            normalized += 360.0;
+        }
+        return (float) normalized;
+    }
+
     /**
      * 若角度恰好等于某个枚举常量（22.5° 倍数），返回该常量而非幻影实例。
      * <p>
      * 保证"万向节点建出的 22.5° 倍数轨道"与"原版节点建出的轨道"使用同一枚举实例，
-     * 使 core 中 {@code ==} 引用比较（倾斜角传播）在两种轨道之间依然成立。
+     * 使 core 中 {@code ==} 引用比较（寻路 {@code node.angle == rail.getStartAngle(...)}、
+     * 倾斜角传播）在两种轨道之间依然成立。
+     * <p>
+     * 注意：枚举常量字段是构造器 {@code normalizeAngle} 后的 [-180,180) 值（如
+     * NEE=337.5° 字段为 -22.5、NWW=202.5° 字段为 -157.5），而本方法输入统一为
+     * [0,360)（见 {@link #fangsu$normalizeDegreesTo360}），因此比较前需把负字段
+     * 映射回 [0,360) —— 否则 337.5° 会匹配不到 NEE 而错误地创建幻影实例，
+     * 导致同一方向出现"枚举/幻影"两个不同实例，寻路 {@code ==} 引用比较断裂。
      */
     private Angle fangsu$snapToEnumIfExact(float degrees) {
         for (final Angle a : Angle.values()) {
-            if (a.angleDegrees == degrees) {
+            float field = a.angleDegrees;
+            if (field < 0) {
+                field += 360f;
+            }
+            if (field == degrees) {
                 return a;
             }
         }
         return null;
     }
 
+    /**
+     * 创建/复用幻影实例。缓存键 = 输入归一化到 [0,360) 后的 float32 值。
+     * <p>
+     * 归一化在 double 域完成后再一次性 float 化，避免 float32 加减链（构造器
+     * normalizeAngle 那种 while 循环）引入 1 ulp 偏差 —— 否则同一方向经
+     * "fromDegrees(123.4)" 与 "getOpposite 传来的 fromDegrees(303.4+180)" 两条
+     * 路径会得到不同 float32 键、不同实例，导致寻路 {@code ==} 引用比较断裂。
+     */
     @Override
     public Angle fangsu$fromDegrees(double angleDegrees) {
-        final float degrees = (float) angleDegrees;
+        final float degrees = fangsu$normalizeDegreesTo360(angleDegrees);
         final Angle exact = fangsu$snapToEnumIfExact(degrees);
         if (exact != null) {
             return exact;
@@ -81,6 +110,7 @@ public abstract class AngleMixin implements AngleExtra {
             return cached;
         }
         final Angle result = create("D" + Float.toString(degrees), -1, degrees);
+        // 弧度字段保留原始输入（double 精度），供 getOpposite/add/sub 恢复精确度数
         fangsu$setRadiansInternal(result, Math.toRadians(angleDegrees));
         AngleExtra.PHANTOM_CACHE.put(degrees, result);
         return result;
@@ -88,7 +118,7 @@ public abstract class AngleMixin implements AngleExtra {
 
     @Override
     public Angle fangsu$fromRadians(double angleRadians) {
-        final float degrees = (float) Math.toDegrees(angleRadians);
+        final float degrees = fangsu$normalizeDegreesTo360(Math.toDegrees(angleRadians));
         final Angle exact = fangsu$snapToEnumIfExact(degrees);
         if (exact != null) {
             return exact;
@@ -125,7 +155,10 @@ public abstract class AngleMixin implements AngleExtra {
     @Inject(method = "getOpposite", at = @At("HEAD"), remap = false, cancellable = true)
     private void fangsu$getOpposite(CallbackInfoReturnable<Angle> cir) {
         if (fangsu$isPhantom()) {
-            cir.setReturnValue(fangsu$fromDegrees(angleDegrees + 180));
+            // 用 angleRadians（double，建轨时保留的原始输入）恢复精确度数再 +180，
+            // 避免 float32 字段（[-180,180) 归一化值）的 1 ulp 偏差导致与
+            // 建轨路径 fromDegrees(归一化 double) 产生不同实例，寻路 == 比较断裂
+            cir.setReturnValue(fangsu$fromDegrees(Math.toDegrees(angleRadians) + 180));
         }
     }
 
