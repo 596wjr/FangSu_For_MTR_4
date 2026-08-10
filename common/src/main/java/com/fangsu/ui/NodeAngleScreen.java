@@ -242,12 +242,22 @@ public class NodeAngleScreen extends Screen {
         }
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(net.minecraft.client.gui.GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
-        // 半径输入框标签（MTR4 版固定 1.20.1，GuiGraphics 可用）
+        //#else
+        //$$@Override
+        //$$public void render(com.mojang.blaze3d.vertex.PoseStack graphics, int mouseX, int mouseY, float partialTick) {
+        //$$    super.render(graphics, mouseX, mouseY, partialTick);
+        //#endif
+        // 半径输入框标签（1.19.4 及以下 Screen.render 为 PoseStack 签名）
         if (radiusInput != null && radiusInput.visible) {
+            //#if MC_VERSION >= 12000
             graphics.drawString(this.font, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.getX(), radiusInput.getY() - 10, 0xFFFFFF);
+            //#else
+            //$$this.font.draw(graphics, ComponentHelper.translatable("ui.fangsu.multi_direction_node.radius"), radiusInput.getX(), radiusInput.getY() - 10, 0xFFFFFF);
+            //#endif
         }
     }
 
