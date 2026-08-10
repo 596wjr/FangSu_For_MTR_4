@@ -3,7 +3,9 @@ package com.fangsu.ui;
 import com.fangsu.data.hybrid.HybridCreatorJsonIO;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.GraphicContext;
+//#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
+//#endif
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
@@ -80,11 +82,16 @@ public class HybridPresetImportScreen extends Screen {
         }
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        final GraphicContext g = GraphicContext.of(graphics);
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
         super.render(graphics, mouseX, mouseY, partialTick);
+        final GraphicContext g = GraphicContext.of(graphics);
         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import_preset.title").getString(), width / 2, 22, 0xFFFFFFFF);
         if (files.isEmpty()) {
             g.drawCenteredString(minecraft.font, ComponentHelper.translatable("msg.fangsu.hybrid_creator.import_fail").getString(), width / 2, height / 2 - 10, 0xFFAAAAAA);
@@ -106,7 +113,36 @@ public class HybridPresetImportScreen extends Screen {
         }
         g.disableScissor();
     }
+    //#else
+    //$$ @Override
+    //$$ public void render(@NotNull com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    //$$     renderBackground(poseStack);
+    //$$     super.render(poseStack, mouseX, mouseY, partialTick);
+    //$$     final GraphicContext g = GraphicContext.of(poseStack);
+    //$$     g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import_preset.title").getString(), width / 2, 22, 0xFFFFFFFF);
+    //$$     if (files.isEmpty()) {
+    //$$         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("msg.fangsu.hybrid_creator.import_fail").getString(), width / 2, height / 2 - 10, 0xFFAAAAAA);
+    //$$         return;
+    //$$     }
+    //$$     // 裁切列表区并应用滚动
+    //$$     final int bottom = height - LIST_BOTTOM_MARGIN;
+    //$$     g.enableScissor(20, LIST_TOP, width - 20, bottom);
+    //$$     final int listHeight = bottom - LIST_TOP;
+    //$$     final int maxScroll = files.size() * ROW_H - listHeight;
+    //$$     if (scroll > 0) scroll = 0;
+    //$$     if (scroll < -maxScroll && maxScroll > 0) scroll = -maxScroll;
+    //$$     for (int i = 0; i < buttons.size(); i++) {
+    //$$         final Button button = buttons.get(i);
+    //$$         final int y = LIST_TOP + i * ROW_H + scroll;
+    //$$         if (y + ROW_H < LIST_TOP || y > bottom) continue; // 不可见行跳过
+    //$$         button.setY(y);
+    //$$         button.render(poseStack, mouseX, mouseY, partialTick);
+    //$$     }
+    //$$     g.disableScissor();
+    //$$ }
+    //#endif
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double x, double y, double amount) {
         if (files.isEmpty()) return super.mouseScrolled(x, y, amount);
@@ -116,4 +152,15 @@ public class HybridPresetImportScreen extends Screen {
         scroll = Math.max(-maxScroll, Math.min(0, scroll + (int) (amount * 16)));
         return true;
     }
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double x, double y, double amount, double horizontalAmount) {
+    //$$     if (files.isEmpty()) return super.mouseScrolled(x, y, amount, horizontalAmount);
+    //$$     final int listHeight = height - LIST_TOP - LIST_BOTTOM_MARGIN;
+    //$$     final int maxScroll = files.size() * ROW_H - listHeight;
+    //$$     if (maxScroll <= 0) return super.mouseScrolled(x, y, amount, horizontalAmount);
+    //$$     scroll = Math.max(-maxScroll, Math.min(0, scroll + (int) (amount * 16)));
+    //$$     return true;
+    //$$ }
+    //#endif
 }

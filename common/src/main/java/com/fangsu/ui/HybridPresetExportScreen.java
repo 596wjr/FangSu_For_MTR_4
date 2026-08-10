@@ -3,7 +3,9 @@ package com.fangsu.ui;
 import com.fangsu.data.hybrid.HybridCreatorJsonIO;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.GraphicContext;
+//#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
+//#endif
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -57,12 +59,27 @@ public class HybridPresetExportScreen extends Screen {
         }
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        final GraphicContext g = GraphicContext.of(graphics);
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
         super.render(graphics, mouseX, mouseY, partialTick);
+        final GraphicContext g = GraphicContext.of(graphics);
         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset.title").getString(), width / 2, 26, 0xFFFFFFFF);
         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset.hint").getString(), width / 2, 44, 0xFFAAAAAA);
     }
+    //#else
+    //$$ @Override
+    //$$ public void render(@NotNull com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    //$$     renderBackground(poseStack);
+    //$$     super.render(poseStack, mouseX, mouseY, partialTick);
+    //$$     final GraphicContext g = GraphicContext.of(poseStack);
+    //$$     g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset.title").getString(), width / 2, 26, 0xFFFFFFFF);
+    //$$     g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.export_preset.hint").getString(), width / 2, 44, 0xFFAAAAAA);
+    //$$ }
+    //#endif
 }

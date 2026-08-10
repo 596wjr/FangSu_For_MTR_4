@@ -7,7 +7,9 @@ import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.network.HybridCreatorPackets;
 import com.fangsu.utils.GraphicContext;
 import net.minecraft.client.Minecraft;
+//#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
+//#endif
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -205,10 +207,31 @@ public class HybridCreatorScreen extends Screen {
         // 按钮手动管理（照 ANTE）：渲染顺序与滚动条/条目相对位置可控
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        final GraphicContext g = GraphicContext.of(graphics);
+        renderImpl(GraphicContext.of(graphics), mouseX, mouseY, partialTick);
+    }
+    //#else
+    //$$ @Override
+    //$$ public void render(@NotNull com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    //$$     renderImpl(GraphicContext.of(poseStack), mouseX, mouseY, partialTick);
+    //$$ }
+    //#endif
+
+    /** 渲染主体：graphics 预处理后为 GuiGraphics（1.20+）/ PoseStack（旧版），随版本分支 */
+    private void renderImpl(GraphicContext g, int mouseX, int mouseY, float partialTick) {
+        //#if MC_VERSION >= 12000
+        final GuiGraphics graphics = g.asMinecraft();
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
+        //#else
+        //$$ final com.mojang.blaze3d.vertex.PoseStack graphics = g.asMinecraft();
+        //$$ renderBackground(graphics);
+        //#endif
         super.render(graphics, mouseX, mouseY, partialTick);
         g.fill(0, 38, width, height - 38, 0x90000000);
 
@@ -278,6 +301,7 @@ public class HybridCreatorScreen extends Screen {
         scroll = temp;
     }
 
+    //#if MC_VERSION < 12003
     @Override
     public boolean mouseScrolled(double x, double y, double amount) {
         if (!canScroll()) return super.mouseScrolled(x, y, amount);
@@ -287,6 +311,17 @@ public class HybridCreatorScreen extends Screen {
         }
         return super.mouseScrolled(x, y, amount);
     }
+    //#else
+    //$$ @Override
+    //$$ public boolean mouseScrolled(double x, double y, double amount, double horizontalAmount) {
+    //$$     if (!canScroll()) return super.mouseScrolled(x, y, amount, horizontalAmount);
+    //$$     if (scissorX <= x && x <= scissorX + scissorW && scissorY <= y && y <= scissorY + scissorH) {
+    //$$         checkAndScroll(scroll + 10 * (int) amount);
+    //$$         return true;
+    //$$     }
+    //$$     return super.mouseScrolled(x, y, amount, horizontalAmount);
+    //$$ }
+    //#endif
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -379,7 +414,11 @@ public class HybridCreatorScreen extends Screen {
             if (nameField == null) {
                 nameField = new EditBox(minecraft.font, 0, 0, 0, 16, Component.literal(""));
                 nameField.setValue(task.name);
+                //#if MC_VERSION >= 12003
+                nameField.moveCursorToStart(true);
+                //#else
                 nameField.moveCursorToStart();
+                //#endif
                 nameField.setResponder(this::updateName);
             }
             return nameField;
@@ -425,8 +464,22 @@ public class HybridCreatorScreen extends Screen {
             }
         }
 
+        //#if MC_VERSION >= 12000
         public void render(GuiGraphics graphics, int mouseX, int mouseY, int y, float partialTick) {
-            final GraphicContext g = GraphicContext.of(graphics);
+            renderImpl(GraphicContext.of(graphics), mouseX, mouseY, y, partialTick);
+        }
+        //#else
+        //$$ public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, int y, float partialTick) {
+        //$$     renderImpl(GraphicContext.of(poseStack), mouseX, mouseY, y, partialTick);
+        //$$ }
+        //#endif
+
+        private void renderImpl(GraphicContext g, int mouseX, int mouseY, int y, float partialTick) {
+            //#if MC_VERSION >= 12000
+            final GuiGraphics graphics = g.asMinecraft();
+            //#else
+            //$$ final com.mojang.blaze3d.vertex.PoseStack graphics = g.asMinecraft();
+            //#endif
             this.y = y;
             if (isSelected()) {
                 g.fill(0, y(), width - 55, y() + HEIGHT, 0xa0eeeeee);

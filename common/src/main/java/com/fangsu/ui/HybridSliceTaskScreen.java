@@ -6,8 +6,12 @@ import com.fangsu.utils.GraphicContext;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
+//#if MC_VERSION >= 11903
 import com.mojang.math.Axis;
+//#endif
+//#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
+//#endif
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -17,7 +21,9 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+//#if MC_VERSION >= 11903
 import net.minecraft.core.registries.BuiltInRegistries;
+//#endif
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -142,7 +148,11 @@ public class HybridSliceTaskScreen extends Screen {
         // minecraft 在 init(Minecraft, int, int) 里才被赋值，所有依赖字体的 widget 必须在这里创建
         nameField = new EditBox(minecraft.font, 0, 0, 0, 16, Component.literal(""));
         nameField.setValue(task.name);
+        //#if MC_VERSION >= 12003
+        nameField.moveCursorToStart(true);
+        //#else
         nameField.moveCursorToStart();
+        //#endif
         nameField.setResponder(str -> {
             task.name = str;
             updateTask();
@@ -150,10 +160,31 @@ public class HybridSliceTaskScreen extends Screen {
         inventory.initSearchField();
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        final GraphicContext g = GraphicContext.of(graphics);
+        renderImpl(GraphicContext.of(graphics), mouseX, mouseY, partialTick);
+    }
+    //#else
+    //$$ @Override
+    //$$ public void render(@NotNull com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    //$$     renderImpl(GraphicContext.of(poseStack), mouseX, mouseY, partialTick);
+    //$$ }
+    //#endif
+
+    /** 渲染主体：graphics 预处理后为 GuiGraphics（1.20+）/ PoseStack（旧版），随版本分支 */
+    private void renderImpl(GraphicContext g, int mouseX, int mouseY, float partialTick) {
+        //#if MC_VERSION >= 12000
+        final GuiGraphics graphics = g.asMinecraft();
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
+        //#else
+        //$$ final com.mojang.blaze3d.vertex.PoseStack graphics = g.asMinecraft();
+        //$$ renderBackground(graphics);
+        //#endif
         super.render(graphics, mouseX, mouseY, partialTick);
         setTY(ty);
         setTX(tx);
@@ -255,7 +286,11 @@ public class HybridSliceTaskScreen extends Screen {
         final int refX = width - 170;
         final int refY = 4;
         g.fill(refX - 3, refY - 3, refX + 26, refY + 30, 0x90000000);
+        //#if MC_VERSION >= 12000
         final PoseStack pose = graphics.pose();
+        //#else
+        //$$ final PoseStack pose = graphics;
+        //#endif
         pose.pushPose();
         pose.translate(refX, refY, 0);
         pose.scale(scale, scale, 1);
@@ -413,6 +448,7 @@ public class HybridSliceTaskScreen extends Screen {
 
     /* ===================== 方块渲染 ===================== */
 
+    //#if MC_VERSION >= 12000
     private void renderBlockState(GuiGraphics matrices, int x, int y, float partialTick, BlockState state) {
         final BlockRenderDispatcher blockRenderer = minecraft.getBlockRenderer();
         final PoseStack poseStack = matrices.pose();
@@ -431,6 +467,26 @@ public class HybridSliceTaskScreen extends Screen {
         buffer.endBatch();
         poseStack.popPose();
     }
+    //#else
+    //$$ private void renderBlockState(com.mojang.blaze3d.vertex.PoseStack poseStack, int x, int y, float partialTick, BlockState state) {
+    //$$     final BlockRenderDispatcher blockRenderer = minecraft.getBlockRenderer();
+    //$$     poseStack.pushPose();
+    //$$     poseStack.translate(x, y + 16, 0);
+    //$$     poseStack.scale(15.5F, -15.5F, 15.5F);
+    //$$     // 1.19.2 及以下无 com.mojang.math.Axis，用 Vector3f 的旋转辅助方法
+    //$$     poseStack.mulPose(com.mojang.math.Vector3f.XP.rotationDegrees(3));
+    //$$
+    //$$     final MultiBufferSource.BufferSource buffer = MultiBufferSource.immediate(Tesselator.getInstance().getBuilder());
+    //$$     RenderSystem.enableDepthTest();
+    //$$     RenderSystem.setShader(GameRenderer::getPositionTexShader);
+    //$$     RenderSystem.setShaderTexture(0, InventoryMenu.BLOCK_ATLAS);
+    //$$
+    //$$     blockRenderer.renderSingleBlock(state, poseStack, buffer, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
+    //$$
+    //$$     buffer.endBatch();
+    //$$     poseStack.popPose();
+    //$$ }
+    //#endif
 
     /* ===================== 画布格子 ===================== */
 
@@ -460,8 +516,22 @@ public class HybridSliceTaskScreen extends Screen {
             this.replacement = replacement;
         }
 
+        //#if MC_VERSION >= 12000
         public void render(GuiGraphics matrices, int mouseX, int mouseY, int tx, int ty, float partialTick) {
-            final GraphicContext g = GraphicContext.of(matrices);
+            renderImpl(GraphicContext.of(matrices), mouseX, mouseY, tx, ty, partialTick);
+        }
+        //#else
+        //$$ public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, int tx, int ty, float partialTick) {
+        //$$     renderImpl(GraphicContext.of(poseStack), mouseX, mouseY, tx, ty, partialTick);
+        //$$ }
+        //#endif
+
+        private void renderImpl(GraphicContext g, int mouseX, int mouseY, int tx, int ty, float partialTick) {
+            //#if MC_VERSION >= 12000
+            final GuiGraphics matrices = g.asMinecraft();
+            //#else
+            //$$ final com.mojang.blaze3d.vertex.PoseStack matrices = g.asMinecraft();
+            //#endif
             x = tx;
             y = ty;
             if (!isVisible()) return;
@@ -480,6 +550,7 @@ public class HybridSliceTaskScreen extends Screen {
             }
         }
 
+        //#if MC_VERSION >= 12000
         public void renderTooltip(GuiGraphics matrices, int mouseX, int mouseY) {
             // 1.20.1 的 renderTooltip 只收 List<FormattedCharSequence>，逐条转
             final List<FormattedCharSequence> lines = new ArrayList<>();
@@ -494,6 +565,23 @@ public class HybridSliceTaskScreen extends Screen {
             }
             matrices.renderTooltip(minecraft.font, lines, mouseX, mouseY);
         }
+        //#else
+        //$$ public void renderTooltip(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY) {
+        //$$     // 旧版渲染接口只收 List<FormattedCharSequence>，逐条转
+        //$$     final List<FormattedCharSequence> lines = new ArrayList<>();
+        //$$     if (state != null) {
+        //$$         lines.add(Component.literal("Replacement: " + replacement).getVisualOrderText());
+        //$$         lines.add(state.getBlock().getName().getVisualOrderText());
+        //$$         for (var property : state.getBlock().getStateDefinition().getProperties()) {
+        //$$             lines.add(Component.literal(property.getName() + ": " + state.getValue(property)).getVisualOrderText());
+        //$$         }
+        //$$     } else {
+        //$$         lines.add(ComponentHelper.translatable("ui.fangsu.hybrid_creator.empty").getVisualOrderText());
+        //$$     }
+        //$$     // 内部类直接调用外层 Screen 的 renderTooltip(PoseStack, List, int, int)
+        //$$     renderTooltip(poseStack, lines, mouseX, mouseY);
+        //$$ }
+        //#endif
 
         @Override
         public boolean isMouseOver(double mouseX, double mouseY) {
@@ -549,7 +637,11 @@ public class HybridSliceTaskScreen extends Screen {
                 now.state = square.state;
                 now.replacement = square.replacement;
             }, square -> now.state == null, square -> true, true));
+            //#if MC_VERSION >= 11903
             for (Block block : BuiltInRegistries.BLOCK) {
+            //#else
+            //$$ for (Block block : net.minecraft.core.Registry.BLOCK) {
+            //#endif
                 blocksList.add(new Square(0, 0, block.defaultBlockState(), square -> {
                     now.state = square.state;
                     now.replacement = square.replacement;
@@ -568,7 +660,11 @@ public class HybridSliceTaskScreen extends Screen {
 
         public void initSearchField() {
             searchField = new EditBox(minecraft.font, 0, 1, WIDTH - 3, 15, Component.literal(""));
+            //#if MC_VERSION >= 12003
+            searchField.moveCursorToStart(true);
+            //#else
             searchField.moveCursorToStart();
+            //#endif
             searchField.setResponder(this::search);
         }
 
@@ -592,8 +688,22 @@ public class HybridSliceTaskScreen extends Screen {
             searchedList.addAll(list);
         }
 
+        //#if MC_VERSION >= 12000
         public void render(GuiGraphics matrices, int mouseX, int mouseY, float partialTick) {
-            final GraphicContext g = GraphicContext.of(matrices);
+            renderImpl(GraphicContext.of(matrices), mouseX, mouseY, partialTick);
+        }
+        //#else
+        //$$ public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+        //$$     renderImpl(GraphicContext.of(poseStack), mouseX, mouseY, partialTick);
+        //$$ }
+        //#endif
+
+        private void renderImpl(GraphicContext g, int mouseX, int mouseY, float partialTick) {
+            //#if MC_VERSION >= 12000
+            final GuiGraphics matrices = g.asMinecraft();
+            //#else
+            //$$ final com.mojang.blaze3d.vertex.PoseStack matrices = g.asMinecraft();
+            //#endif
             final int sx = width - WIDTH;
             g.fill(sx, 0, sx + WIDTH, height, 0xff212121);
             g.fill(sx, 0, sx + 1, height, mouseX >= sx ? 0xfff2f7eb : 0xffafb3aa);
@@ -647,6 +757,7 @@ public class HybridSliceTaskScreen extends Screen {
             return false;
         }
 
+        //#if MC_VERSION < 12003
         @Override
         public boolean mouseScrolled(double x, double y, double amount) {
             if (canScroll() && isMouseOver(x, y)) {
@@ -655,6 +766,16 @@ public class HybridSliceTaskScreen extends Screen {
             }
             return false;
         }
+        //#else
+        //$$ @Override
+        //$$ public boolean mouseScrolled(double x, double y, double amount, double horizontalAmount) {
+        //$$     if (canScroll() && isMouseOver(x, y)) {
+        //$$         checkAndScroll(scroll + 20 * (int) amount);
+        //$$         return true;
+        //$$     }
+        //$$     return false;
+        //$$ }
+        //#endif
 
         @Override
         public boolean mouseReleased(double mouseX, double mouseY, int button) {

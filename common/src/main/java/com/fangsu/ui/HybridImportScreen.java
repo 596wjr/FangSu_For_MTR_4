@@ -1,11 +1,13 @@
 package com.fangsu.ui;
 
 import com.fangsu.data.hybrid.HybridCreatorJsonIO;
+import com.fangsu.extraConfig.MultiLineTextWidget;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.GraphicContext;
+//#if MC_VERSION >= 12000
 import net.minecraft.client.gui.GuiGraphics;
+//#endif
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -23,7 +25,7 @@ public class HybridImportScreen extends Screen {
 
     private final Screen parent;
     private final Consumer<CompoundTag> onImport;
-    private MultiLineEditBox input;
+    private MultiLineTextWidget input;
 
     public HybridImportScreen(Screen parent, Consumer<CompoundTag> onImport) {
         super(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import.title"));
@@ -34,8 +36,11 @@ public class HybridImportScreen extends Screen {
     @Override
     protected void init() {
         final int boxW = Math.min(420, width - 80);
-        input = new MultiLineEditBox(minecraft.font, (width - boxW) / 2, 52, boxW, Math.min(150, height - 150), Component.empty(), Component.empty());
+        // MultiLineTextWidget：1.19.3+ 用原版 MultiLineEditBox，1.18.2 回退到单行输入框包装（兼容旧版）
+        input = new MultiLineTextWidget((width - boxW) / 2, 52, boxW, Math.min(150, height - 150), "", null);
+        //#if MC_VERSION >= 11903
         input.setCharacterLimit(1024 * 64);
+        //#endif
         addRenderableWidget(input);
         addRenderableWidget(Button.builder(ComponentHelper.translatable("ui.fangsu.hybrid_creator.import"),
                         button -> importText())
@@ -56,14 +61,29 @@ public class HybridImportScreen extends Screen {
         minecraft.setScreen(parent);
     }
 
+    //#if MC_VERSION >= 12000
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        final GraphicContext g = GraphicContext.of(graphics);
+        //#if MC_VERSION < 12003
         renderBackground(graphics);
+        //#else
+        //$$ renderBackground(graphics, mouseX, mouseY, partialTick);
+        //#endif
         super.render(graphics, mouseX, mouseY, partialTick);
+        final GraphicContext g = GraphicContext.of(graphics);
         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import.title").getString(), width / 2, 22, 0xFFFFFFFF);
         g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import.hint").getString(), width / 2, 36, 0xFFAAAAAA);
     }
+    //#else
+    //$$ @Override
+    //$$ public void render(@NotNull com.mojang.blaze3d.vertex.PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    //$$     renderBackground(poseStack);
+    //$$     super.render(poseStack, mouseX, mouseY, partialTick);
+    //$$     final GraphicContext g = GraphicContext.of(poseStack);
+    //$$     g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import.title").getString(), width / 2, 22, 0xFFFFFFFF);
+    //$$     g.drawCenteredString(minecraft.font, ComponentHelper.translatable("ui.fangsu.hybrid_creator.import.hint").getString(), width / 2, 36, 0xFFAAAAAA);
+    //$$ }
+    //#endif
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
