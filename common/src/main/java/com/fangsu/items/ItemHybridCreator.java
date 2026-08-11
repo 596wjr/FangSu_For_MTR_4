@@ -4,6 +4,8 @@ import com.fangsu.data.hybrid.HybridSliceAction;
 import com.fangsu.data.hybrid.HybridSliceTask;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.network.HybridCreatorPackets;
+import com.fangsu.utils.RegisterUtil;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.mtr.core.data.Rail;
 import org.mtr.core.tool.Vector;
@@ -16,6 +18,7 @@ import org.mtr.mapping.holder.ItemUsageContext;
 import org.mtr.mapping.holder.PlayerEntity;
 import org.mtr.mapping.holder.ServerPlayerEntity;
 import org.mtr.mapping.holder.ServerWorld;
+import org.mtr.mapping.holder.TooltipContext;
 import org.mtr.mapping.holder.World;
 import org.mtr.mod.Init;
 import org.mtr.mod.item.ItemNodeModifierSelectableBlockBase;
@@ -45,6 +48,11 @@ public class ItemHybridCreator extends ItemNodeModifierSelectableBlockBase {
 
     public ItemHybridCreator() {
         super(false, 0, 1, new org.mtr.mapping.holder.ItemSettings());
+    }
+
+    @Override
+    public void appendTooltipHelper(ItemStack stack, World world, List<Component> tooltipList, TooltipContext options) {
+        RegisterUtil.addDescTooltip(tooltipList, "item.fangsu.hybrid_creator.desc");
     }
 
     @Override

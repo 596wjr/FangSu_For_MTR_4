@@ -3,17 +3,20 @@ package com.fangsu.items;
 import com.fangsu.blocks.BlockMultiDirectionNode;
 import com.fangsu.client.ClientHooks;
 import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.utils.RegisterUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -45,6 +48,11 @@ public class ItemRailModelTool extends Item {
 
     public ItemRailModelTool() {
         super(com.fangsu.utils.RegisterUtil.tabProps(new Item.Properties().stacksTo(1)));
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
+        RegisterUtil.addDescTooltip(tooltip, "item.fangsu.rail_model_tool.desc");
     }
 
     /**
