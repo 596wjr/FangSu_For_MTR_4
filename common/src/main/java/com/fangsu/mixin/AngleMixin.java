@@ -180,7 +180,22 @@ public abstract class AngleMixin implements AngleExtra {
     @Inject(method = "sub", at = @At("HEAD"), remap = false, cancellable = true)
     private void fangsu$sub(Angle angle, CallbackInfoReturnable<Angle> cir) {
         if (fangsu$isPhantom() || angle.ordinal() < 0) {
-            cir.setReturnValue(fangsu$fromDegrees(angleDegrees - angle.angleDegrees));
+            // 差值取 [0,360) 作为 angleDegrees 字段（与 fromDegrees 的实例字段语义一致），
+            // 但 radians 必须归一化到 [-180,180)：RailMath 用 angleDifference 的符号判断
+            // 几何分支（signum(angleForward) == signum(angleDifference)），未归一化的差值
+            // （如 216.9° 应为 -143.1°）会导致误判退化分支，轨道静默无法创建。
+            // 不走 PHANTOM_CACHE：同键实例可能由 fromDegrees(315°) 创建（radians=+315°），
+            // 与 sub 所需的 -45° radians 语义冲突。
+            final float diff360 = fangsu$normalizeDegreesTo360(angleDegrees - angle.angleDegrees);
+            final Angle exact = fangsu$snapToEnumIfExact(diff360);
+            if (exact != null) {
+                cir.setReturnValue(exact);
+                return;
+            }
+            final float diff180 = diff360 > 180 ? diff360 - 360 : diff360;
+            final Angle result = create("S" + Float.toString(diff360), -1, diff360);
+            fangsu$setRadiansInternal(result, Math.toRadians(diff180));
+            cir.setReturnValue(result);
         }
     }
 

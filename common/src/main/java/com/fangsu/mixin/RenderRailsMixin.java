@@ -143,15 +143,21 @@ public class RenderRailsMixin {
         final float startAngle = getNodeAngle(level, posStart, stateStart);
         final float endAngle = getNodeAngle(level, posEnd, stateEnd);
 
-        if (!startBonded && !endBonded) {
-            // 两端均未绑定 → 直线
+        // 与 ItemNodeModifierBaseMixin.handleRailConnect 的自适应逻辑保持一致：
+        // 普通节点没有绑定语义（blockstate 角度只是第一条轨道的历史方向），一律视为可自适应，
+        // 否则预览与实际建轨结果不一致（实际会退化或产生畸形曲线）。
+        final boolean startFixed = stateStart.getBlock() instanceof BlockMultiDirectionNode && startBonded;
+        final boolean endFixed = stateEnd.getBlock() instanceof BlockMultiDirectionNode && endBonded;
+
+        if (!startFixed && !endFixed) {
+            // 两端均无固定角度 → 直线
             final float straight = (float) NodeConnector.straightAngle(posStart, posEnd);
             return new float[]{straight, straight};
-        } else if (!startBonded) {
-            // 起点未绑定，终点已绑定/普通节点 → 起点取最大半径圆弧切向
+        } else if (!startFixed) {
+            // 起点无固定角度，终点固定 → 起点取最大半径圆弧切向
             return new float[]{(float) NodeConnector.maxRadiusTangentAngle(posEnd, endAngle, posStart), endAngle};
-        } else if (!endBonded) {
-            // 终点未绑定，起点已绑定/普通节点 → 终点取最大半径圆弧切向
+        } else if (!endFixed) {
+            // 终点无固定角度，起点固定 → 终点取最大半径圆弧切向
             return new float[]{startAngle, (float) NodeConnector.maxRadiusTangentAngle(posStart, startAngle, posEnd)};
         } else {
             // 两端均已绑定 → 使用既有角度

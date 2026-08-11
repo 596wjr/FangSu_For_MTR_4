@@ -131,32 +131,40 @@ public abstract class ItemNodeModifierBaseMixin {
      * 轨道连接器建轨：计算并绑定角度后，按连接器类型（限速/单向/站台/侧线/折返）建轨。
      */
     private void handleRailConnect(Level level, org.mtr.mapping.holder.ServerWorld serverWorld, BlockPos posStart, BlockPos endPos, net.minecraft.world.item.Item item, ServerPlayer serverPlayer) {
+        final boolean startIsNode = isMultiDirectionNode(level, posStart);
+        final boolean endIsNode = isMultiDirectionNode(level, endPos);
         final boolean startBonded = isBonded(level, posStart);
         final boolean endBonded = isBonded(level, endPos);
         final double startAngle = nodeAngle(level, posStart);
         final double endAngle = nodeAngle(level, endPos);
         com.fangsu.Main.LOGGER.info("[NodeConnector] angles start={} (bonded={}) end={} (bonded={})", startAngle, startBonded, endAngle, endBonded);
 
+        // 角度是否"固定"：仅万向节点且已绑定时才算固定。普通节点没有绑定语义，
+        // 其 blockstate 角度只是第一条轨道的历史方向，与本次连线几何不一定匹配——
+        // 原样使用会触发 RailMath 退化（静默无法连接）或畸形曲线（折线），因此一律自适应。
+        final boolean startFixed = startIsNode && startBonded;
+        final boolean endFixed = endIsNode && endBonded;
+
         final double finalStartAngle;
         final double finalEndAngle;
 
-        if (!startBonded && !endBonded) {
-            // 两端均未绑定 → 直线
+        if (!startFixed && !endFixed) {
+            // 两端均无固定角度 → 直线
             final double straight = NodeConnector.straightAngle(posStart, endPos);
             finalStartAngle = straight;
             finalEndAngle = straight;
-            bindNode(level, posStart, straight);
-            bindNode(level, endPos, straight);
-        } else if (!startBonded) {
-            // 起点未绑定，终点已绑定/普通节点 → 起点取最大半径圆弧切向
+            if (startIsNode) bindNode(level, posStart, straight);
+            if (endIsNode) bindNode(level, endPos, straight);
+        } else if (!startFixed) {
+            // 起点无固定角度，终点固定 → 起点取最大半径圆弧切向
             finalStartAngle = NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart);
             finalEndAngle = endAngle;
-            bindNode(level, posStart, finalStartAngle);
-        } else if (!endBonded) {
-            // 终点未绑定，起点已绑定/普通节点 → 终点取最大半径圆弧切向
+            if (startIsNode) bindNode(level, posStart, finalStartAngle);
+        } else if (!endFixed) {
+            // 终点无固定角度，起点固定 → 终点取最大半径圆弧切向
             finalStartAngle = startAngle;
             finalEndAngle = NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos);
-            bindNode(level, endPos, finalEndAngle);
+            if (endIsNode) bindNode(level, endPos, finalEndAngle);
         } else {
             // 两端均已绑定 → 使用既有角度
             finalStartAngle = startAngle;
@@ -168,7 +176,19 @@ public abstract class ItemNodeModifierBaseMixin {
         final RailType railType = accessor.getRailType();
         final boolean isOneWay = accessor.isOneWay();
 
-        NodeConnector.createAndSendRail(serverWorld, posStart, finalStartAngle, endPos, finalEndAngle, railType, isOneWay, serverPlayer.getUUID());
+        if (!NodeConnector.createAndSendRail(serverWorld, posStart, finalStartAngle, endPos, finalEndAngle, railType, isOneWay, serverPlayer.getUUID())) {
+            // 与 MTR 原版一致：几何不成立（如两端绑定方向与连线冲突）时提示"无效方向"，
+            // 不标记连接，避免"点击后静默无反应"的假性无法连接
+            final net.minecraft.network.chat.Component invalidMsg =
+                    org.mtr.mod.generated.lang.TranslationProvider.GUI_MTR_INVALID_ORIENTATION.getMutableText().data;
+            //#if MC_VERSION >= 11900
+            serverPlayer.sendSystemMessage(invalidMsg);
+            //#else
+            //$$ serverPlayer.displayClientMessage(invalidMsg, false);
+            //#endif
+            com.fangsu.Main.LOGGER.info("[NodeConnector] rail creation failed (invalid orientation) {}->{}", posStart, endPos);
+            return;
+        }
 
         markConnected(level, posStart);
         markConnected(level, endPos);
@@ -239,7 +259,9 @@ public abstract class ItemNodeModifierBaseMixin {
         if (be instanceof BlockEntityMultiDirectionNode node) {
             return node.isDirectionBonded();
         }
-        return true; // 普通节点视为已绑定
+        // 普通节点恒 true（供日志/兼容展示）；"是否固定角度"的判断在 handleRailConnect 中
+        // 用 startIsNode && startBonded 组合得出——普通节点无绑定语义，一律视为可自适应
+        return true;
     }
 
     private static double nodeAngle(Level level, BlockPos pos) {

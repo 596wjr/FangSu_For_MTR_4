@@ -169,6 +169,11 @@ public class NodeAngleScreen extends Screen {
         if (onSave != null) {
             onSave.accept(angle);
         }
+        // 未连接轨道时 onSave 的 refreshConnectedRailsIfNeeded 会直接返回（不发包），
+        // 这里必须主动同步，否则服务端 BE 永远读不到绑定状态（directionBonded 恒 false），
+        // 连接器在服务端会把已绑定节点当作"未绑定"重新计算角度，导致轨道角度与用户绑定不符，
+        // 且与普通节点端组合时极易触发 RailMath 退化（无法连接）。
+        node.sendUpdateC2S();
         this.onClose();
     }
 

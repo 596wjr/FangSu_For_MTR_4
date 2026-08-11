@@ -166,8 +166,9 @@ public final class NodeConnector {
      * @param railType    连接器类型（限速/站台/侧线/折返等）
      * @param isOneWay    是否单向（反向限速 0，渲染单向箭头）
      * @param uuid        玩家 UUID，用于应用玩家最后使用的轨道样式（null 时用默认样式）
+     * @return 轨道是否创建成功（false = RailMath 几何不成立，如两端绑定方向与连线冲突）
      */
-    public static void createAndSendRail(
+    public static boolean createAndSendRail(
             org.mtr.mapping.holder.ServerWorld serverWorld,
             BlockPos pos1, double angle1,
             BlockPos pos2, double angle2,
@@ -187,7 +188,7 @@ public final class NodeConnector {
 
         final Rail rail = buildRail(p1, a1, p2, a2, new ObjectArrayList<>(), railType.railShape, railType, isOneWay);
         if (rail == null || !rail.isValid()) {
-            return;
+            return false;
         }
         // 应用玩家最后使用的轨道样式：空样式会以"无模型"渲染（RenderRails 对空 styles 不绘制），
         // getRailWithLastStyles 会补上默认样式（CustomResourceLoader.DEFAULT_RAIL_ID），与原版
@@ -201,6 +202,7 @@ public final class NodeConnector {
         com.fangsu.Main.LOGGER.info("[NodeConnector] createAndSendRail {}->{} a1={} a2={} type={} oneWay={} rail={} valid={}", pos1, pos2, angle1, angle2, railType, isOneWay, styledRail, styledRail == null ? "n/a" : styledRail.isValid());
         PacketUpdateData.sendDirectlyToServerRail(serverWorld, styledRail);
         com.fangsu.Main.LOGGER.info("[NodeConnector] sent rail to server hexId={}", styledRail.getHexId());
+        return true;
     }
 
     /**
@@ -274,8 +276,14 @@ public final class NodeConnector {
         org.mtr.mod.packet.PacketDeleteData.sendDirectlyToServerRailId(
                 serverWorld, org.mtr.core.data.TwoPositionsBase.getHexId(p1, p2));
 
-        // 另一端角度
-        final double otherAngle = getDirectionDegrees(level, otherPos);
+        // 另一端角度：普通节点没有绑定语义，blockstate 角度只是第一条轨道的历史方向，
+        // 与本次连线几何不匹配时原样使用会触发 RailMath 退化（重建静默失败、轨道消失），
+        // 因此普通节点端按最大半径圆弧切向自适应（与本端新绑定方向平滑衔接）。
+        final boolean otherIsMultiDirectionNode =
+                level.getBlockState(otherPos).getBlock() instanceof com.fangsu.blocks.BlockMultiDirectionNode;
+        final double otherAngle = otherIsMultiDirectionNode
+                ? getDirectionDegrees(level, otherPos)
+                : maxRadiusTangentAngle(nodePos, newDirection, otherPos);
         // 本端为已绑定方向
         final ObjectArrayList<String> styles = new ObjectArrayList<>(attrs.styles());
         final double angleDifference = Math.toDegrees(Math.atan2(p2.getZ() - p1.getZ(), p2.getX() - p1.getX()));
