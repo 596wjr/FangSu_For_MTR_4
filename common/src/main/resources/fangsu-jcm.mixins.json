@@ -1,0 +1,10 @@
+{
+    "required": false,
+    "package": "com.fangsu.mixin.jcm",
+    "compatibilityLevel": "JAVA_17",
+    "minVersion": "0.8",
+    "client": ["StopsDataS2CPacketMixin"],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

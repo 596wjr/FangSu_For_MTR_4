@@ -50,6 +50,7 @@ public class MainClient {
         ShadersModHandler.init();
         ScriptManager.getInstance().init();
         com.fangsu.network.HybridCreatorClient.init();
+        com.fangsu.network.HiddenRoutesPackets.registerClient();
 
         try {
             Class.forName("cn.zbx1425.mtrsteamloco.MainClient", false, MainClient.class.getClassLoader());

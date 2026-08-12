@@ -6,6 +6,7 @@ loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
     forge {
         mixinConfig "fangsu.mixins.json"
+        mixinConfig "fangsu-jcm.mixins.json"
     }
 }
 

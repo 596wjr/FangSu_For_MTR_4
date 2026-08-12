@@ -259,6 +259,11 @@ public final class NodeConnector {
      * nodePos 为万向节点且已绑定新方向 newDirection；otherPos 为另一端（万向节点或普通节点）。
      * 删除旧轨道后，以新方向与另一端既有角度，按旧轨道属性（限速/单向/类型/样式）重建，
      * 保证角度调整后轨道外观与功能不丢失。
+     * <p>
+     * 另一端角度语义与 {@code com.fangsu.mixin.ItemNodeModifierBaseMixin#handleRailConnect} 一致：
+     * 万向节点取绑定角度、普通节点 blockstate 角度即其绑定方向，均固定使用；
+     * 固定角度组合在 RailMath 几何不成立（退化）时，若另一端是普通节点（无绑定意图），
+     * 降级为该端取最大半径圆弧切向（与本端新方向平滑衔接），保证重建不静默失败。
      *
      * @param level        服务端世界
      * @param nodePos      万向节点位置（已绑定新方向）
@@ -276,22 +281,42 @@ public final class NodeConnector {
         org.mtr.mod.packet.PacketDeleteData.sendDirectlyToServerRailId(
                 serverWorld, org.mtr.core.data.TwoPositionsBase.getHexId(p1, p2));
 
-        // 另一端角度：普通节点没有绑定语义，blockstate 角度只是第一条轨道的历史方向，
-        // 与本次连线几何不匹配时原样使用会触发 RailMath 退化（重建静默失败、轨道消失），
-        // 因此普通节点端按最大半径圆弧切向自适应（与本端新绑定方向平滑衔接）。
-        final boolean otherIsMultiDirectionNode =
-                level.getBlockState(otherPos).getBlock() instanceof com.fangsu.blocks.BlockMultiDirectionNode;
-        final double otherAngle = otherIsMultiDirectionNode
-                ? getDirectionDegrees(level, otherPos)
-                : maxRadiusTangentAngle(nodePos, newDirection, otherPos);
-        // 本端为已绑定方向
         final ObjectArrayList<String> styles = new ObjectArrayList<>(attrs.styles());
         final double angleDifference = Math.toDegrees(Math.atan2(p2.getZ() - p1.getZ(), p2.getX() - p1.getX()));
         final double deg1 = normalizeDegrees(newDirection + (Angle.similarFacing((float) angleDifference, (float) newDirection) ? 0 : 180));
+
+        // 另一端角度：万向节点取绑定角度；普通节点 blockstate 角度即其绑定方向（与原版节点语义一致）
+        final boolean otherIsMultiDirectionNode =
+                level.getBlockState(otherPos).getBlock() instanceof com.fangsu.blocks.BlockMultiDirectionNode;
+        final double otherAngle = getDirectionDegrees(level, otherPos);
         final double deg2 = normalizeDegrees(otherAngle + (Angle.similarFacing((float) angleDifference, (float) otherAngle) ? 180 : 0));
+
+        // 先按固定角度重建；几何不成立（退化）且另一端是普通节点时，降级为最大半径圆弧切向
+        if (refreshRailWithAngles(serverWorld, p1, p2, nodePos, otherPos, deg1, deg2, attrs, styles)) {
+            return;
+        }
+        if (!otherIsMultiDirectionNode) {
+            final double degraded = maxRadiusTangentAngle(nodePos, newDirection, otherPos);
+            final double deg2b = normalizeDegrees(degraded + (Angle.similarFacing((float) angleDifference, (float) degraded) ? 180 : 0));
+            if (refreshRailWithAngles(serverWorld, p1, p2, nodePos, otherPos, deg1, deg2b, attrs, styles)) {
+                return;
+            }
+        }
+        com.fangsu.Main.LOGGER.warn("[NodeConnector] refreshNodeRail failed (invalid geometry) {}->{}", nodePos, otherPos);
+    }
+
+    /**
+     * 按两角度构建并派发重建轨道；返回是否成功（RailMath 几何不成立时 false，不派发）。
+     */
+    private static boolean refreshRailWithAngles(
+            org.mtr.mapping.holder.ServerWorld serverWorld,
+            Position p1, Position p2,
+            BlockPos nodePos, BlockPos otherPos,
+            double deg1, double deg2,
+            RailAttrs attrs, ObjectArrayList<String> styles
+    ) {
         final Angle a1 = AngleExtra.fromDegrees(deg1);
         final Angle a2 = AngleExtra.fromDegrees(deg2);
-
         final Rail rail;
         if (attrs.isPlatform()) {
             rail = Rail.newPlatformRail(p1, a1, p2, a2, attrs.shape(), 0, styles, TransportMode.TRAIN);
@@ -311,9 +336,10 @@ public final class NodeConnector {
             );
         }
         if (rail == null || !rail.isValid()) {
-            return;
+            return false;
         }
         PacketUpdateData.sendDirectlyToServerRail(serverWorld, rail);
         com.fangsu.Main.LOGGER.info("[NodeConnector] refreshed rail {}->{} hexId={}", nodePos, otherPos, rail.getHexId());
+        return true;
     }
 }

@@ -17,7 +17,7 @@
         "main": ["com.fangsu.fabric.MainFabric"],
         "client": ["com.fangsu.fabric.client.MainFabricClient"]
     },
-    "mixins": ["fangsu.mixins.json"],
+    "mixins": ["fangsu.mixins.json", "fangsu-jcm.mixins.json"],
     "depends": {
         "fabricloader": "${fabric_loader_dependency}",
         "minecraft": "${minecraft_dependency}",

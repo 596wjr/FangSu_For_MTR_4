@@ -129,6 +129,11 @@ public abstract class ItemNodeModifierBaseMixin {
 
     /**
      * 轨道连接器建轨：计算并绑定角度后，按连接器类型（限速/单向/站台/侧线/折返）建轨。
+     * <p>
+     * 端点角度语义：万向节点已绑定、或普通节点（blockstate 角度即其绑定方向，与原版节点一致）
+     * 都视为"固定"；未绑定的万向节点端按最大半径圆弧切向自适应。固定角度组合在 RailMath
+     * 几何不成立（退化）时，按优先级降级：普通节点端 → 最大半径圆弧切向 → 直线，
+     * 保证绝大多数场景能建出轨道而不是静默失败。
      */
     private void handleRailConnect(Level level, org.mtr.mapping.holder.ServerWorld serverWorld, BlockPos posStart, BlockPos endPos, net.minecraft.world.item.Item item, ServerPlayer serverPlayer) {
         final boolean startIsNode = isMultiDirectionNode(level, posStart);
@@ -139,59 +144,63 @@ public abstract class ItemNodeModifierBaseMixin {
         final double endAngle = nodeAngle(level, endPos);
         com.fangsu.Main.LOGGER.info("[NodeConnector] angles start={} (bonded={}) end={} (bonded={})", startAngle, startBonded, endAngle, endBonded);
 
-        // 角度是否"固定"：仅万向节点且已绑定时才算固定。普通节点没有绑定语义，
-        // 其 blockstate 角度只是第一条轨道的历史方向，与本次连线几何不一定匹配——
-        // 原样使用会触发 RailMath 退化（静默无法连接）或畸形曲线（折线），因此一律自适应。
-        final boolean startFixed = startIsNode && startBonded;
-        final boolean endFixed = endIsNode && endBonded;
+        final boolean startFixed = startBonded;
+        final boolean endFixed = endBonded;
 
-        final double finalStartAngle;
-        final double finalEndAngle;
-
+        // 按优先级尝试的候选角度组合（退化时依次降级）
+        final java.util.List<double[]> candidates = new java.util.ArrayList<>();
+        final double straight = NodeConnector.straightAngle(posStart, endPos);
         if (!startFixed && !endFixed) {
-            // 两端均无固定角度 → 直线
-            final double straight = NodeConnector.straightAngle(posStart, endPos);
-            finalStartAngle = straight;
-            finalEndAngle = straight;
-            if (startIsNode) bindNode(level, posStart, straight);
-            if (endIsNode) bindNode(level, endPos, straight);
+            // 两端均未绑定 → 直线
+            candidates.add(new double[]{straight, straight});
         } else if (!startFixed) {
-            // 起点无固定角度，终点固定 → 起点取最大半径圆弧切向
-            finalStartAngle = NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart);
-            finalEndAngle = endAngle;
-            if (startIsNode) bindNode(level, posStart, finalStartAngle);
+            // 起点未绑定，终点固定 → 起点取最大半径圆弧切向（平滑衔接），失败退化为直线
+            candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart), endAngle});
+            candidates.add(new double[]{straight, straight});
         } else if (!endFixed) {
-            // 终点无固定角度，起点固定 → 终点取最大半径圆弧切向
-            finalStartAngle = startAngle;
-            finalEndAngle = NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos);
-            if (endIsNode) bindNode(level, endPos, finalEndAngle);
+            // 终点未绑定，起点固定 → 终点取最大半径圆弧切向（平滑衔接），失败退化为直线
+            candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos)});
+            candidates.add(new double[]{straight, straight});
         } else {
-            // 两端均已绑定 → 使用既有角度
-            finalStartAngle = startAngle;
-            finalEndAngle = endAngle;
+            // 两端均已绑定 → 使用既有角度。几何不成立且有一端是普通节点（无绑定意图）时，
+            // 降级为该端取最大半径圆弧切向，再退化为直线；两端均为万向节点时不降级
+            // （绑定角度是用户明确意图，冲突时提示"无效方向"而非静默改变语义）。
+            candidates.add(new double[]{startAngle, endAngle});
+            if (!startIsNode) {
+                candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart), endAngle});
+            } else if (!endIsNode) {
+                candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos)});
+            }
+            if (!startIsNode || !endIsNode) {
+                candidates.add(new double[]{straight, straight});
+            }
         }
-        com.fangsu.Main.LOGGER.info("[NodeConnector] final angles start={} end={}", finalStartAngle, finalEndAngle);
+        com.fangsu.Main.LOGGER.info("[NodeConnector] final angles start={} end={}", candidates.get(0)[0], candidates.get(0)[1]);
 
         final ItemRailModifierAccessorMixin accessor = (ItemRailModifierAccessorMixin) item;
         final RailType railType = accessor.getRailType();
         final boolean isOneWay = accessor.isOneWay();
 
-        if (!NodeConnector.createAndSendRail(serverWorld, posStart, finalStartAngle, endPos, finalEndAngle, railType, isOneWay, serverPlayer.getUUID())) {
-            // 与 MTR 原版一致：几何不成立（如两端绑定方向与连线冲突）时提示"无效方向"，
-            // 不标记连接，避免"点击后静默无反应"的假性无法连接
-            final net.minecraft.network.chat.Component invalidMsg =
-                    org.mtr.mod.generated.lang.TranslationProvider.GUI_MTR_INVALID_ORIENTATION.getMutableText().data;
-            //#if MC_VERSION >= 11900
-            serverPlayer.sendSystemMessage(invalidMsg);
-            //#else
-            //$$ serverPlayer.displayClientMessage(invalidMsg, false);
-            //#endif
-            com.fangsu.Main.LOGGER.info("[NodeConnector] rail creation failed (invalid orientation) {}->{}", posStart, endPos);
-            return;
+        for (final double[] cand : candidates) {
+            if (NodeConnector.createAndSendRail(serverWorld, posStart, cand[0], endPos, cand[1], railType, isOneWay, serverPlayer.getUUID())) {
+                // 建轨成功后才把未绑定万向节点绑定为实际使用的角度（失败不改变绑定状态）
+                if (startIsNode && !startBonded) bindNode(level, posStart, cand[0]);
+                if (endIsNode && !endBonded) bindNode(level, endPos, cand[1]);
+                markConnected(level, posStart);
+                markConnected(level, endPos);
+                return;
+            }
         }
 
-        markConnected(level, posStart);
-        markConnected(level, endPos);
+        // 全部角度组合均不成立（如两端万向节点绑定方向与连线冲突）：与原版一致提示"无效方向"
+        final net.minecraft.network.chat.Component invalidMsg =
+                org.mtr.mod.generated.lang.TranslationProvider.GUI_MTR_INVALID_ORIENTATION.getMutableText().data;
+        //#if MC_VERSION >= 11900
+        serverPlayer.sendSystemMessage(invalidMsg);
+        //#else
+        //$$ serverPlayer.displayClientMessage(invalidMsg, false);
+        //#endif
+        com.fangsu.Main.LOGGER.info("[NodeConnector] rail creation failed (invalid orientation) {}->{}", posStart, endPos);
     }
 
     /**
@@ -259,8 +268,8 @@ public abstract class ItemNodeModifierBaseMixin {
         if (be instanceof BlockEntityMultiDirectionNode node) {
             return node.isDirectionBonded();
         }
-        // 普通节点恒 true（供日志/兼容展示）；"是否固定角度"的判断在 handleRailConnect 中
-        // 用 startIsNode && startBonded 组合得出——普通节点无绑定语义，一律视为可自适应
+        // 普通节点恒 true：blockstate 角度即其绑定方向（与原版节点语义一致），
+        // 连接时视为已绑定、保留角度；几何不成立时由 handleRailConnect 降级（普通端→切向→直线）
         return true;
     }
 

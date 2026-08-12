@@ -143,11 +143,12 @@ public class RenderRailsMixin {
         final float startAngle = getNodeAngle(level, posStart, stateStart);
         final float endAngle = getNodeAngle(level, posEnd, stateEnd);
 
-        // 与 ItemNodeModifierBaseMixin.handleRailConnect 的自适应逻辑保持一致：
-        // 普通节点没有绑定语义（blockstate 角度只是第一条轨道的历史方向），一律视为可自适应，
-        // 否则预览与实际建轨结果不一致（实际会退化或产生畸形曲线）。
-        final boolean startFixed = stateStart.getBlock() instanceof BlockMultiDirectionNode && startBonded;
-        final boolean endFixed = stateEnd.getBlock() instanceof BlockMultiDirectionNode && endBonded;
+        // 与 ItemNodeModifierBaseMixin.handleRailConnect 的角度语义保持一致：
+        // 万向节点已绑定、或普通节点（blockstate 角度即其绑定方向，与原版节点一致）都视为固定；
+        // 未绑定的万向节点端取最大半径圆弧切向自适应。预览采用固定角度优先
+        // （与建轨的首选候选一致；实际建轨在几何不成立时会降级，预览近似即可）。
+        final boolean startFixed = startBonded;
+        final boolean endFixed = endBonded;
 
         if (!startFixed && !endFixed) {
             // 两端均无固定角度 → 直线
