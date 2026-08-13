@@ -1,6 +1,7 @@
 package com.fangsu.mixin;
 
 import com.fangsu.MainClient;
+import com.fangsu.render.NodeHighlightRenderer;
 import com.fangsu.render.sowcerext.model.integration.BufferSourceProxy;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
@@ -43,6 +44,8 @@ public class LevelRendererMixin {
         MainClient.drawScheduler.commit(vertexConsumersProxy, MainClient.drawContext);
         if (!MainClient.is_nte_loaded)
             vertexConsumersProxy.commit();
+        // 手持位移工具/轨道模型工具时显示轨道节点（内部自建 buffer 立即提交，不受 NTE 影响）
+        NodeHighlightRenderer.renderLevel(poseStack, camera);
         MainClient.drawContext.resetFrameProfiler();
     }
 

@@ -1,6 +1,7 @@
 package com.fangsu.utils;
 
 import com.fangsu.mtr.LocalRoute;
+import com.fangsu.network.HiddenRoutesClient;
 import com.fangsu.scripting.TextUtil;
 import net.minecraft.client.Minecraft;
 import org.mtr.libraries.it.unimi.dsi.fastutil.longs.LongAVLTreeSet;
@@ -173,7 +174,7 @@ public class MtrUtil {
     public static LocalRoute getRouteById(long routeId) {
         final Route route = MinecraftClientData.getInstance().routeIdMap.get(routeId);
         if (route != null) return new LocalRoute(route);
-        final SimplifiedRoute simplifiedRoute = MinecraftClientData.getInstance().simplifiedRouteIdMap.get(routeId);
+        final SimplifiedRoute simplifiedRoute = getSimplifiedRouteById(routeId);
         return simplifiedRoute != null ? new LocalRoute(simplifiedRoute) : null;
     }
 
@@ -186,7 +187,8 @@ public class MtrUtil {
      */
     public static boolean hasAnyRouteData() {
         return !MinecraftClientData.getInstance().routes.isEmpty()
-                || !MinecraftClientData.getInstance().simplifiedRoutes.isEmpty();
+                || !MinecraftClientData.getInstance().simplifiedRoutes.isEmpty()
+                || !HiddenRoutesClient.getHiddenRoutes().isEmpty();
     }
 
     public static List<LocalRoute> getRouteByName(String routeName) {
@@ -203,6 +205,15 @@ public class MtrUtil {
         }
         // 再查 SimplifiedRoute 补充
         for (final SimplifiedRoute sr : MinecraftClientData.getInstance().simplifiedRoutes) {
+            if (!addedIds.contains(sr.getId())) {
+                final String currentRouteName = TextUtil.getNonExtraParts(sr.getName());
+                if (compareName.equals(currentRouteName)) {
+                    routes.add(new LocalRoute(sr));
+                }
+            }
+        }
+        // 最后查隐藏线路缓存（隐藏线路不进入 MTR 主通道，只能从这里拿到）
+        for (final SimplifiedRoute sr : HiddenRoutesClient.getHiddenRoutes()) {
             if (!addedIds.contains(sr.getId())) {
                 final String currentRouteName = TextUtil.getNonExtraParts(sr.getName());
                 if (compareName.equals(currentRouteName)) {
@@ -258,8 +269,8 @@ public class MtrUtil {
     public static String getDestinationByRouteMtr(Route route) {
         if (route == null) return "undefined";
         try {
-            // 先从 SimplifiedRoute 获取终点站
-            final SimplifiedRoute simplifiedRoute = MinecraftClientData.getInstance().simplifiedRouteIdMap.get(route.getId());
+            // 先从 SimplifiedRoute 获取终点站（主通道 miss 时回退隐藏线路缓存）
+            final SimplifiedRoute simplifiedRoute = getSimplifiedRouteById(route.getId());
             if (simplifiedRoute != null) {
                 final var platforms = simplifiedRoute.getPlatforms();
                 if (!platforms.isEmpty()) {
@@ -287,8 +298,8 @@ public class MtrUtil {
     public static String getDestinationByRoute(LocalRoute route) {
         if (route == null) return "undefined";
         try {
-            // 优先从 SimplifiedRoute 获取（远端数据也完整）
-            final SimplifiedRoute sr = MinecraftClientData.getInstance().simplifiedRouteIdMap.get(route.id);
+            // 优先从 SimplifiedRoute 获取（远端数据也完整；主通道 miss 时回退隐藏线路缓存）
+            final SimplifiedRoute sr = getSimplifiedRouteById(route.id);
             if (sr != null) {
                 final var platforms = sr.getPlatforms();
                 if (!platforms.isEmpty()) {
@@ -327,18 +338,21 @@ public class MtrUtil {
     // ============ SimplifiedRoute 辅助方法 ============
 
     /**
-     * 获取所有 SimplifiedRoute（客户端始终完整）。
+     * 获取所有 SimplifiedRoute（主通道 + 隐藏线路缓存合并）。
      */
     public static ObjectAVLTreeSet<SimplifiedRoute> getSimplifiedRoutes() {
-        return MinecraftClientData.getInstance().simplifiedRoutes;
+        final ObjectAVLTreeSet<SimplifiedRoute> result = new ObjectAVLTreeSet<>(MinecraftClientData.getInstance().simplifiedRoutes);
+        result.addAll(HiddenRoutesClient.getHiddenRoutes());
+        return result;
     }
 
     /**
-     * 根据路线 ID 获取 SimplifiedRoute。
+     * 根据路线 ID 获取 SimplifiedRoute（主通道 miss 时回退隐藏线路缓存）。
      */
     @Nullable
     public static SimplifiedRoute getSimplifiedRouteById(long routeId) {
-        return MinecraftClientData.getInstance().simplifiedRouteIdMap.get(routeId);
+        final SimplifiedRoute sr = MinecraftClientData.getInstance().simplifiedRouteIdMap.get(routeId);
+        return sr != null ? sr : HiddenRoutesClient.getHiddenRouteById(routeId);
     }
 
     /**

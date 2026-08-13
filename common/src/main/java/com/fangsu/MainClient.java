@@ -20,12 +20,16 @@ import com.fangsu.mtr.LcdVehicleRegistry;
 import com.fangsu.train.LcdDrawManager;
 import com.fangsu.train.LcdManager;
 import com.fangsu.train.lcds.MtrLcd;
+import com.fangsu.network.HiddenRoutesClient;
 import com.fangsu.ui.ModMenus;
 import com.fangsu.userScripts.ScriptManager;
 import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonObject;
+import dev.architectury.event.events.client.ClientTickEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 
 import java.util.ArrayList;
@@ -43,6 +47,9 @@ public class MainClient {
 
     public static List<Runnable> resourceInitRunnables = new ArrayList<>();
 
+    /** 上次检测的客户端世界引用（世界切换触发点） */
+    private static ClientLevel lastClientLevel = null;
+
     public static void initClient() {
         CustomTrainRegister.initTickHook();
         ModBlocks.initClient();
@@ -51,6 +58,19 @@ public class MainClient {
         ScriptManager.getInstance().init();
         com.fangsu.network.HybridCreatorClient.init();
         com.fangsu.network.HiddenRoutesPackets.registerClient();
+
+        // 世界切换检测：进入新世界时全量拉取隐藏线路（方速 PIDS/RIS/MtrUtil 查询用），离开时清空缓存
+        ClientTickEvent.CLIENT_POST.register(client -> {
+            final ClientLevel level = client.level;
+            if (level != lastClientLevel) {
+                lastClientLevel = level;
+                if (level == null) {
+                    HiddenRoutesClient.clear();
+                } else {
+                    HiddenRoutesClient.onWorldJoin();
+                }
+            }
+        });
 
         try {
             Class.forName("cn.zbx1425.mtrsteamloco.MainClient", false, MainClient.class.getClassLoader());

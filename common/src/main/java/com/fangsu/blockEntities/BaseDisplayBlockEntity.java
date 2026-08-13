@@ -4,6 +4,7 @@ import com.fangsu.mappings.GsonHelper;
 import com.fangsu.Main;
 import com.fangsu.blocks.BaseObjBlock;
 import com.fangsu.mtr.LocalRoute;
+import com.fangsu.network.HiddenRoutesClient;
 import com.fangsu.render.scripting.util.DynamicModelHolder;
 import com.fangsu.render.sowcerext.model.ModelCluster;
 import com.fangsu.render.sowcerext.model.RawModel;
@@ -123,6 +124,13 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             hash = hash * 31 + (name != null ? name.hashCode() : 0);
             hash = hash * 31 + sr.getColor();
         }
+        // 隐藏线路缓存也计入哈希：隐藏线路数据到达（全量请求响应）时能触发重绘
+        for (final SimplifiedRoute sr : HiddenRoutesClient.getHiddenRoutes()) {
+            hash = hash * 31 + (int) (sr.getId() ^ (sr.getId() >>> 32));
+            final String name = sr.getName();
+            hash = hash * 31 + (name != null ? name.hashCode() : 0);
+            hash = hash * 31 + sr.getColor();
+        }
         return hash;
     }
 
@@ -236,6 +244,10 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
                     routeMapRef[0] = map;
                     final Map<Long, SimplifiedRoute> srMap = new HashMap<>();
                     for (final SimplifiedRoute sr : MinecraftClientData.getInstance().simplifiedRoutes) {
+                        srMap.put(sr.getId(), sr);
+                    }
+                    // 隐藏线路合并进选择表：RIS/Diaoban 的线路选择列表也能列出/选中隐藏线路
+                    for (final SimplifiedRoute sr : HiddenRoutesClient.getHiddenRoutes()) {
                         srMap.put(sr.getId(), sr);
                     }
                     simplifiedRouteMapRef[0] = srMap;

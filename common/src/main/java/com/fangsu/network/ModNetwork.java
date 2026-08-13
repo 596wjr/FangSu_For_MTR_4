@@ -66,6 +66,7 @@ public class ModNetwork {
                 ModNetwork::handleTicketBarrierSync
         );
         HybridCreatorPackets.registerServer();
+        DisplacementToolPackets.registerServer();
         HiddenRoutesPackets.registerServer();
     }
 

@@ -2,12 +2,12 @@ package com.fangsu.train;
 
 import com.fangsu.mtr.DrawableRoute;
 import com.fangsu.mtr.LocalRoute;
+import com.fangsu.utils.MtrUtil;
 import com.fangsu.render.sowcer.math.Matrix4f;
 import com.fangsu.render.sowcer.math.Vector3f;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.NTETrainWrapper;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.VehicleWrapper;
 import org.mtr.core.data.*;
-import org.mtr.mod.client.MinecraftClientData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,8 +114,8 @@ public class TrainStatus {
         } else {
             final long routeId = train.getMtrVehicle().vehicleExtraData.getThisRouteId();
             if (routeId != 0) {
-                final Route route = MinecraftClientData.getInstance().routeIdMap.get(routeId);
-                this.currentRoute = route != null ? new LocalRoute(route) : null;
+                // MtrUtil 查询链：完整 Route 优先，miss 时回退 SimplifiedRoute（含隐藏线路缓存）
+                this.currentRoute = MtrUtil.getRouteById(routeId);
             } else {
                 this.currentRoute = null;
             }
@@ -219,8 +219,8 @@ public class TrainStatus {
      */
     private LocalRoute stopToLocalRoute(VehicleWrapper.Stop stop) {
         if (stop.route == null) return null;
-        final Route route = MinecraftClientData.getInstance().routeIdMap.get(stop.route.getId());
-        return route != null ? new LocalRoute(route) : null;
+        // MtrUtil 查询链：主通道 miss（隐藏线路）时回退 SimplifiedRoute
+        return MtrUtil.getRouteById(stop.route.getId());
     }
 
     // ========== 向后兼容的便捷方法 ==========

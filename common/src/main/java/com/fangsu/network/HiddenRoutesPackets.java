@@ -63,7 +63,10 @@ public class HiddenRoutesPackets {
 				if (simulator.dimension.equals(dimensionId)) {
 					// simulator.run 在模拟器线程内安全读取数据；回包经主线程 submit，与 JCM 自身流程一致
 					simulator.run(() -> {
-						final org.mtr.libraries.com.google.gson.JsonArray routesArray = HiddenRouteData.buildRoutesJson(simulator, routeIds);
+						// 空请求 = 全量隐藏线路（世界进入时方速侧拉取），否则按 id 过滤（JCM 站序触发）
+						final org.mtr.libraries.com.google.gson.JsonArray routesArray = routeIds.isEmpty()
+								? HiddenRouteData.buildAllHiddenRoutesJson(simulator)
+								: HiddenRouteData.buildRoutesJson(simulator, routeIds);
 						final org.mtr.libraries.com.google.gson.JsonObject root = new org.mtr.libraries.com.google.gson.JsonObject();
 						root.add("routes", routesArray);
 						player.server.submit(() -> {
@@ -89,6 +92,13 @@ public class HiddenRoutesPackets {
 		final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
 		buf.writeInt(routeIds.size());
 		routeIds.forEach(buf::writeLong);
+		NetworkManager.sendToServer(HIDDEN_ROUTES_REQUEST, buf);
+	}
+
+	/** 请求全部隐藏线路（count=0 表示全量；世界进入时由 {@link HiddenRoutesClient#onWorldJoin} 调用） */
+	public static void requestFullHiddenRoutesC2S() {
+		final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+		buf.writeInt(0);
 		NetworkManager.sendToServer(HIDDEN_ROUTES_REQUEST, buf);
 	}
 }

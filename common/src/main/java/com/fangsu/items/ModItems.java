@@ -9,6 +9,7 @@ public class ModItems {
     public static final RegistrySupplier<Item> ITEM_IC_CARD = RegisterUtil.addItem("ic_card", ItemIcCard::new);
     public static final RegistrySupplier<Item> ITEM_WRENCH = RegisterUtil.addItem("wrench", ItemWrench::new);
     public static final RegistrySupplier<Item> ITEM_RAIL_MODEL_TOOL = RegisterUtil.addItem("rail_model_tool", ItemRailModelTool::new);
+    public static final RegistrySupplier<Item> ITEM_DISPLACEMENT_TOOL = RegisterUtil.addItem("displacement_tool", ItemDisplacementTool::new);
     public static final RegistrySupplier<Item> ITEM_HYBRID_CREATOR = RegisterUtil.addItem("hybrid_creator", ItemHybridCreator::new);
 
     public static void init() {

@@ -42,6 +42,17 @@ public final class HiddenRouteData {
 		return routes;
 	}
 
+	/** 全量投影：所有隐藏线路（世界进入时方速 PIDS/RIS 显示用，不依赖 JCM 触发） */
+	public static JsonArray buildAllHiddenRoutesJson(Simulator simulator) {
+		final JsonArray routes = new JsonArray();
+		simulator.routeIdMap.values().forEach(route -> {
+			if (route.getHidden()) {
+				routes.add(toRouteJson(route));
+			}
+		});
+		return routes;
+	}
+
 	private static JsonObject toRouteJson(Route route) {
 		final JsonObject root = new JsonObject();
 		root.addProperty("id", route.getId());
