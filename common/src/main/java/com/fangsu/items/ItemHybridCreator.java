@@ -1,5 +1,6 @@
 package com.fangsu.items;
 
+import com.fangsu.data.hybrid.HybridScheme;
 import com.fangsu.data.hybrid.HybridSliceAction;
 import com.fangsu.data.hybrid.HybridSliceTask;
 import com.fangsu.mappings.ComponentHelper;
@@ -41,6 +42,8 @@ public class ItemHybridCreator extends ItemNodeModifierSelectableBlockBase {
 
     /** NBT 键：任务列表（客户端编辑器写、服务端构建时读） */
     public static final String TAG_TASKS = "tasks";
+    /** 构建级混合方案列表（物品 NBT 顶层键，与 tasks 并列；lumps 的 schemeIndex 引用此列表） */
+    public static final String TAG_SCHEMES = "schemes";
     /** NBT 键：先点（第一次点击）位置 */
     private static final String TAG_FIRST_POS = "hybrid_first_pos";
     /** NBT 键：后点（第二次点击）位置 */
@@ -135,9 +138,17 @@ public class ItemHybridCreator extends ItemNodeModifierSelectableBlockBase {
         // getServerWorld() 为 MTR mapping 全版本 API（照 ItemBridgeCreator 写法），
         // 不用 vanilla 的 Entity.level()（1.20.2 才引入）/ level 字段（旧版可见性随版本变）
         final ServerWorld serverWorld = serverPlayerEntity.getServerWorld();
+        // 构建级混合方案列表（物品 NBT 顶层，与 tasks 并列）：所有任务共用，
+        // lumps 里的 schemeIndex 引用此列表；缺失/空 = 旧数据或未建方案，引用悬空跳过
+        final List<HybridScheme> schemes = new ArrayList<>();
+        if (tag.contains(TAG_SCHEMES)) {
+            for (net.minecraft.nbt.Tag t : tag.getList(TAG_SCHEMES, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                schemes.add(HybridScheme.fromCompoundTag((net.minecraft.nbt.CompoundTag) t));
+            }
+        }
         for (HybridSliceTask task : tasks) {
             // 逐个挂载；RailActionModule.tick() 一次只处理队头，按 order 串行执行
-            HybridSliceAction.attach(serverWorld, new HybridSliceAction(serverWorld, serverPlayerEntity, rail, task, reverse));
+            HybridSliceAction.attach(serverWorld, new HybridSliceAction(serverWorld, serverPlayerEntity, rail, task, schemes, reverse));
         }
     }
 }

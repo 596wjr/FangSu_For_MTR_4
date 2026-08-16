@@ -119,7 +119,7 @@ public class HybridSliceConfigScreen extends BasicConfigScreen {
      * 单个数值输入行（Double）。
      *
      * @param positive   true = 只接受 > 0 的值
-     * @param allowEmpty true = 输入留空时置 null（interval 的「只建一块」语义）
+     * @param allowEmpty true = 输入留空时置 null（interval 的「无缝循环」语义）
      */
     private void addDoubleInput(ContentLayout layout, Component label, String initial, java.util.function.Consumer<Double> setter, boolean positive, boolean allowEmpty) {
         final TextLabel lbl = createTextLabel(layout.areaLeft, layout.y, label, TextLabel.Align.LEFT, 0xFFFFFF, false);
