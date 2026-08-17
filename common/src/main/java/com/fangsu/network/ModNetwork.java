@@ -95,7 +95,11 @@ public class ModNetwork {
             }
 
             BlockEntity be = level.getBlockEntity(nodePos);
-            if (!(be instanceof com.fangsu.blockEntities.BlockEntityMultiDirectionNode node)) return;
+            if (!(be instanceof com.fangsu.blockEntities.BlockEntityMultiDirectionNode node)) {
+                // 客户端发了刷新包但服务端对应位置没有万向节点（方块被拆/数据不一致），打日志便于排查
+                Main.LOGGER.warn("[NodeConnector] handleNodeRefreshRail: no MultiDirectionNode BE at {}", nodePos);
+                return;
+            }
             // 应用新的绑定方向
             node.setDirectionBonded(newDirection);
             node.setConnected(true);

@@ -62,6 +62,18 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     private boolean connected;
     private boolean directionBonded;
 
+    // ==================== 刷新重试状态（客户端） ====================
+    /** 客户端 MTR 数据未同步时，角度刷新（refreshConnectedRailsIfNeeded）延迟重试的待处理标记。 */
+    private boolean pendingRefresh;
+    /** 下次重试时间（System.currentTimeMillis 毫秒）。 */
+    private long nextRetryTime;
+    /** 已重试次数。 */
+    private int retryCount;
+    /** 最大重试次数（每次间隔 RETRY_INTERVAL_MS，合计约 10 秒窗口）。 */
+    private static final int MAX_RETRY = 10;
+    /** 重试间隔（毫秒）。 */
+    private static final long RETRY_INTERVAL_MS = 1000;
+
     private DynamicModelHolder modelHolder;
     private DynamicModelHolder connectedModelHolder;
     private boolean modelLoadingFailed = false;
@@ -125,12 +137,21 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
      * <p>
      * 该方法由客户端角度界面在确认新角度后调用：先收集连接到本节点的其他端点，
      * 再通过专用 C2S 包发送给服务端执行删除+重建。
+     * <p>
+     * 客户端 MTR 数据（{@code MinecraftClientData.positionsToRail}）可能尚未同步到位，
+     * 此时不静默放弃，而是安排延迟重试（见 {@link #scheduleRetry} 与 {@link #whenRendering}）——
+     * 否则服务端图里的轨道角度将永远滞留建轨值，寻路与曲线都不会更新。
      */
     public void refreshConnectedRailsIfNeeded() {
         if (level == null || !level.isClientSide) return;
         // 仅在已连接或可能存在轨道时刷新
         final java.util.List<net.minecraft.core.BlockPos> others = com.fangsu.util.NodeConnector.findConnectedEndpoints(worldPosition);
-        if (others.isEmpty()) return;
+        if (others.isEmpty()) {
+            // 客户端 MTR 数据未同步（找不到本节点端点）→ 延迟重试，不静默放弃
+            Main.LOGGER.debug("[MultiDirectionNode] refresh skipped: no endpoints in client data at {}", worldPosition);
+            scheduleRetry();
+            return;
+        }
 
         // 从客户端 MTR 数据读取连接到本节点的轨道，只保留数据已同步的端点；
         // 每个端点打包限速/形状/类型/样式属性，服务端据此按原属性重建（角度调整后外观与功能不丢失）
@@ -144,7 +165,12 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
                 }
             }
         }
-        if (connected.isEmpty()) return;
+        if (connected.isEmpty()) {
+            // 端点过滤后为空（数据同步不全）→ 延迟重试，不静默放弃
+            Main.LOGGER.debug("[MultiDirectionNode] refresh skipped: no synced endpoints at {}", worldPosition);
+            scheduleRetry();
+            return;
+        }
 
         final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(worldPosition);
@@ -167,6 +193,27 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
             }
         }
         dev.architectury.networking.NetworkManager.sendToServer(com.fangsu.network.ModNetwork.NODE_REFRESH_RAIL, buf);
+        // 已成功发出刷新包，清除待重试状态
+        pendingRefresh = false;
+        retryCount = 0;
+    }
+
+    /**
+     * 安排延迟重试：客户端 MTR 数据未同步时每 {@value #RETRY_INTERVAL_MS} ms 重试一次，
+     * 最多 {@value #MAX_RETRY} 次，仍失败则放弃并打 warn 日志（用户可再次保存触发）。
+     * 重试在 {@link #whenRendering}（客户端渲染主线程，每帧调用）中执行，网络发送天然在主线程。
+     */
+    private void scheduleRetry() {
+        if (level == null || !level.isClientSide) return;
+        if (retryCount >= MAX_RETRY) {
+            pendingRefresh = false;
+            retryCount = 0;
+            Main.LOGGER.warn("[MultiDirectionNode] refresh retry exhausted at {}, rail angles NOT updated on server", worldPosition);
+            return;
+        }
+        pendingRefresh = true;
+        retryCount++;
+        nextRetryTime = System.currentTimeMillis() + RETRY_INTERVAL_MS;
     }
 
     // ==================== 网络同步 ====================
@@ -333,6 +380,10 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
 
     @Override
     public void whenRendering() {
+        // 客户端 MTR 数据就绪后的延迟重试：数据未同步时角度刷新顺延到数据到位后执行
+        if (pendingRefresh && System.currentTimeMillis() >= nextRetryTime) {
+            refreshConnectedRailsIfNeeded();
+        }
         ObjBlockScriptContext ctx = this.scriptContext;
         if (ctx == null) return;
         // 若尚未加载/未上传成功，确保加载
