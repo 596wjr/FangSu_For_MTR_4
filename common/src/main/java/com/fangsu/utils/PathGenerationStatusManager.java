@@ -1,5 +1,6 @@
 package com.fangsu.utils;
 
+import com.fangsu.Main;
 import com.fangsu.client.ClientHooks;
 import com.fangsu.mappings.ComponentHelper;
 import net.minecraft.ChatFormatting;
@@ -19,14 +20,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 「刷新线路」状态登记与完成通知（客户端）：触发刷新的玩家在发送生成包时登记
- * 开始时间，界面轮询显示「刷新线路中（已用时 %s）...」，服务端回包合并车厂数据后
- * 检测完成并在触发者聊天栏发送成功/失败通知。
+ * 开始时刻，界面轮询显示「刷新线路中（已用时 %s）...」，服务端完成推送合并车厂
+ * 数据后检测完成并在触发者聊天栏发送成功/失败通知。
  * <p>
- * 完成判定复用原版判定：车厂 {@code getLastGeneratedMillis()}（生成完成时刻的服务端
- * 墙钟）晚于登记时刻即视为本次生成完成；{@code lastGeneratedMillis == 0} 表示从未
- * 生成（TSC 默认值），不误判。注意远程服务器与客户端时钟偏差可能让判定失效——
- * 与原版 {@code DEPOT_GENERATION_START_TIME} 同款假设（原版也是靠这个时间戳区分
- * 生成中/已完成），30 分钟残留清理兜底，最坏情况只是通知不出现，不误报。
+ * 完成判定：服务端 {@code lastGeneratedMillis}（生成完成时刻的服务端墙钟）只在
+ * 完成瞬间一次性设置（成功/失败都写），生成过程中保持旧值；客户端车厂副本该字段
+ * 的唯一更新途径是完成推送（{@code GENERATION_STATUS_UPDATE → PacketUpdateData →
+ * UpdateDataResponse.write}，GET_DATA 轮询对已知车厂只回 ID 不刷新）——因此登记时
+ * 记录副本初始值、检测到值变化即视为本次生成完成。注意不能用「服务端时间戳 >=
+ * 客户端登记时刻」比较（跨时钟绝对值，远程服务器时钟偏差会让条件永不成立），
+ * 这是服务器环境无通知的根因；值变化检测与时钟无关。
  * <p>
  * 聊天消息：客户端包处理在 netty 线程，必须 {@code Minecraft.getInstance().execute}
  * 切回主线程；1.18.2 用 {@code displayClientMessage}，1.19+ 用 {@code sendSystemMessage}
@@ -34,27 +37,45 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PathGenerationStatusManager {
 
-    /** 残留记录（depot 被删/服务端无响应/时钟偏差）超过该时长自动清理，防泄漏。 */
+    /** 残留记录（depot 被删/服务端无响应/推送丢失）超过该时长自动清理，防泄漏。 */
     private static final long STALE_CLEANUP_MS = 30 * 60 * 1000L;
 
-    /** 触发刷新的 depotId → 客户端墙钟开始时刻。 */
-    private static final ConcurrentHashMap<Long, Long> START_TIMES = new ConcurrentHashMap<>();
+    /** 一次刷新的登记记录。 */
+    private static final class GenerationRecord {
+
+        /** 客户端墙钟开始时刻（生成中文案 elapsed 用）。 */
+        final long startTime;
+
+        /** 登记时客户端副本的 lastGeneratedMillis（服务端时钟；无副本为 0）。 */
+        final long initialLastGeneratedMillis;
+
+        GenerationRecord(long startTime, long initialLastGeneratedMillis) {
+            this.startTime = startTime;
+            this.initialLastGeneratedMillis = initialLastGeneratedMillis;
+        }
+    }
+
+    /** 触发刷新的 depotId → 登记记录。 */
+    private static final ConcurrentHashMap<Long, GenerationRecord> RECORDS = new ConcurrentHashMap<>();
 
     private PathGenerationStatusManager() {
     }
 
-    /** 登记一次「刷新线路」开始（C2S 包发送处注入；重复点击只更新开始时刻）。 */
+    /** 登记一次「刷新线路」开始（C2S 包发送处注入；重复点击更新记录）。 */
     public static void onGenerationStarted(long depotId) {
-        START_TIMES.put(depotId, System.currentTimeMillis());
+        final Depot depot = MinecraftClientData.getDashboardInstance().depotIdMap.get(depotId);
+        final long initialLastGeneratedMillis = depot == null ? 0 : depot.getLastGeneratedMillis();
+        RECORDS.put(depotId, new GenerationRecord(System.currentTimeMillis(), initialLastGeneratedMillis));
     }
 
     /** 该车厂是否处于本次方速登记的刷新中（界面生成中文案判定）。 */
     public static boolean isGenerating(long depotId) {
-        return START_TIMES.containsKey(depotId);
+        return RECORDS.containsKey(depotId);
     }
 
     public static long getStartTime(long depotId) {
-        return START_TIMES.getOrDefault(depotId, 0L);
+        final GenerationRecord record = RECORDS.get(depotId);
+        return record == null ? 0 : record.startTime;
     }
 
     /** legacy 颜色码：站名/车厂名黄、成功绿、失败红、重置（聊天栏与仪表盘共用）。 */
@@ -127,25 +148,29 @@ public final class PathGenerationStatusManager {
 
     /**
      * 由 {@link com.fangsu.mixin.UpdateDataResponseMixin} 在客户端数据合并后调用：
-     * 车厂 {@code lastGeneratedMillis} 更新过 → 按生成状态发成功/失败聊天通知并移除记录。
+     * 车厂副本 {@code lastGeneratedMillis} 与登记时初始值不同（且非 0，排除从未生成）
+     * → 本次生成完成，按生成状态发成功/失败聊天通知并移除记录。值变化检测与
+     * 客户端/服务端时钟偏差无关（完成推送是副本该字段的唯一更新途径）。
      */
     public static void checkGenerationFinished(Data data) {
-        if (START_TIMES.isEmpty()) {
+        if (RECORDS.isEmpty()) {
             return;
         }
         final long now = System.currentTimeMillis();
-        START_TIMES.forEach((depotId, startTime) -> {
+        RECORDS.forEach((depotId, record) -> {
             final Depot depot = data.depotIdMap.get(depotId);
             if (depot != null) {
                 final long lastGeneratedMillis = depot.getLastGeneratedMillis();
-                if (lastGeneratedMillis >= startTime && lastGeneratedMillis > 0) {
-                    START_TIMES.remove(depotId);
+                if (lastGeneratedMillis > 0 && lastGeneratedMillis != record.initialLastGeneratedMillis) {
+                    RECORDS.remove(depotId);
+                    Main.debug("Depot path generation finished for depot {} (status {})",
+                            depotId, depot.getLastGeneratedStatus());
                     notifyResult(depot);
                     return;
                 }
             }
-            if (now - startTime > STALE_CLEANUP_MS) {
-                START_TIMES.remove(depotId);
+            if (now - record.startTime > STALE_CLEANUP_MS) {
+                RECORDS.remove(depotId);
             }
         });
     }

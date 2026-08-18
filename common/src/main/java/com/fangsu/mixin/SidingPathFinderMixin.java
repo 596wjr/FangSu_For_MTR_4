@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.At;
  * <ol>
  *   <li>{@code @WrapOperation}（偏移 5 的 {@code getSpeedLimitMetersPerMillisecond}，
  *       参数 Rail/Position 均为 public）：算速限的同时把 {@code rail.getStartAngle(position)}
- *       的实例缓存到 {@link #fangsu$cachedRailAngle}（speedLimit &lt;= 0 时清空）</li>
+ *       的实例缓存到 {@link #FANGSU_CACHED_RAIL_ANGLE}（speedLimit &lt;= 0 时清空）</li>
  *   <li>{@code @ModifyExpressionValue}（比较左操作数，lambda 内第二次 {@code access$200}
  *       调用，无 target + {@code ordinal = 3}，参见方法注释里的调用序列表）：若 node.angle
  *       与缓存实例最短角差 ≤ {@link #MAX_TURN_DEVIATION}，把 node.angle 替换为缓存实例
@@ -40,9 +40,13 @@ import org.spongepowered.asm.mixin.injection.At;
  * </ol>
  * 结果：节点处 ≤22.5° 的小角度转弯可寻路（掉头 180° 仍需 {@code canTurnBack()} 折返轨，
  * 语义不变）。不匹配时返回原值，比较仍为 false，与原版一致；{@code node.angle == null}
- * 短路（偏移 17）与 {@code canTurnBack()}（偏移 40）分支不受影响。静态缓存无并发问题：
- * MTR 寻路在服务器 tick 线程（含客户端 Simulator）单线程执行，且每个 lambda 调用都
- * 先经过注入点 1 重算缓存。
+ * 短路（偏移 17）与 {@code canTurnBack()}（偏移 40）分支不受影响。缓存用 ThreadLocal
+ * 做线程隔离：自 278e1ba（异步寻路）起，车厂主路径寻路在独立 worker 线程执行
+ * （{@link com.fangsu.utils.DepotPathGenerationManager}），与模拟线程的侧线寻路
+ * （{@code Siding.tick} 原版节流路径）并发调用本 lambda——若用静态字段，对方线程的
+ * getConnections 会覆盖缓存，注入点 3 无条件返回被污染的缓存实例使 {@code ==} 比较
+ * 恒 false，连接被剔除、寻路漏边找不到路径（时序敏感，时好时坏）。ThreadLocal 后
+ * 两路寻路各自缓存，且每个 lambda 调用都先经过注入点 1 重算（set），无残留问题。
  * <p>
  * 注意（升级 MTR 时需 javap 复核）：lambda 合成方法名 {@code lambda$getConnections$0}、
  * {@code getfield angle}/{@code getStartAngle}/{@code getSpeedLimitMetersPerMillisecond}
@@ -55,8 +59,12 @@ public abstract class SidingPathFinderMixin {
     /** 节点处允许的最大转弯角度：与"直行"（数值相等）的最短角差上限（度）。 */
     private static final float MAX_TURN_DEVIATION = 22.5f;
 
-    /** 预计算的当前轨在节点处的角度实例：注入点 1 写入，比较两侧注入点复用同一实例使 == 成立。 */
-    private static Angle fangsu$cachedRailAngle;
+    /**
+     * 预计算的当前轨在节点处的角度实例：注入点 1 写入，比较两侧注入点复用同一实例使 == 成立。
+     * 必须按线程隔离（见类注释）：worker 线程（车厂主路径）与模拟线程（侧线寻路）并发
+     * 执行同一 lambda，静态字段会被对方线程的 getConnections 覆盖。
+     */
+    private static final ThreadLocal<Angle> FANGSU_CACHED_RAIL_ANGLE = new ThreadLocal<>();
 
     /**
      * 角度匹配：同一实例（枚举同值 / 幻影缓存同键）直接通过；否则比较最短角差
@@ -82,7 +90,7 @@ public abstract class SidingPathFinderMixin {
     )
     private static double fangsu$precomputeRailAngle(Rail rail, Position position, Operation<Double> original) {
         final double speedLimit = original.call(rail, position);
-        fangsu$cachedRailAngle = speedLimit > 0 ? rail.getStartAngle(position) : null;
+        FANGSU_CACHED_RAIL_ANGLE.set(speedLimit > 0 ? rail.getStartAngle(position) : null);
         return speedLimit;
     }
 
@@ -111,7 +119,7 @@ public abstract class SidingPathFinderMixin {
             at = @At(value = "INVOKE", ordinal = 3)
     )
     private static Angle fangsu$matchNodeAngle(Angle nodeAngle) {
-        final Angle railAngle = fangsu$cachedRailAngle;
+        final Angle railAngle = FANGSU_CACHED_RAIL_ANGLE.get();
         if (railAngle != null && fangsu$anglesMatch(nodeAngle, railAngle)) {
             return railAngle;
         }
@@ -128,6 +136,7 @@ public abstract class SidingPathFinderMixin {
             at = @At(value = "INVOKE", target = "Lorg/mtr/core/data/Rail;getStartAngle(Lorg/mtr/core/data/Position;)Lorg/mtr/core/tool/Angle;", ordinal = 0)
     )
     private static Angle fangsu$reuseCachedRailAngle(Angle original) {
-        return fangsu$cachedRailAngle != null ? fangsu$cachedRailAngle : original;
+        final Angle cached = FANGSU_CACHED_RAIL_ANGLE.get();
+        return cached != null ? cached : original;
     }
 }
