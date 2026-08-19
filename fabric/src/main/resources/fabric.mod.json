@@ -24,7 +24,8 @@
         "java": ">=17",
         "architectury": "${architectury_dependency}",
         "fabric-api": "*",
-        "mtr": ">=4.0.4 <4.1.0"
+        "mtr": ">=4.0.4 <4.1.0",
+        "jsblock": ">=2.2.2"
     },
     "suggests": {},
     "custom": {

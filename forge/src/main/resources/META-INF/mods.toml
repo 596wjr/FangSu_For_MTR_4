@@ -41,7 +41,6 @@ versionRange = "[4.0.4,4.1.0)"
 side = "BOTH"
 ordering = "AFTER"
 
-# MixinExtras：以 jar-in-jar 内嵌在 mod jar 里（META-INF/jarjar/），FML 自动加载
 [[dependencies.fangsu]]
 modId = "mixinextras"
 mandatory = true
@@ -49,8 +48,8 @@ versionRange = "[0.4,)"
 ordering = "NONE"
 side = "BOTH"
 
-#[[dependencies.fangsu]]
-#modId = "mtrsteamloco"
-#mandatory = true
-#versionRange = "[0.5.2,)"
-#side = "BOTH"
+[[dependencies.fangsu]]
+modId = "jsblock"
+mandatory = true
+versionRange = "[2.2.2,)"
+side = "BOTH"

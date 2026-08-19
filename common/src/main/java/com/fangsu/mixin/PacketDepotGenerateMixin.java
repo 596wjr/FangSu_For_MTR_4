@@ -20,10 +20,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = PacketDepotGenerate.class, remap = false)
 public abstract class PacketDepotGenerateMixin {
 
-    // 构造函数 HEAD 位于 super() 之前（this 未初始化），handler 必须是 static，
-    // 只访问参数 contentObject，不触碰实例状态
-    @Inject(method = "<init>(Lorg/mtr/core/operation/DepotOperationByIds;)V", at = @At("HEAD"))
-    private static void fangsu$onGenerationStarted(DepotOperationByIds contentObject, CallbackInfo ci) {
+    // 用 @At("RETURN") 而不是 @At("HEAD")：构造函数 HEAD 位于 super() 调用之前，
+    // 部分 mixin 版本对构造器 HEAD 注入会抛 "Cannot inject before super() call"，
+    // 导致整个 mixin 无法加载。RETURN 时 super() 已完成，无此限制；此构造器唯一，
+    // RETURN 只有一个，参数 contentObject 此时仍在局部变量槽中可访问。
+    // handler 保持 static（不触碰实例状态），只读参数。
+    @Inject(method = "<init>(Lorg/mtr/core/operation/DepotOperationByIds;)V", at = @At("RETURN"))
+    private void fangsu$onGenerationStarted(DepotOperationByIds contentObject, CallbackInfo ci) {
         // contentObject 为 final class（DepotOperationByIds），javac 拒绝直接 cast 到
         // 编译期不可见的接口，需先经 Object；运行时接口由父类 schema 注入，沿继承链分派
         ((DepotOperationByIdsSchemaAccessorMixin) (Object) contentObject).getDepotIds()
