@@ -143,6 +143,13 @@ public class MainClient {
             }
 
             try {
+                com.fangsu.render.lift.CustomLiftModel.clearCache();
+                CustomMtrLifts.getInstance().load();
+            } catch (Exception e) {
+                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
+            }
+
+            try {
                 LcdVehicleRegistry.load();
             } catch (Exception e) {
                 Main.LOGGER.error("[FangSu] LcdVehicleRegistry init failed", e);
