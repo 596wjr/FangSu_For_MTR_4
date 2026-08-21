@@ -43,11 +43,26 @@ public class RenderLiftsMixin {
             final double yaw = (-Math.PI / 2D) - lift.getAngle().angleRadians;
 
             final Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+            // 相机旋转四元数：1.19.3+ 用 org.joml（该版本移除了 com.mojang.math 包）；
+            // 1.18.2/1.19.2 用 com.mojang.math.Quaternion（仅静态 fromYXZ；1.19.2 尚未改名 Quaternionf）
+            //#if MC_VERSION >= 11903
             final org.joml.Quaternionf camRot = new org.joml.Quaternionf().rotationYXZ(
                     (float) Math.toRadians(-camera.getYRot()),
                     (float) Math.toRadians(camera.getXRot()),
                     0);
-            final Matrix4f mv = new Matrix4f(new org.joml.Matrix4f().rotation(camRot));
+            //#else
+            //$$ final com.mojang.math.Quaternion camRot = com.mojang.math.Quaternion.fromYXZ(
+            //$$         (float) Math.toRadians(-camera.getYRot()),
+            //$$         (float) Math.toRadians(camera.getXRot()),
+            //$$         0);
+            //#endif
+            // 1.19.3+ 的 MC 直接使用 org.joml.Matrix4f；1.19.2- 为独立类（1.18.2 有 Quaternion 构造器）
+            final Matrix4f mv = new Matrix4f(
+                    //#if MC_VERSION >= 11903
+                    new org.joml.Matrix4f().rotation(camRot));
+                    //#else
+                    //$$ new com.mojang.math.Matrix4f(camRot));
+                    //#endif
             mv.translate((float) (pos.x - camera.getPosition().x),
                     (float) (pos.y - camera.getPosition().y),
                     (float) (pos.z - camera.getPosition().z));
