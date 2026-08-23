@@ -142,12 +142,12 @@ public class MainClient {
                 Main.LOGGER.error("[FangSu] LcdManager init failed", e);
             }
 
-            try {
-                com.fangsu.render.lift.CustomLiftModel.clearCache();
-                CustomMtrLifts.getInstance().load();
-            } catch (Exception e) {
-                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
-            }
+//            try {
+//                com.fangsu.render.lift.CustomLiftModel.clearCache();
+//                CustomMtrLifts.getInstance().load();
+//            } catch (Exception e) {
+//                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
+//            }
 
             try {
                 LcdVehicleRegistry.load();
@@ -169,6 +169,13 @@ public class MainClient {
                     Main.LOGGER.error("failed to run resource runnable", e);
                 }
             }
+
+            try {
+                SignItemFactory.loadMtrItems();
+            } catch (Exception e) {
+                Main.LOGGER.error("[FangSu] SignItemFactory.loadMtrItems failed", e);
+            }
+            Main.LOGGER.info("[FangSu] SignItemFactory.loadMtrItems completed");
 
             Main.LOGGER.info("[FangSu] initResources completed successfully");
         } catch (Exception e) {

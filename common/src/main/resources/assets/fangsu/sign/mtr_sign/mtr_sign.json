@@ -8,16 +8,28 @@
       "isMtrTheme": true,
       "mtrPoleOffset": -1.5,
       "defaultBgColor": 0,
-      "tex": [
-        [
-          0.0625,
-          0.06
+      "tex": {
+        "front": [
+          [
+            0.0625,
+            0.06
+          ],
+          [
+            0.5625,
+            0.06
+          ]
         ],
-        [
-          0.5625,
-          0.06
+        "back": [
+          [
+            0.0625,
+            -0.06
+          ],
+          [
+            0.5625,
+            -0.06
+          ]
         ]
-      ],
+      },
       "main": {
         "subModel": "main",
         "shape": [
