@@ -144,7 +144,7 @@ public class MtrTicketSystem {
     /**
      * 通过 Mixin 访问器获取 MTR4 服务端 Simulator，按位置查找车站。
      */
-    protected static Station getStation(Level world, BlockPos pos) {
+    public static Station getStation(Level world, BlockPos pos) {
         try {
             final Main main = InitAccessorMixin.getMain();
             final String dimensionId = Init.getWorldId(new org.mtr.mapping.holder.World(world));
