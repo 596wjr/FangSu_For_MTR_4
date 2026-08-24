@@ -56,6 +56,7 @@
   "ui.fangsu.common.selectStn": "Select Station",
   "ui.fangsu.common.selectPlat": "Select Platform",
   "ui.fangsu.common.selectRoute": "Select Route",
+  "ui.fangsu.common.selectExit": "Select Exit",
   "ui.fangsu.common.selected": "Selected",
   "ui.fangsu.common.width": "Width",
   "ui.fangsu.common.height": "Height",
@@ -307,5 +308,10 @@
   "gui.fangsu.depot.fail.generic": "Failed to generate path",
   "gui.fangsu.time.hours": "%s h",
   "gui.fangsu.time.minutes": "%s m",
-  "gui.fangsu.time.seconds": "%s s"
+  "gui.fangsu.time.seconds": "%s s",
+  "ui.fangsu.mtrplatform.direction": "Direction",
+  "ui.fangsu.mtrplatform.dirNone": "None",
+  "ui.fangsu.mtrplatform.dirLeft": "Left",
+  "ui.fangsu.mtrplatform.dirRight": "Right",
+  "ui.fangsu.mtrplatform.showDest": "Show Destination"
 }

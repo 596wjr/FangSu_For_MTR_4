@@ -28,9 +28,12 @@ import java.util.function.BiConsumer;
  *   <li>重按刷新时 {@code generateMainRoute} 会重建 finder 队列，快照首元素引用不同即
  *       判定为新一代任务，旧任务 discarded 后其回执不落盘；</li>
  *   <li>寻路读 {@code data.positionsToRail} 等网络图 map，与模拟线程并发修改的窗口与
- *       MTR3 原版独立线程寻路一致：fastutil 无 fail-fast，可能漏路径或（罕见）异常——
- *       每段 try/catch(Throwable) 视为该段失败（用户可重按刷新），不重试（finder 内部
- *       迭代状态可能已破坏）。</li>
+ *       MTR3 原版独立线程寻路一致：fastutil 无 fail-fast，可能漏路径或（罕见）抛
+ *       {@code ConcurrentModificationException}——关闭车厂 UI 时服务端 {@code data.sync}
+ *       重建网络图即会触发。此类瞬时异常在 {@link Task#run} 中对同段有界重试
+ *       （{@link #MAX_SEGMENT_RETRIES} × {@link #RETRY_SLEEP_MS}）而非直接判失败，
+ *       避免「刷新时关闭 UI 有概率导致刷新直接失败」；仅重试耗尽（网络被持续修改）
+ *       或超时才按失败回执。</li>
  * </ul>
  * 侧线级寻路（{@code Siding.tick}）仍走原版 5ms 节流，侧线路径短通常 1~3 tick 完成，
  * 非主路径生成瓶颈，不在本类范围。
@@ -39,6 +42,12 @@ public final class DepotPathGenerationManager {
 
     /** 单任务超时上限：防寻路死循环拖住工作线程（30 分钟），超时按失败回执。 */
     private static final long TASK_TIMEOUT_MS = 30 * 60 * 1000L;
+
+    /** 单段寻路遇到瞬时并发异常（如关闭车厂 UI 触发 {@code data.sync} 重建网络图）时的重试次数上限。 */
+    private static final int MAX_SEGMENT_RETRIES = 6;
+
+    /** 每次重试前的等待时长：让并发的网络图重建（{@code data.sync}）完成后再读同段。 */
+    private static final long RETRY_SLEEP_MS = 30L;
 
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(r -> {
         final Thread thread = new Thread(r, "fangsu-depot-pathgen");
@@ -144,16 +153,44 @@ public final class DepotPathGenerationManager {
                     return;
                 }
                 final SidingPathFinder<?, ?, ?, ?> finder = (SidingPathFinder<?, ?, ?, ?>) snapshot.get(0);
-                final ObjectArrayList<PathData> tempPath;
-                try {
-                    // SidingPathFinder 为 final class，javac 拒绝直接 cast 到编译期不可见的接口，
-                    // 需先经 Object；运行时接口由 mixin 注入，cast 与调用均正常
-                    tempPath = ((SidingPathFinderAccessorMixin) (Object) finder).fangsu$invokeTick(cruisingAltitude);
-                } catch (Throwable t) {
-                    // 寻路期间网络图被并发修改等：视为该段失败（与 MTR3 原版异常→回 0 语义一致）
-                    Main.LOGGER.warn("[方速] 车厂寻路段异常（可能寻路期间网络被修改）: {} -> {}", finder.startSavedRail, finder.endSavedRail, t);
-                    fail(finder);
-                    return;
+                // tick() 读 data.positionsToRail 等共享网络图 map，与模拟/网络线程并发重建
+                // （典型触发：关闭车厂 UI 时 onClose→saveData 发 PacketUpdateData，服务端
+                // UpdateDataRequest.update 调 data.sync 重建 positionsToRail）冲突会抛瞬时
+                // ConcurrentModificationException。这种异常是瞬时的，重试同段（有界）而非
+                // 直接判失败，避免「刷新线路时关闭 UI 有概率导致刷新直接失败」。
+                // 说明：findPath() 在 getConnections 抛异常前只部分写入 globalBlacklist（写入的
+                // 键值与重试时的 elapsedTime 相同），重试不会破坏 A* 状态，最多让个别节点提前
+                // 视为已访问，不影响正确性；仅当重试耗尽（网络图被持续修改）或超时才按失败回执。
+                // 不能声明 final：赋值发生在 while(true) 循环体内，javac 会误判
+                // 「可能在 loop 中重复赋值」（虽然实际只 break 时赋一次）
+                ObjectArrayList<PathData> tempPath;
+                int retries = 0;
+                while (true) {
+                    try {
+                        // SidingPathFinder 为 final class，javac 拒绝直接 cast 到编译期不可见的接口，
+                        // 需先经 Object；运行时接口由 mixin 注入，cast 与调用均正常
+                        tempPath = ((SidingPathFinderAccessorMixin) (Object) finder).fangsu$invokeTick(cruisingAltitude);
+                        break;
+                    } catch (Throwable t) {
+                        retries++;
+                        if (discarded) {
+                            return; // 新一代任务已接管，静默放弃（不写回执）
+                        }
+                        if (retries > MAX_SEGMENT_RETRIES) {
+                            // 寻路期间网络图被并发修改等且重试仍失败：视为该段失败（与 MTR3 原版异常→回 0 语义一致）
+                            Main.LOGGER.warn("[方速] 车厂寻路段持续异常（可能寻路期间网络被修改）: {} -> {}", finder.startSavedRail, finder.endSavedRail, t);
+                            fail(finder);
+                            return;
+                        }
+                        try {
+                            // 短暂让出，给并发的网络图重建（data.sync）让出窗口
+                            Thread.sleep(RETRY_SLEEP_MS);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            fail(finder);
+                            return;
+                        }
+                    }
                 }
                 if (tempPath == null) {
                     continue; // 该段仍在迭代，全速旋转至出结果

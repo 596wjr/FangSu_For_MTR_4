@@ -50,6 +50,7 @@
   "ui.fangsu.common.selectStn": "选择车站",
   "ui.fangsu.common.selectPlat": "选择站台",
   "ui.fangsu.common.selectRoute": "选择线路",
+  "ui.fangsu.common.selectExit": "选择出入口",
   "ui.fangsu.common.selected": "已选择",
   "msg.fangsu.ticketbarrier.fareOnce": "扣费 %s - 余额 %s",
   "tab.fangsu.main": "方速 · 核心",
@@ -307,5 +308,10 @@
   "gui.fangsu.depot.fail.generic": "无法生成路径",
   "gui.fangsu.time.hours": "%s小时",
   "gui.fangsu.time.minutes": "%s分",
-  "gui.fangsu.time.seconds": "%s秒"
+  "gui.fangsu.time.seconds": "%s秒",
+  "ui.fangsu.mtrplatform.direction": "方向",
+  "ui.fangsu.mtrplatform.dirNone": "无",
+  "ui.fangsu.mtrplatform.dirLeft": "左",
+  "ui.fangsu.mtrplatform.dirRight": "右",
+  "ui.fangsu.mtrplatform.showDest": "显示终点"
 }
