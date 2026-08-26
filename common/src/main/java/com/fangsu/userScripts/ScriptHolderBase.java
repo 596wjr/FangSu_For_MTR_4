@@ -35,9 +35,6 @@ public abstract class ScriptHolderBase {
             currentThread.setContextClassLoader(Engine.class.getClassLoader());
             context = Context.newBuilder("js")
                     .engine(engine)
-                    .allowExperimentalOptions(true)
-                    .option("js.nashorn-compat", "true")
-                    .option("js.ecmascript-version", "2020")
                     .allowHostAccess(ScriptManager.getInstance().hostAccess)
                     .allowHostClassLookup(c -> true)
                     .allowCreateThread(true)

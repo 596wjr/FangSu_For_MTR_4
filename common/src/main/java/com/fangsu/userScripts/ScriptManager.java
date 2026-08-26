@@ -133,6 +133,8 @@ public class ScriptManager {
             this.engine = Engine.newBuilder("js")
                     .allowExperimentalOptions(true)
 //                    .option("engine.WarnInterpreterOnly", "false")
+                    .option("js.nashorn-compat", "true")
+                    .option("js.ecmascript-version", "2020")
                     .option("log.file", "./logs/latest.log")
                     .build();
         } finally {
