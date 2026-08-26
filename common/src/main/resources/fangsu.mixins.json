@@ -7,6 +7,5 @@
     "mixins": ["ClientDataMixin", "DataMixin", "InitAccessorMixin", "MainAccessorMixin", "AngleMixin", "EnumHelperMixin", "ItemNodeModifierBaseMixin", "ItemRailModifierAccessorMixin", "TrainMixin", "BlockNodeMixin", "PathDataMixin", "RailActionModuleAccessorMixin", "SidingPathFinderMixin", "DepotTickAsyncGenerationMixin", "SidingPathFinderAccessorMixin", "MetropolisTurnstileMixin"],
     "injectors": {
         "defaultRequire": 1
-    },
-    "refmap": "fangsu-common-refmap.json"
+    }
 }
