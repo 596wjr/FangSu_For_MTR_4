@@ -66,7 +66,7 @@ dependencies {
 //    implementation "io.github.llamalad7:mixinextras-forge:0.4.1"
 //    jarInJar("io.github.llamalad7:mixinextras-forge:0.4.1")
     implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.4.1"))
-    implementation(include("io.github.llamalad7:mixinextras-forge:0.4.1"))
+    include(implementation("io.github.llamalad7:mixinextras-forge:0.4.1"))
 //    if (rootProject.require_nte) {
 //        modImplementation "maven.modrinth:mtr-nte:$rootProject.nte_version"
 //    }
@@ -76,10 +76,17 @@ dependencies {
     forgeRuntimeLibrary("org.graalvm.truffle:truffle-api:${rootProject.graaljsVersion}")
     forgeRuntimeLibrary("org.graalvm.js:js-language:${rootProject.graaljsVersion}")
     forgeRuntimeLibrary("org.graalvm.js:js-scriptengine:${rootProject.graaljsVersion}")
-    shadowBundle("org.graalvm.sdk:graal-sdk:${rootProject.graaljsVersion}")
-    shadowBundle("org.graalvm.truffle:truffle-api:${rootProject.graaljsVersion}")
-    shadowBundle("org.graalvm.js:js-language:${rootProject.graaljsVersion}")
-    shadowBundle("org.graalvm.js:js-scriptengine:${rootProject.graaljsVersion}")
+    include("org.graalvm.sdk:graal-sdk:${rootProject.graaljsVersion}")
+    include("org.graalvm.sdk:collections:${rootProject.graaljsVersion}")
+    include("org.graalvm.sdk:nativeimage:${rootProject.graaljsVersion}")
+    include("org.graalvm.sdk:word:${rootProject.graaljsVersion}")
+    include("org.graalvm.polyglot:polyglot:${rootProject.graaljsVersion}")
+    include("org.graalvm.truffle:truffle-api:${rootProject.graaljsVersion}")
+    include("org.graalvm.regex:regex:${rootProject.graaljsVersion}")
+    include("org.graalvm.shadowed:icu4j:${rootProject.graaljsVersion}")
+    include("org.graalvm.shadowed:xz:${rootProject.graaljsVersion}")
+    include("org.graalvm.js:js-language:${rootProject.graaljsVersion}")
+    include("org.graalvm.js:js-scriptengine:${rootProject.graaljsVersion}")
 }
 
 processResources {
