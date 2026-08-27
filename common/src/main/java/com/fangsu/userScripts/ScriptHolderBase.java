@@ -29,13 +29,20 @@ public abstract class ScriptHolderBase {
 
     public ScriptHolderBase() {
         Engine engine = ScriptManager.getInstance().engine;
-        context = Context.newBuilder("js")
-                .engine(engine)
-                .allowHostAccess(ScriptManager.getInstance().hostAccess)
-                .allowHostClassLookup(c -> true)
-                .allowCreateThread(true)
-                .build();
-        ScriptManager.initializeGlobalBindings(context);
+        Thread currentThread = Thread.currentThread();
+        ClassLoader previousClassLoader = currentThread.getContextClassLoader();
+        try {
+            currentThread.setContextClassLoader(Engine.class.getClassLoader());
+            context = Context.newBuilder("js")
+                    .engine(engine)
+                    .allowHostAccess(ScriptManager.getInstance().hostAccess)
+                    .allowHostClassLookup(c -> true)
+                    .allowCreateThread(true)
+                    .build();
+            ScriptManager.initializeGlobalBindings(context);
+        } finally {
+            currentThread.setContextClassLoader(previousClassLoader);
+        }
     }
 
     /**

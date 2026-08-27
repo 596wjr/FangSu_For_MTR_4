@@ -3,7 +3,6 @@ package com.fangsu.userScripts;
 import com.fangsu.Main;
 import com.fangsu.render.sowcer.math.Vector3f;
 import com.fangsu.scripting.*;
-import com.fangsu.utils.ModuleAccessHelper;
 import com.fangsu.utils.MtrUtil;
 import net.minecraft.resources.ResourceLocation;
 import org.graalvm.polyglot.Context;
@@ -48,8 +47,6 @@ public class ScriptManager {
 
     public void init() {
         if (initialized.get()) throw new IllegalStateException("ScriptManager has already been initialized");
-
-        ModuleAccessHelper.ensureModuleAccess();
 
         createEngine();
 
@@ -126,13 +123,23 @@ public class ScriptManager {
                 .build();
 
 
-        this.engine = Engine.newBuilder("js")
-                .allowExperimentalOptions(true)
-//                .option("engine.WarnInterpreterOnly", "false")
-                .option("js.nashorn-compat", "true")
-                .option("js.ecmascript-version", "2020")
-                .option("log.file", "./logs/latest.log")
-                .build();
+        // ModLauncher 的线程上下文加载器不会暴露 forgeRuntimeLibrary 的服务资源。
+        // Graal 使用上下文加载器查找 TruffleLanguageProvider，因此初始化期间临时
+        // 切换到 Graal 自己的加载器，否则 Engine 能创建但 languages 始终为空。
+        Thread currentThread = Thread.currentThread();
+        ClassLoader previousClassLoader = currentThread.getContextClassLoader();
+        try {
+            currentThread.setContextClassLoader(Engine.class.getClassLoader());
+            this.engine = Engine.newBuilder("js")
+                    .allowExperimentalOptions(true)
+//                    .option("engine.WarnInterpreterOnly", "false")
+                    .option("js.nashorn-compat", "true")
+                    .option("js.ecmascript-version", "2020")
+                    .option("log.file", "./logs/latest.log")
+                    .build();
+        } finally {
+            currentThread.setContextClassLoader(previousClassLoader);
+        }
 
         Main.LOGGER.info("Initialized ScriptManager engine in {} ms", System.currentTimeMillis() - beginTime);
     }

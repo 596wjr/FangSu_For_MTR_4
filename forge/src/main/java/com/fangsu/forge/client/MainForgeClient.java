@@ -3,7 +3,6 @@ package com.fangsu.forge.client;
 import com.fangsu.Main;
 import com.fangsu.MainClient;
 import com.fangsu.client.ClientHooks;
-import com.fangsu.client.ClientHooksImpl;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;

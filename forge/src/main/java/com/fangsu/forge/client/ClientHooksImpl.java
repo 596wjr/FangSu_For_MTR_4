@@ -1,4 +1,4 @@
-package com.fangsu.client;
+package com.fangsu.forge.client;
 
 import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.blockEntities.FunctionalObjBlockEntity;
