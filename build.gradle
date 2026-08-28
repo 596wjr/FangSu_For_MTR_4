@@ -176,14 +176,14 @@ subprojects {
         it.options.release = 17
     }
 
-    // Minecraft 1.20.1 / Forge 47 的 ModLauncher 使用 ASM 9.5，无法读取
-    // Java 22+ 的运行时类（class file major 66+）。Gradle/Loom 可以运行在
-    // 较新的 JDK 上，但游戏进程必须固定为 Minecraft 1.20.1 所需的 Java 17。
-    tasks.withType(JavaExec).configureEach {
-        javaLauncher.set(javaToolchains.launcherFor {
-            languageVersion = JavaLanguageVersion.of(17)
-        })
-    }
+//    // Minecraft 1.20.1 / Forge 47 的 ModLauncher 使用 ASM 9.5，无法读取
+//    // Java 22+ 的运行时类（class file major 66+）。Gradle/Loom 可以运行在
+//    // 较新的 JDK 上，但游戏进程必须固定为 Minecraft 1.20.1 所需的 Java 17。
+//    tasks.withType(JavaExec).configureEach {
+//        javaLauncher.set(javaToolchains.launcherFor {
+//            languageVersion = JavaLanguageVersion.of(17)
+//        })
+//    }
 
     tasks.matching { it.name == "sourcesJar" }.configureEach {
         dependsOn(tasks.named("processConditionalSources"))

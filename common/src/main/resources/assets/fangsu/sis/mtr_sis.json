@@ -4,7 +4,7 @@
             "id": "mtr_sis_1",
             "text": "fangsu.item.sis.mtr_1.text",
             "contentText": "fangsu.item.sis.mtr_1.text",
-            "model": "fangsu:sis/mtr_sis_1.obj",
+            "model": "fangsu:sis/demoblock.bbmodel",
             "script": "fangsu:sis/stationinfosign.js",
             "shape": [[2, -4, 15, 14, 16, 16]],
             "slots": [

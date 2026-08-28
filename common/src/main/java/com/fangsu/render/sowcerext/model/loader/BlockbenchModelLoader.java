@@ -271,23 +271,16 @@ public class BlockbenchModelLoader {
 		if ("cube".equals(type)) {
 			meshes = buildCube(element, texW, texH, textureLocations);
 		} else if ("mesh".equals(type)) {
-			RawMesh single = buildMesh(element, texW, texH);
-			meshes = single == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(single);
+			meshes = buildMesh(element, texW, texH, textureLocations);
 		} else {
 			meshes = java.util.Collections.emptyList();
 		}
 		if (meshes.isEmpty()) return meshes;
-		// 元素顶层 texture 索引（cube 各面未单独指定时使用；mesh 用单个贴图）
-		int elementTexIndex = element.has("texture") && element.get("texture").isJsonPrimitive()
-				? element.get("texture").getAsInt() : -1;
 		// 渲染类型优先级：元素(块)名 #后缀 > 组名 #后缀 > 默认 exterior
 		String renderType = resolveRenderType(element, groupRenderType);
 		for (RawMesh mesh : meshes) {
 			// 必须设置渲染类型，否则 shaderName 为 null，绘制时 ShaderManager 找不到 shader
 			mesh.setRenderType(renderType);
-			if (mesh.materialProp.texture == null) {
-				resolveMeshTexture(mesh, elementTexIndex, textureLocations);
-			}
 		}
 		return meshes;
 	}
@@ -468,9 +461,15 @@ public class BlockbenchModelLoader {
 
 	// ---------- mesh ----------
 
-	private static RawMesh buildMesh(JsonObject element, float texW, float texH) {
-		if (!element.has("vertices") || !element.get("vertices").isJsonObject()) return null;
-		if (!element.has("faces") || !element.get("faces").isJsonObject()) return null;
+	private static List<RawMesh> buildMesh(JsonObject element, float texW, float texH,
+										   List<ResourceLocation> textureLocations) {
+		if (!element.has("vertices") || !element.get("vertices").isJsonObject()) return java.util.Collections.emptyList();
+		if (!element.has("faces") || !element.get("faces").isJsonObject()) return java.util.Collections.emptyList();
+
+		// mesh 顶点是相对元素 origin 的局部坐标，需平移 origin 后再 ÷16（与 OBJ 导出一致）
+		double[] origin = {0, 0, 0};
+		if (element.has("origin") && element.get("origin").isJsonArray()) getArray(origin, element, "origin");
+		float ox = (float) origin[0], oy = (float) origin[1], oz = (float) origin[2];
 
 		Map<String, double[]> vertexPositions = new HashMap<>();
 		for (Map.Entry<String, JsonElement> v : element.getAsJsonObject("vertices").entrySet()) {
@@ -479,14 +478,27 @@ public class BlockbenchModelLoader {
 			}
 		}
 
-		RawMesh mesh = new RawMesh(new MaterialProp());
-		mesh.materialProp.attrState.setColor(255, 255, 255, 255);
+		// 元素顶层贴图索引（face 未单独指定时使用）
+		int elementTexIndex = element.has("texture") && element.get("texture").isJsonPrimitive()
+				? element.get("texture").getAsInt() : -1;
+
+		// 按面贴图索引拆分 mesh：不同贴图的面分开（RawMesh 只能有一个材质）
+		Map<Integer, RawMesh> meshesByTexture = new LinkedHashMap<>();
 
 		for (Map.Entry<String, JsonElement> f : element.getAsJsonObject("faces").entrySet()) {
 			JsonObject face = f.getValue().getAsJsonObject();
 			if (!face.has("vertices") || !face.get("vertices").isJsonArray()) continue;
 			JsonArray vertexKeys = face.getAsJsonArray("vertices");
 			if (vertexKeys.size() < 3) continue;
+
+			// 该面贴图索引（优先 face.texture，否则元素顶层）
+			int texIndex = face.has("texture") && face.get("texture").isJsonPrimitive()
+					? face.get("texture").getAsInt() : elementTexIndex;
+			RawMesh mesh = meshesByTexture.computeIfAbsent(texIndex, k -> {
+				RawMesh m = new RawMesh(new MaterialProp());
+				m.materialProp.attrState.setColor(255, 255, 255, 255);
+				return m;
+			});
 
 			// 该面的逐顶点 UV
 			Map<String, double[]> vertexUvs = new HashMap<>();
@@ -503,8 +515,9 @@ public class BlockbenchModelLoader {
 			for (int i = 0; i < vertexKeys.size(); i++) {
 				String key = vertexKeys.get(i).getAsString();
 				double[] pos = vertexPositions.get(key);
-				if (pos == null || pos.length < 3) return null;
-				Vertex vtx = new Vertex(new Vector3f((float) pos[0], (float) pos[1], (float) pos[2]),
+				if (pos == null || pos.length < 3) continue;
+				// 局部坐标 + origin（÷16 在 loadModels 统一 applyScale）
+				Vertex vtx = new Vertex(new Vector3f((float) (pos[0] + ox), (float) (pos[1] + oy), (float) (pos[2] + oz)),
 						new Vector3f(0, 0, 0));
 				double[] uv = vertexUvs.get(key);
 				if (uv != null && uv.length >= 2) {
@@ -523,7 +536,12 @@ public class BlockbenchModelLoader {
 				mesh.faces.add(new Face(new int[]{indices[0], indices[i - 1], indices[i]}));
 			}
 		}
-		return mesh;
+
+		// 为每个拆分出的 mesh 解析贴图资源
+		for (Map.Entry<Integer, RawMesh> entry : meshesByTexture.entrySet()) {
+			if (entry.getKey() >= 0) resolveMeshTexture(entry.getValue(), entry.getKey(), textureLocations);
+		}
+		return new ArrayList<>(meshesByTexture.values());
 	}
 
 	// ==================== 工具 ====================

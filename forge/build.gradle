@@ -2,12 +2,12 @@ plugins {
     id 'com.gradleup.shadow'
 }
 
-repositories {
-    maven {
-        url = 'https://repo.sleeping.town/'
-        content { includeGroup 'folk.sisby' }
-    }
-}
+//repositories {
+//    maven {
+//        url = 'https://repo.sleeping.town/'
+//        content { includeGroup 'folk.sisby' }
+//    }
+//}
 
 loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath
@@ -58,7 +58,8 @@ dependencies {
     modImplementation "maven.modrinth:minecraft-transit-railway:$rootProject.mtr_version_forge"
     modImplementation "maven.modrinth:jcm:${rootProject.jcm_version_forge}"
     // Loom does not expose JCM's nested Kaleido jar to Forge development runs.
-    forgeRuntimeLibrary("folk.sisby:kaleido-config:0.3.3+1.3.2")
+    // cannot connect to source, use JCM jar in runtime instead
+//    runtimeOnly("folk.sisby:kaleido-config:0.3.3+1.3.2")
     // Mixin Extras（@ModifyExpressionValue/@Local 注入器）。Fabric 端由 fabric-loader 自带；
     // Forge 端 Mixin 0.8.5 不含 Extras：编译期 implementation，运行时以 jar-in-jar 内嵌
     // （shadowJar 打进 META-INF/jarjar/，玩家无需单独安装；MixinExtras 通过
