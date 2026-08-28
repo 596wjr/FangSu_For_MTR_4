@@ -270,12 +270,4 @@ subprojects {
         }
     }
 
-    configurations {
-        shadowBundle
-    }
-
-    dependencies {
-        shadowBundle("org.graalvm.sdk:graal-sdk:${rootProject.graaljsVersion}")
-        shadowBundle("org.graalvm.js:js:${rootProject.graaljsVersion}")
-    }
 }
