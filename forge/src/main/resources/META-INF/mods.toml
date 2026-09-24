@@ -41,8 +41,11 @@ versionRange = "[4.0.4,4.1.0)"
 side = "BOTH"
 ordering = "AFTER"
 
+# JCM（Joban Client Mod，modId = jsblock / mtrscripting）：
+# 车载 LCD 走 JCM 的车辆脚本渲染链（com.fangsu.train.lcd.*），故为必装依赖。
 [[dependencies.fangsu]]
 modId = "jsblock"
 mandatory = true
 versionRange = "[2.2.2,)"
 side = "BOTH"
+ordering = "AFTER"

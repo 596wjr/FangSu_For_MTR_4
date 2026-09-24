@@ -45,7 +45,6 @@ import static com.fangsu.blocks.ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE;
  * 已连接时默认隐藏模型，仅手持轨道连接器或刷子时显示 node_connected.obj（与原版 MTR 节点行为一致）。
  * 扳手右键打开角度配置界面，刷子右键在已连接时打开轨道形状/功能界面（与原版节点一致），
  * 未连接时打开角度配置界面。
- * （见 {@link com.fangsu.util.NodeConnector#refreshConnectedRails}）。
  */
 public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements Syncable {
 

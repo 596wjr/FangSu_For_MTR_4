@@ -65,6 +65,15 @@ public final class CustomTrainRegister {
     }
 
     private static void tick() {
+        // 车载 LCD：JCM 的脚本重载可能早于方速 initResources，那时还读不到
+        // mtr_custom_resources.json / custom_trains.json；这里在资源就绪后再补扫一次（幂等）。
+        if (!com.fangsu.train.JcmLcdScriptBridge.hasAny()) {
+            try {
+                com.fangsu.train.JcmLcdScriptBridge.retryInject();
+            } catch (Throwable ignored) {
+            }
+        }
+
         if (!needsRegister) return;
         try {
             // MTR reload 未完成则等下一 tick（getVehicleById 同步查 VEHICLES_CACHE，未注册时回调不触发）
@@ -134,9 +143,6 @@ public final class CustomTrainRegister {
             for (Map.Entry<String, JsonElement> entry : customTrains.entrySet()) {
                 final String trainKey = entry.getKey();
                 final JsonObject train = entry.getValue().getAsJsonObject();
-                // LCD 车载渲染暂未修复（2026-08-09 搁置，排查笔记见 deliverables/mtr4-vehicle-lcd-notes.md）：
-                // 带 lcd 字段的车型暂不注册（避免游戏中出现渲染异常的车辆），恢复时删除此行使之注册
-                if (train.has("lcd")) continue;
                 if (!train.has("base_train_type")) continue;
                 final String baseType = train.get("base_train_type").getAsString();
 

@@ -6,5 +6,88 @@
             "color": "CCCCCC",
             "textureResource": "fangsu:textures/entity/non_transparent.png"
         }
+    ],
+    "vehicles": [
+        {
+            "id": "fangsu_r_train_cab_1_lcd",
+            "name": "R-Train Cab (Forwards, LCD)",
+            "color": "6CB5E2",
+            "transportMode": "TRAIN",
+            "width": 2,
+            "couplingPadding1": 2,
+            "couplingPadding2": 0,
+            "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+            "tags": ["family:r_train", "iso_3166:HK", "doors:5", "type:cab_1"],
+            "models": [
+                {
+                    "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+                    "textureResource": "mtr:textures/vehicle/r_train.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_common.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+                },
+                {
+                    "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+                    "textureResource": "mtr:textures/vehicle/r_train.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_head_1.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+                },
+                {
+                    "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+                    "textureResource": "mtr:textures/vehicle/r_train.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+                },
+                {
+                    "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+                    "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+                },
+                {
+                    "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+                    "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+                },
+                {
+                    "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+                    "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+                }
+            ],
+            "bogie1Models": [
+                {
+                    "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+                    "textureResource": "mtr:textures/vehicle/bogie_1.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+                }
+            ],
+            "bogie2Models": [
+                {
+                    "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+                    "textureResource": "mtr:textures/vehicle/bogie_1.png",
+                    "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+                    "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+                }
+            ],
+            "hasGangway1": false,
+            "hasGangway2": true,
+            "hasBarrier1": false,
+            "hasBarrier2": true,
+            "legacySpeedSoundBaseResource": "c1141a",
+            "legacySpeedSoundCount": 90,
+            "legacyDoorSoundBaseResource": "sp1900",
+            "legacyDoorSoundCloseTime": 0.5,
+            "length": 25.0,
+            "bogie1Position": -8.5,
+            "bogie2Position": 8.5,
+
+            "lcd": {
+                "id": "mtr",
+                "slots": "mtr:r_train/slots.json"
+            }
+        }
     ]
 }

@@ -623,5 +623,84 @@ public class ResourceUtil {
         // 而 orphaned holder 的回收需要引用计数，属后续工作。共享 holder 的内存增长量级
         // 与"模型种类数"而非"方块数量"相关，远小于逐方块泄漏。
         register.clear();
+        modResourceMisses.clear();
+    }
+
+    // ===== 模组自带资源（classloader 直读，不依赖资源包加载时序） =====
+
+    /** jar 内已确认缺失的路径（避免每帧重复探测） */
+    private static final Set<String> modResourceMisses = ConcurrentHashMap.newKeySet();
+
+    public static InputStream openModResource(ResourceLocation location) {
+        final String path = "assets/" + location.getNamespace() + "/" + location.getPath();
+        if (modResourceMisses.contains(path)) return null;
+        try {
+            final InputStream stream = ResourceUtil.class.getClassLoader().getResourceAsStream(path);
+            if (stream == null) modResourceMisses.add(path);
+            return stream;
+        } catch (Exception e) {
+            modResourceMisses.add(path);
+            return null;
+        }
+    }
+
+    public static String readModResource(ResourceLocation location) {
+        try (InputStream stream = openModResource(location)) {
+            if (stream == null) return null;
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static JsonElement parseJson(String text) {
+        if (text == null || text.isBlank()) return null;
+        try {
+            return new JsonParser().parse(text);
+        } catch (Exception e) {
+            Main.LOGGER.warn("Failed to parse JSON: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 读方速自带 JSON：优先走已加载的资源包（这样能被资源包覆盖），
+     * 资源包还没就绪（拿不到 ResourceManager / 该资源尚未加载）时回退到 classloader 直读 mod jar。
+     * <p>
+     * 回退是必要的：JCM 的车辆脚本重载可能发生在方速 {@code initResources} 之前，
+     * 那时 {@link #loadAsJSON} 只会返回空对象。
+     */
+    public static JsonElement loadAsJSONWithModFallback(ResourceLocation location) {
+        if (resourceManager != null && hasResources(location)) {
+            final JsonElement fromPacks = loadAsJSON(location);
+            if (fromPacks != null && !isEmptyJson(fromPacks)) return fromPacks;
+        }
+        final JsonElement fromJar = parseJson(readModResource(location));
+        return fromJar == null ? new JsonObject() : fromJar;
+    }
+
+    private static boolean isEmptyJson(JsonElement element) {
+        return element == null
+                || (element.isJsonObject() && element.getAsJsonObject().size() == 0)
+                || (element.isJsonArray() && element.getAsJsonArray().size() == 0);
+    }
+
+    /**
+     * 读任意资源文本：资源包优先，缺失时按 mod jar 路径（{@code assets/<ns>/<path>}）回退。
+     * 用于 JCM 脚本、slots.json 这类「必须在脚本解析期就能拿到」的资源。
+     */
+    public static String readResourceText(ResourceLocation location) {
+        if (resourceManager != null && hasResources(location)) {
+            try {
+                final String text = loadString(location);
+                if (text != null && !text.isEmpty()) return text;
+            } catch (Exception ignored) {
+            }
+        }
+        return readModResource(location);
+    }
+
+    public static JsonElement parseJsonText(String text) {
+        return parseJson(text);
     }
 }

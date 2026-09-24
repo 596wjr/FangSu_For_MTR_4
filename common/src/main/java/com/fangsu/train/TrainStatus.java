@@ -19,7 +19,7 @@ import java.util.List;
  * 兼容 MTR4 的 VehicleExtension 数据模型。
  */
 public class TrainStatus {
-    private final NTETrainWrapper train;
+    private final VehicleWrapper train;
 
     public final boolean[] doorLeftOpen;
     public final boolean[] doorRightOpen;
@@ -105,8 +105,8 @@ public class TrainStatus {
     }
 
     public void updateRoute() {
-        final List<VehicleWrapper.Stop> allPlatforms = train.getAllPlatforms();
-        final int nextIndex = train.getAllPlatformsNextIndex();
+        final List<VehicleWrapper.Stop> allPlatforms = train.getStops();
+        final int nextIndex = train.getNextStopIndex(allPlatforms, 0.0);
 
         if (nextIndex < allPlatforms.size()) {
             final VehicleWrapper.Stop nextStop = allPlatforms.get(nextIndex);
@@ -144,21 +144,21 @@ public class TrainStatus {
      * 获取完整停靠站列表（所有路线合并）。
      */
     public List<VehicleWrapper.Stop> getAllPlatforms() {
-        return train.getAllPlatforms();
+        return train.getStops();
     }
 
     /**
      * 获取当前路线的停靠站列表。
      */
     public List<VehicleWrapper.Stop> getThisRoutePlatforms() {
-        return train.getThisRoutePlatforms();
+        return train.getThisRouteStops();
     }
 
     /**
      * 获取当前路线下一站索引（本地索引）。
      */
     public int getThisRoutePlatformsNextIndex() {
-        return train.getNextStopIndex(train.getThisRouteStops(), 0);
+        return findNextStopIndex(train.getThisRouteStops());
     }
 
     /**
@@ -174,7 +174,46 @@ public class TrainStatus {
      * 获取完整列表的下一站索引。
      */
     public int getAllPlatformsNextIndex() {
-        return train.getAllPlatformsNextIndex();
+        return findNextStopIndex(train.getStops());
+    }
+
+    /**
+     * 求「下一站」索引。
+     * <p>
+     * <b>不能直接用 {@code VehicleWrapper.getNextStopIndex}：</b>它优先用停靠点的
+     * {@code distance}（{@code DataFetchMode.SKIP} 下 JCM 的 limited stops data
+     * 里全是 {@code -1}），拿不到就退回比较
+     * {@code vehicleExtraData.getThisPlatformId() == stop.platform.getId()}——
+     * 而这两个 id 不是同一套（前者是车辆记录里的站台 id，后者来自
+     * {@code SimplifiedRoutePlatform}），实测永不相等，于是它返回 {@code stops.size()}，
+     * 导致 {@code updateRoute()} 落到「用 thisRouteId 查线路」的分支，
+     * 表现出「下一站永远是第一站」「到终点后无线路信息」。
+     * <p>
+     * <b>前提是停靠点的 {@code distance} 必须可用。</b>{@code DataFetchMode.SKIP} 下
+     * JCM 的 limited stops data 会把 {@code distance} 全写成 {@code -1}，
+     * 那时 {@code getNextStopIndex} 会退回比较
+     * {@code vehicleExtraData.getThisPlatformId() == stop.platform.getId()}
+     * （两套 id 不同源，匹配不上）并返回 {@code stops.size()}，
+     * 表现为「下一站永远是第一站」「到终点后无线路信息」。
+     * 所以 {@link VehicleLcdRenderer#buildStatus} 用
+     * {@code DataFetchMode.MANDATORY} 强制向服务端取完整站序（带真实里程）。
+     */
+    private int findNextStopIndex(List<VehicleWrapper.Stop> stops) {
+        if (stops == null || stops.isEmpty()) return 0;
+
+        // 里程可用：按里程推进
+        if (stops.get(0).distance >= 0) {
+            final double progress = train.getRailProgress();
+            int idx = 0;
+            for (VehicleWrapper.Stop stop : stops) {
+                if (progress > stop.distance) idx++;
+                else break;
+            }
+            return Math.min(idx, stops.size());
+        }
+
+        // 兜底：服务端数据还没到（首帧）时用 JCM 原实现
+        return train.getNextStopIndex(stops, 0);
     }
 
     private int calcTrainStatus() {
@@ -184,34 +223,39 @@ public class TrainStatus {
             return train.getMtrVehicle().getSpeed() > 0.01 ? 2 : 1;
         }
         final int nextIndex = getAllPlatformsNextIndex();
-        final int platformCount = train.getAllPlatforms().size();
+        final int platformCount = train.getStops().size();
         if (platformCount == 0) {
             return 3;
         }
         if (nextIndex >= platformCount) return 6;
-        if (onPlatformRail()) return 4;
+        if (isArrived()) return 4;
         return 3;
     }
 
-    private boolean onPlatformRail() {
+    /** 到站判定窗口（米）：车头进入「距下一站 {@code ARRIVING_DISTANCE} 以内」就算到站 */
+    private static final double ARRIVING_DISTANCE = 3.0;
+
+    /**
+     * 列车是否已到站。
+     * <p>
+     * 判据：下一站有真实里程，且
+     * {@code nextStop.distance - ARRIVING_DISTANCE <= railProgress <= nextStop.distance}。
+     * 即车头已经进入该站台前的判定窗口、且还未冲过站台（后者说明是经过而非停靠）。
+     * <p>
+     * 用里程而不是站台 id：MTR 的 {@code thisPlatformId} / path 的
+     * {@code savedRailBaseId} 与 {@code Stop.platform.getId()} 不同源，
+     * 比起来很容易永远不相等，而 {@code distance} 一旦随站序数据到手就是准的。
+     */
+    private boolean isArrived() {
+        final List<VehicleWrapper.Stop> stops = train.getStops();
         final int nextIndex = getAllPlatformsNextIndex();
-        final List<VehicleWrapper.Stop> allPlatforms = train.getAllPlatforms();
-        if (nextIndex >= allPlatforms.size()) return false;
+        if (stops.isEmpty() || nextIndex >= stops.size()) return false;
 
-        final List<PathData> path = train.getPathData();
-        if (path.isEmpty()) return false;
+        final VehicleWrapper.Stop nextStop = stops.get(nextIndex);
+        if (nextStop.distance < 0) return false; // 站序数据未就绪
 
-        final long nextPlatformId = allPlatforms.get(nextIndex).platform != null
-                ? allPlatforms.get(nextIndex).platform.getId() : 0;
-
-        // 检查车头或车尾是否在目标站台轨道上
-        final int idx1 = Math.max(0, Math.min(getPathIndex(getRailProgress(0), false), path.size() - 1));
-        final int idx2 = Math.max(0, Math.min(getPathIndex(getRailProgress(getCarCount() - 1), true), path.size() - 1));
-        final PathData path1 = path.get(idx1);
-        final PathData path2 = path.get(idx2);
-
-        return (path1.getDwellTime() != 0 && path1.getSavedRailBaseId() == nextPlatformId) ||
-                (path2.getDwellTime() != 0 && path2.getSavedRailBaseId() == nextPlatformId);
+        final double progress = train.getRailProgress(0);
+        return progress >= nextStop.distance - ARRIVING_DISTANCE && progress <= nextStop.distance;
     }
 
     /**
@@ -226,7 +270,7 @@ public class TrainStatus {
     // ========== 向后兼容的便捷方法 ==========
 
     @SuppressWarnings("unused")
-    public NTETrainWrapper getWrapper() {
+    public VehicleWrapper getWrapper() {
         return train;
     }
 

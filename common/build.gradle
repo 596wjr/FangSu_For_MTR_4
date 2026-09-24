@@ -20,6 +20,10 @@ dependencies {
     // classpath 缺 JSR-305 则报「无法访问ParametersAreNonnullByDefault」（javax.annotation-api 是
     // JSR-250，不含这些类；必须用 jsr305）。仅编译期，运行时不需要。
     compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+
+    // JCM / mtrscripting：车载 LCD 走 JCM 车辆脚本渲染链（com.fangsu.train.lcd.*、
+    // com.fangsu.mixin.jcm.MTRContentResourceManagerMixin）。运行时由各平台的 jcm 依赖提供。
+    compileOnly "maven.modrinth:jcm:${rootProject.jcm_version_forge}"
 }
 
 loom {

@@ -45,6 +45,8 @@ dependencies {
     shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
 
     modImplementation "maven.modrinth:minecraft-transit-railway:$rootProject.mtr_version_fabric"
+    // JCM（Joban Client Mod / mtrscripting）自 2026-08 起为方速 MTR4 版的必装依赖：
+    // 车载 LCD 走 JCM 的车辆脚本渲染链（com.fangsu.train.lcd.*），见 deliverables/mtr4-vehicle-lcd-notes.md
 //    modImplementation "maven.modrinth:jcm:${rootProject.jcm_version_fabric}"
 //    implementation 'folk.sisby:kaleido-config:0.3.3+1.3.2'
 //    include 'folk.sisby:kaleido-config:0.3.3+1.3.2'
