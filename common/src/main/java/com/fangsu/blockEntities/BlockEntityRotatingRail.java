@@ -255,17 +255,15 @@ public class BlockEntityRotatingRail extends BaseObjBlockEntity implements Synca
         return loadingFuture == null || loadingFuture.isDone();
     }
 
-    public final boolean tryBeginRendering() {
-        if (!isAsyncLoadingDone()) return false;
-        if (renderingFuture != null && !renderingFuture.isDone()) return false;
-        renderingFuture = new java.util.concurrent.CompletableFuture<>();
-        return true;
-    }
-
-    public final void finishRendering() {
-        if (renderingFuture != null && !renderingFuture.isDone()) {
-            renderingFuture.complete(null);
-        }
+    /**
+     * 渲染就绪条件：本实例的模型异步加载已完成。
+     * 异步渲染的调度（提交到后台单线程、双缓冲交换）已统一由 {@link BaseObjBlockEntity} 提供，
+     * 这里原先各自复制的 tryBeginRendering/finishRendering 已删除（它们与基类的 final 方法冲突，
+     * 且实际上从未被调用 —— 渲染线程此前走的是阻塞等待路径）。
+     */
+    @Override
+    protected boolean isRenderReady() {
+        return isAsyncLoadingDone();
     }
 
     // ==================== 运行时状态 ====================

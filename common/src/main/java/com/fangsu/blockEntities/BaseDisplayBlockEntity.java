@@ -97,10 +97,22 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
     private long lastDataCheckTime = 0;
     private static final long DATA_CHECK_FALLBACK_MS = 30000;
 
+    /**
+     * 进程级路线数据哈希缓存。
+     * <p>
+     * MTR4 版此前在 {@link #shouldCheckDataChange()} 里**每次调用都全量遍历所有线路**，
+     * 而该方法的调用点是每帧的 {@code whenRendering()}（RIS / SIS / 吊板各一处），
+     * 于是成本是"显示方块数 × 线路数 / 帧"，而且跑在共享的单线程后台渲染执行器上。
+     * 现在改为全局最多每 {@link #ROUTE_HASH_INTERVAL_MS} 毫秒重算一次，其余方块只做一次 int 比较。
+     */
+    private static volatile int cachedRouteDataHash = 0;
+    private static volatile long cachedRouteDataHashTime = 0;
+    private static final long ROUTE_HASH_INTERVAL_MS = 500;
+
     protected boolean shouldCheckDataChange() {
         final long now = System.currentTimeMillis();
         try {
-            final int currentHash = computeRouteDataHash();
+            final int currentHash = currentRouteDataHash();
             if (currentHash != lastRouteDataHash) {
                 lastRouteDataHash = currentHash;
                 lastDataCheckTime = now;
@@ -114,6 +126,18 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 取全局缓存的路线数据哈希，最多每 {@link #ROUTE_HASH_INTERVAL_MS} 毫秒重算一次。
+     */
+    private static int currentRouteDataHash() {
+        final long now = System.currentTimeMillis();
+        if (now - cachedRouteDataHashTime >= ROUTE_HASH_INTERVAL_MS) {
+            cachedRouteDataHashTime = now;
+            cachedRouteDataHash = computeRouteDataHash();
+        }
+        return cachedRouteDataHash;
     }
 
     private static int computeRouteDataHash() {
@@ -563,8 +587,13 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
 
     @Override
     public void whenDisposing() {
-        RotatableShapeHelper.getInstance().removeCache(getWorldPos());
+        RotatableShapeHelper.getInstance().removeCache(getLevel(), getWorldPos());
         GraphicsTextureHelper.getInstance().removeDrawGraphic(getBlockPos());
+        // 释放本实例独占的显示面模型（共享缓存的 holder 会被 closeIfOwned 自动跳过）。
+        // 保留 holder 对象本身：chunk 重新加载时 load()/whenLoading() 会复用同一实例再次 uploadLater。
+        if (dmhDisp != null) {
+            dmhDisp.closeIfOwned();
+        }
     }
 
     @Override
@@ -628,10 +657,10 @@ public abstract class BaseDisplayBlockEntity extends FunctionalObjBlockEntity {
         float rotZ = this.rotateZ;
 
         RotatableShapeHelper helper = RotatableShapeHelper.getInstance();
-        VoxelShape rotated = helper.getShapeForBlock(getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ);
+        VoxelShape rotated = helper.getShapeForBlock(getLevel(), getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ);
         if (rotated == null) {
-            helper.initForBlock(getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ, shape);
-            rotated = helper.getShapeForBlock(getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ);
+            helper.initForBlock(getLevel(), getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ, shape);
+            rotated = helper.getShapeForBlock(getLevel(), getWorldPos(), translateX, translateY, translateZ, rotX, rotY, rotZ);
         }
         if (rotated == null) {
             rotated = shape.asVoxelShape();

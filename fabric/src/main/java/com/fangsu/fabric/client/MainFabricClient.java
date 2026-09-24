@@ -44,6 +44,7 @@ public final class MainFabricClient implements ClientModInitializer {
         ClientHooks.OPEN_NODE_ANGLE_SCREEN = ClientHooksImpl::openNodeAngleScreen;
         ClientHooks.OPEN_RAIL_MODEL_SELECT_SCREEN = ClientHooksImpl::openRailModelSelectScreen;
         ClientHooks.GET_LOCAL_PLAYER = () -> net.minecraft.client.Minecraft.getInstance().player;
+        ClientHooks.OPEN_MODULAR_EDITOR = ClientHooksImpl::openModularEditor;
     }
 
     private void initResources(ResourceManager resourceManager) {

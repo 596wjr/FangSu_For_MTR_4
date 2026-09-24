@@ -101,4 +101,8 @@ public final class ClientHooksImpl {
     public static void openRailModelSelectScreen(ItemStack stack) {
         Minecraft.getInstance().setScreen(new RailModelSelectScreen(stack));
     }
+
+    public static void openModularEditor(java.util.function.Supplier<String> getter, java.util.function.Consumer<String> setter) {
+        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new com.fangsu.ui.ModularEditingScreen(getter, setter)));
+    }
 }

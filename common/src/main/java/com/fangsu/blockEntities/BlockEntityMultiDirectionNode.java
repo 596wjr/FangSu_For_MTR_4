@@ -299,17 +299,14 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         return loadingFuture == null || loadingFuture.isDone();
     }
 
-    public final boolean tryBeginRendering() {
-        if (!isAsyncLoadingDone()) return false;
-        if (renderingFuture != null && !renderingFuture.isDone()) return false;
-        renderingFuture = new CompletableFuture<>();
-        return true;
-    }
-
-    public final void finishRendering() {
-        if (renderingFuture != null && !renderingFuture.isDone()) {
-            renderingFuture.complete(null);
-        }
+    /**
+     * 渲染就绪条件：本实例的模型异步加载已完成。
+     * 异步渲染的调度已统一由 {@link BaseObjBlockEntity} 提供，原先各自复制的
+     * tryBeginRendering/finishRendering 已删除（与基类 final 方法冲突，且从未被调用）。
+     */
+    @Override
+    protected boolean isRenderReady() {
+        return isAsyncLoadingDone();
     }
 
     public void whenLoading() {

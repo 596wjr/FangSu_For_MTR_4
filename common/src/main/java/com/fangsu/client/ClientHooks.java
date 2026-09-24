@@ -64,6 +64,12 @@ public final class ClientHooks {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
 
+    /** 打开图形化积木编辑器（客户端注入；服务器端或未注入时报错提示）。 */
+    public static ModularEditorConsumer OPEN_MODULAR_EDITOR
+            = ((getter, setter) -> {
+                Main.LOGGER.error("打开方法没有被替换!");
+            });
+
     /** 获取本地玩家（仅客户端注入；服务器端或未注入时返回 null）。 */
     public static Supplier<Player> GET_LOCAL_PLAYER = () -> null;
 
@@ -130,6 +136,11 @@ public final class ClientHooks {
         OPEN_NODE_ANGLE_SCREEN.accept(be, rail);
     }
 
+    /** 打开图形化积木编辑器。 */
+    public static void openModularEditor(Supplier<String> getter, Consumer<String> setter) {
+        OPEN_MODULAR_EDITOR.accept(getter, setter);
+    }
+
     @FunctionalInterface
     public interface SignScreenConsumer {
 
@@ -158,5 +169,11 @@ public final class ClientHooks {
     public interface StationSelectConsumer {
 
         void accept(Component component, List<Long> defaultValue, Consumer<List<Long>> setter, BlockPos pos, int maxSelect);
+    }
+
+    @FunctionalInterface
+    public interface ModularEditorConsumer {
+
+        void accept(Supplier<String> getter, Consumer<String> setter);
     }
 }
