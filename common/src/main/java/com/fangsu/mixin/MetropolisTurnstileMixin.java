@@ -99,9 +99,9 @@ public abstract class MetropolisTurnstileMixin {
             return;
         }
 
-        // 空手 → MTR 计费（与方速闸机效果一致）；若闸机槽0已插入卡片，则交给原闸机取回卡片
+        // 空手 → MTR 计费（与方速闸机效果一致）；对于进站闸机若闸机槽0已插入卡片，则交给原闸机取回卡片（目前metropolis出站闸机仍然会在内部物品栏中保留车票）
         if (stack.isEmpty()) {
-            if (fangsu$slotHasItem(level, pos)) return;
+            if (isEnter && fangsu$slotHasItem(level, pos)) return;
             boolean ok = isEnter
                     ? MtrTicketSystem.enter(level, name, zone1, zone2, zone3, player)
                     : MtrTicketSystem.exit(level, name, zone1, zone2, zone3, player);
