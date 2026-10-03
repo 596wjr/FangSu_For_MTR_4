@@ -395,8 +395,9 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
                     // 手持轨道相关物品 → 显示已连接模型
                     final DynamicModelHolder holder = connectedModelHolder;
                     if (holder != null && holder.getUploadedModel() != null) {
+                        // 原点平移已由 BaseBlockEntityRender 统一施加（candyPose.translate(0.5, 0, 0.5)），
+                        // 这里不能再平移，否则模型会再偏移半格到方块角落；node_connected.obj 本身以原点为中心
                         Matrices mat = new Matrices();
-                        mat.translate(0.5f, 0f, 0.5f);
                         // 已连接时方向必定已绑定，按固定方向渲染（与 MTR renderNode rotateYDegrees(-angle) 对齐）
                         final double rotation = -Math.toRadians(direction) + Math.PI / 2;
                         mat.rotateY((float) rotation);
@@ -414,9 +415,11 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
             return;
         }
 
+        // 原点平移已由 BaseBlockEntityRender 统一施加（candyPose.translate(0.5, 0, 0.5)），
+        // 这里不能再平移：否则叠加后模型会整体偏移半格，落在方块的角落而不是中心。
+        // node.obj / node_connected.obj 的几何本身以原点为旋转中心（X -0.5..0.5，Y 0..1），
+        // 因此直接在原点处绕 Y 轴旋转即可保证模型始终居于方块中央。
         Matrices mat = new Matrices();
-        // 平移使模型居中于方块中心
-        mat.translate(0.5f, 0f, 0.5f);
 
         final double rotation;
         if (!directionBonded) {
