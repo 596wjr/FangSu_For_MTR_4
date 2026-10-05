@@ -1,22 +1,20 @@
 package com.fangsu.mappings;
 
-public class ResourceLocation {
-    private final net.minecraft.resources.ResourceLocation raw;
-
-    public ResourceLocation(net.minecraft.resources.ResourceLocation raw) {
-        this.raw = raw;
+public class ResourceLocation extends SimpleMappings<net.minecraft.resources.ResourceLocation> {
+    private ResourceLocation(net.minecraft.resources.ResourceLocation raw) {
+        super(raw);
     }
 
     public ResourceLocation(String path) {
-        this.raw = new net.minecraft.resources.ResourceLocation(path);
+        super(new net.minecraft.resources.ResourceLocation(path));
     }
 
     public ResourceLocation(String str1, String str2) {
-        this.raw = new net.minecraft.resources.ResourceLocation(str1, str2);
+        super(new net.minecraft.resources.ResourceLocation(str1, str2));
     }
 
-    public net.minecraft.resources.ResourceLocation getRaw() {
-        return raw;
+    public static ResourceLocation fromRaw(net.minecraft.resources.ResourceLocation raw) {
+        return new ResourceLocation(raw);
     }
 
     public String getPath() {
@@ -27,18 +25,8 @@ public class ResourceLocation {
         return raw.getNamespace();
     }
 
+    @Override
     public String toString() {
         return raw.toString();
-    }
-
-    public int hashCode() {
-        return raw.hashCode();
-    }
-
-    public boolean equals(Object obj) {
-        if (obj instanceof ResourceLocation) {
-            return raw.equals(((ResourceLocation) obj).raw);
-        }
-        return raw.equals(obj);
     }
 }

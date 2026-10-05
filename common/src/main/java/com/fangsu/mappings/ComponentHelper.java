@@ -5,9 +5,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 /**
- * Component 鍏煎宸ュ叿绫伙紝缁熶竴 1.18.2 锟?1.20.1 锟?Component.translatable API锟?
+ * LocalComponent 鍏煎宸ュ叿绫伙紝缁熶竴 1.18.2 锟?1.20.1 锟?LocalComponent.translatable API锟?
  * <p>
- * 1.19+ 寮€锟?Component 鎺ュ彛鏈夐潤鎬佹柟锟?translatable()锟?
+ * 1.19+ 寮€锟?LocalComponent 鎺ュ彛鏈夐潤鎬佹柟锟?translatable()锟?
  * 1.18.2 闇€锟?new TranslatableComponent()锟?
  */
 public class ComponentHelper {
@@ -32,7 +32,9 @@ public class ComponentHelper {
         return translatable(key).getString();
     }
 
-    /** 等效于 Component.empty() — 1.18.2 不存在该静态方法 */
+    /**
+     * 等效于 LocalComponent.empty() — 1.18.2 不存在该静态方法
+     */
     public static MutableComponent empty() {
         //#if MC_VERSION >= 11900
         return Component.empty();
@@ -42,9 +44,7 @@ public class ComponentHelper {
     }
 
     /**
-     * 等效于 Component.literal(str) — 1.19.0 才引入该静态方法；
-     * 1.18.2 无静态工厂，用 new TextComponent（MTR 官方 Minecraft-Mappings-rewrite
-     * 1.18.2-mapping TextHelper 同款：TextComponent 只存在于 1.18.2，1.19.2 起改名）
+     * 等效于 LocalComponent.literal(str) — 1.18.2 不存在该静态方法
      */
     public static MutableComponent literal(String str) {
         //#if MC_VERSION >= 11900
@@ -56,7 +56,7 @@ public class ComponentHelper {
 
     /**
      * 跨版本创建按钮：1.19.3+ 用 Button.builder（新 API），
-     * 1.18.2/1.19.2 无 builder 方法，用构造器（照 MTR3 版 BasicConfigScreen.addButton 分界）。
+     * 1.18.2/1.19.2 无 builder 方法，用构造器（照 BasicConfigScreen.addButton 分界）。
      * 版本差异收敛于此，UI 各处调用无需再写 //#if 双分支。
      */
     public static Button button(int x, int y, int width, int height, Component label, Button.OnPress onPress) {

@@ -5,7 +5,6 @@ import com.fangsu.blockEntities.BaseObjBlockEntity;
 import com.fangsu.blockEntities.FunctionalObjBlockEntity;
 import com.fangsu.blockEntities.Scriptable;
 import com.fangsu.blocks.BaseObjBlock;
-import com.fangsu.mappings.RegistryObject;
 import com.fangsu.render.ShadersModHandler;
 import com.fangsu.render.sowcer.math.Matrix4f;
 import com.fangsu.render.sowcer.math.PoseStackUtil;
@@ -27,9 +26,13 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Method;
+import java.util.function.Supplier;
 
 public class BaseBlockEntityRender<T extends BaseObjBlockEntity> implements BlockEntityRenderer<T> {
-    private static final RegistryObject<ItemStack> BARRIER_ITEM_STACK = new RegistryObject<>(() -> new ItemStack(net.minecraft.world.item.Items.BARRIER, 1));
+    // 简单的惰性 ItemStack 持有者：每次 get() 新建（与原先 RegistryObject 包装 lambda 的语义一致）。
+    // 注意：com.fangsu.mappings.RegistryObject 已与 MTR3 版对齐（构造器只接受 RegistrySupplier），
+    // 因此这里不再借它做普通 Supplier 的包装，避免两工程的 mappings 层出现设计分叉。
+    private static final Supplier<ItemStack> BARRIER_ITEM_STACK = () -> new ItemStack(net.minecraft.world.item.Items.BARRIER, 1);
 
     /**
      * 方块实体渲染距离上限（格）。超出直接跳过，避免为远处方块白白提交异步渲染任务与 draw call。

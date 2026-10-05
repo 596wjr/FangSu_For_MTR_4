@@ -1,6 +1,7 @@
 package com.fangsu.mappings;
 
 import dev.architectury.registry.registries.DeferredRegister;
+import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.MenuType;
@@ -14,9 +15,9 @@ import java.util.function.Supplier;
 
 public class RegistryObject<T> {
 
-    private final Supplier<T> supplier;
+    private final RegistrySupplier<T> supplier;
 
-    public RegistryObject(Supplier<T> supplier) {
+    public RegistryObject(RegistrySupplier<T> supplier) {
         this.supplier = supplier;
     }
 
@@ -28,9 +29,9 @@ public class RegistryObject<T> {
     }
 
     /**
-     * 获取原始 {@link Supplier}。
+     * 获取原始 {@link RegistrySupplier}。
      */
-    public Supplier<T> asMinecraft() {
+    public RegistrySupplier<T> asMinecraft() {
         return supplier;
     }
 
