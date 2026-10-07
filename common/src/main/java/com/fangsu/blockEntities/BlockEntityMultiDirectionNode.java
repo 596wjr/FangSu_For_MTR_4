@@ -39,7 +39,14 @@ import static com.fangsu.blocks.ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE;
  *   <li>{@code direction} (double) — 当前方向（度，0=E, 90=S, 180=W, 270=N）；未绑定时为默认 0</li>
  *   <li>{@code connected} (bool) — 是否已连接轨道</li>
  *   <li>{@code directionBonded} (bool) — 方向是否已绑定；未绑定(false)时模型持续旋转</li>
+ *   <li>{@code offsetX/offsetY/offsetZ} (double) — 锚点平移（格，钳制 ±1.0）</li>
+ *   <li>{@code pitchDeg} (double) — 俯仰角（度，钳制 ±15），正 = 沿方向前进时上坡</li>
+ *   <li>{@code rollDeg} (double) — 翻滚角（度，钳制 ±20），正 = 前进方向右手侧抬高</li>
  * </ul>
+ * <p>
+ * <b>P3 阶段边界</b>：{@code pitchDeg/rollDeg} 目前<b>只</b>用于倾斜节点自身的标记模型，
+ * 不写入轨道姿态（{@code NodeConnector.readRailPose / readNodePose} 仍传 0），
+ * 轨道截面与车体的倾斜留到下一步「外轨超高」。
  * <p>
  * 未绑定时 {@link #whenRendering()} 让模型绕 Y 轴匀速 360° 旋转；绑定后按 {@code direction} 固定。
  * 已连接时默认隐藏模型，仅手持轨道连接器或刷子时显示 node_connected.obj（与原版 MTR 节点行为一致）。
@@ -59,19 +66,51 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     private static final String KEY_OFFSET_X = "offsetX";
     private static final String KEY_OFFSET_Y = "offsetY";
     private static final String KEY_OFFSET_Z = "offsetZ";
+    /**
+     * 节点俯仰角（度，double，钳制到 ±{@value #MAX_PITCH_DEG}）。
+     * <p>
+     * 约定：节点处轨道切线的<b>竖向坡角</b>，沿节点方向前进时<b>正 = 上坡</b>。
+     * 见 {@link #whenRendering()} 的中文注释。
+     */
+    private static final String KEY_PITCH_DEG = "pitchDeg";
+    /**
+     * 节点翻滚角（度，double，钳制到 ±{@value #MAX_ROLL_DEG}）。
+     * <p>
+     * 约定：绕节点前进轴的旋转，<b>正 = 前进方向右手侧抬高</b>（外轨超高 / 翻滚约定，
+     * 与 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 及几何内核的 {@code |sin(roll)|} 中心线抬升一致）。
+     */
+    private static final String KEY_ROLL_DEG = "rollDeg";
 
     /** 锚点平移上限（格）：超过 1 格就会跳出宿主方块，且与相邻方块的语义冲突。 */
     public static final double MAX_OFFSET = 1.0D;
 
     /**
+     * 俯仰角（纵坡）上限（度）。
+     * <p>
+     * 15° ≈ 26.8% 坡度，已远超现实铁路（最大约 4~7%），足够表达坡道又不会让模型竖起来。
+     */
+    public static final double MAX_PITCH_DEG = 15.0D;
+
+    /**
+     * 翻滚角（外轨超高）上限（度）。
+     * <p>
+     * 20° 对应 {@code 半轨距 · sin20° ≈ 0.245 m} 的中心线抬升，视觉上已经很夸张；
+     * 上限存在的意义主要是防止误输入把模型/下一阶段的轨道截面翻过去。
+     */
+    public static final double MAX_ROLL_DEG = 20.0D;
+
+    /**
      * C2S 载荷版本（{@code ModNetwork.BE_SYNC}）。
      * <p>
-     * <b>布局只追加不修改</b>：v1 = direction/connected/directionBonded，v2 在其后追加 3 个 double。
-     * 接收侧用"剩余可读字节数"判断版本，因此旧客户端（只写 v1）与新客户端可以互通，
+     * <b>布局只追加不修改</b>：v1 = direction/connected/directionBonded，v2 在其后追加 3 个 double（平移），
+     * v3 再追加 2 个 double（俯仰角 + 翻滚角）。
+     * 接收侧用"剩余可读字节数"判断版本，因此旧客户端（只写 v1 / v2）与新客户端可以互通，
      * 不会出现读串位。注意 {@code ModNetwork.handleBeSync} 是把 BlockPos 之后的字节
      * 原样包成一个新 buffer 交给 {@link #readC2S}，所以这里的字节数判断是准确的。
+     * <p>
+     * 字节数：v1 = 10、v2 = 10 + 24 = 34、v3 = 34 + 16 = 50（不含 BlockPos）。
      */
-    private static final int C2S_PAYLOAD_VERSION = 2;
+    private static final int C2S_PAYLOAD_VERSION = 3;
 
     // ==================== 运行时状态 ====================
     private double direction;
@@ -82,6 +121,17 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     private double offsetX;
     private double offsetY;
     private double offsetZ;
+
+    /**
+     * 俯仰角（度）：节点处轨道切线的竖向坡角，正 = 沿方向前进时上坡。
+     * <p>
+     * <b>P3 阶段边界</b>：本值目前只影响节点自身的标记模型，<b>不</b>写入轨道姿态
+     * （{@code NodeConnector.readRailPose} / {@code readNodePose} 仍传 0），
+     * 轨道截面与车体的实际倾斜留到下一步「外轨超高」。
+     */
+    private double pitchDeg;
+    /** 翻滚角（度）：绕前进轴旋转，正 = 前进方向右手侧抬高。阶段边界同 {@link #pitchDeg}。 */
+    private double rollDeg;
 
     // ==================== 刷新重试状态（客户端） ====================
     /** 客户端 MTR 数据未同步时，角度刷新（refreshConnectedRailsIfNeeded）延迟重试的待处理标记。 */
@@ -263,6 +313,96 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         return value;
     }
 
+    // ==================== 俯仰角 / 翻滚角（P3：节点侧） ====================
+
+    /**
+     * 节点俯仰角（度，纵坡）。
+     * <p>
+     * <b>约定</b>：节点处轨道切线的竖向坡角，沿节点方向前进时<b>正 = 上坡</b>（爬升）。
+     * 下一步写进 {@code RailPoseExtra.pitch1Degrees/pitch2Degrees} 时必须沿用该符号。
+     */
+    public double getPitchDegrees() {
+        return pitchDeg;
+    }
+
+    /**
+     * 节点翻滚角（度，外轨超高）。
+     * <p>
+     * <b>约定</b>：绕节点前进轴的旋转，<b>正 = 前进方向右手侧抬高</b>。
+     * 与 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 的约定一致（下一步直接复用）。
+     */
+    public double getRollDegrees() {
+        return rollDeg;
+    }
+
+    /** 是否设置了非零俯仰 / 翻滚（节点模型据此决定是否额外倾斜）。 */
+    public boolean hasTilt() {
+        return pitchDeg != 0.0D || rollDeg != 0.0D;
+    }
+
+    /**
+     * 一次性写入俯仰角 + 翻滚角（自动钳制），只改数据并 {@code setChanged()}，<b>不</b>发包。
+     * <p>
+     * 与 {@link #setNodeOffset(double, double, double)} 保持同一风格：钳制后与旧值完全相同则直接返回，
+     * 避免拖动滑块时每帧都触发一次方块实体更新。需要同步到服务端时调用
+     * {@link #setAnglesAndSync(double, double)} 或写完补一次 {@link #sendUpdateC2S()}。
+     */
+    public void setNodeAngles(double pitch, double roll) {
+        final double newPitch = clampPitch(pitch);
+        final double newRoll = clampRoll(roll);
+        if (newPitch == pitchDeg && newRoll == rollDeg) {
+            return;
+        }
+        this.pitchDeg = newPitch;
+        this.rollDeg = newRoll;
+        this.setChanged();
+        this.syncToPeer();
+    }
+
+    /**
+     * 配置界面的俯仰 / 翻滚写入入口：写数据 + {@code setChanged()} + 立即 BE_SYNC。
+     * <p>
+     * <b>刻意不调用</b> {@link #refreshConnectedRailsIfNeeded()}：P3 阶段这两个角度还没有进入轨道姿态，
+     * 重建出来的轨道与旧轨道逐字节相同，发刷新包只是白做一次「删旧轨 + 建新轨」。
+     * 等下一步把角度写进 {@code RailPoseExtra} 时再在这里补上重建调用。
+     */
+    public void setAnglesAndSync(double pitch, double roll) {
+        setNodeAngles(pitch, roll);
+        if (level != null && level.isClientSide) {
+            sendUpdateC2S();
+        }
+    }
+
+    /** 把俯仰角钳制到 ±{@link #MAX_PITCH_DEG}，并消除 NaN / 无穷（NaN / Inf → 0）。 */
+    public static double clampPitch(double value) {
+        return clampAngle(value, MAX_PITCH_DEG);
+    }
+
+    /** 把翻滚角钳制到 ±{@link #MAX_ROLL_DEG}，并消除 NaN / 无穷（NaN / Inf → 0）。 */
+    public static double clampRoll(double value) {
+        return clampAngle(value, MAX_ROLL_DEG);
+    }
+
+    /**
+     * 通用角度钳制：NaN / 无穷归零，其余钳制到 ±{@code limit}。
+     * <p>
+     * 与 {@link #clampOffset(double)} 同样的写法（不用 {@code Math.min/max} 是为了让 NaN 分支显式可读）。
+     * 注意 {@code Double.isInfinite} 必须在比较之前判掉：{@code +Inf > limit} 成立会返回 limit，
+     * 虽然也安全，但语义上无穷更应该视作「无效输入」而清零。
+     */
+    private static double clampAngle(double value, double limit) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0D;
+        }
+        if (value > limit) {
+            return limit;
+        }
+        if (value < -limit) {
+            return -limit;
+        }
+        return value;
+    }
+
     /**
      * 当方向改变且已连接轨道时，刷新重建连接到本节点的轨道。
      * <p>
@@ -304,6 +444,16 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         }
 
         final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
+        // ---- NODE_REFRESH_RAIL 载荷布局（客户端/服务端永远同版本，无需版本探测）----
+        //   BlockPos nodePos
+        //   double   direction
+        //   double   offsetX / offsetY / offsetZ
+        //   double   pitchDeg / rollDeg          ← P3 新增，紧跟平移之后
+        //   boolean  directionBonded
+        //   int      count
+        //   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
+        //             byte flags, int styleCount, styleCount × String }
+        // 读侧：ModNetwork.handleNodeRefreshRail（字段顺序必须逐字对应）。
         buf.writeBlockPos(worldPosition);
         buf.writeDouble(direction);
         // 姿态（平移）随刷新请求一起发送，紧跟在 direction 之后。
@@ -313,6 +463,11 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         buf.writeDouble(offsetX);
         buf.writeDouble(offsetY);
         buf.writeDouble(offsetZ);
+        // P3：俯仰 / 翻滚也随刷新请求同行。本阶段服务端只把它写进方块实体（节点模型倾斜），
+        // 还不参与建轨几何；放在这里是为了让「界面写入 → 服务端 BE」这条链路一次到位，
+        // 下一步把它接进 RailPoseExtra 时不必再改包布局。
+        buf.writeDouble(pitchDeg);
+        buf.writeDouble(rollDeg);
         // 方向是否绑定：旋转绑定开关为「否」时，服务端只按新方向重建几何，不得把方向绑定。
         buf.writeBoolean(directionBonded);
         buf.writeInt(connected.size());
@@ -389,6 +544,11 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         buf.writeDouble(offsetX);
         buf.writeDouble(offsetY);
         buf.writeDouble(offsetZ);
+        // ---- v3 段（P3 追加字段）----
+        // 与 v2 同样只在尾部追加：v1 / v2 发送方的剩余字节数分别比 v3 少 16 字节，
+        // 接收侧两段检查依次失败，两个角度保持原值（不静默清零）。
+        buf.writeDouble(pitchDeg);
+        buf.writeDouble(rollDeg);
         // 版本号本身不写进流（写了会让旧接收方把版本字节当成 direction 的首字节）；
         // C2S_PAYLOAD_VERSION 只在代码内标记当前布局，真实判据是接收侧的字节数检查。
     }
@@ -403,6 +563,12 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
             this.offsetX = clampOffset(buf.readDouble());
             this.offsetY = clampOffset(buf.readDouble());
             this.offsetZ = clampOffset(buf.readDouble());
+        }
+        // v3：再 2 个 double = 16 字节。v1 发送方读到这里是 0 字节、v2 发送方是 0 字节（v2 已被上面消费完），
+        // 都直接跳过；只有 v3 发送方才读写俯仰 / 翻滚。判据同样是剩余字节数，不依赖包内版本号。
+        if (buf.readableBytes() >= 16) {
+            this.pitchDeg = clampPitch(buf.readDouble());
+            this.rollDeg = clampRoll(buf.readDouble());
         }
         this.setChanged();
         syncToPeer();
@@ -422,6 +588,9 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         tag.putDouble(KEY_OFFSET_X, offsetX);
         tag.putDouble(KEY_OFFSET_Y, offsetY);
         tag.putDouble(KEY_OFFSET_Z, offsetZ);
+        // 同理总是写俯仰 / 翻滚：客户端区块加载后节点模型要靠它倾斜
+        tag.putDouble(KEY_PITCH_DEG, pitchDeg);
+        tag.putDouble(KEY_ROLL_DEG, rollDeg);
     }
 
     @Override
@@ -435,6 +604,9 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         this.offsetX = clampOffset(tag.getDouble(KEY_OFFSET_X));
         this.offsetY = clampOffset(tag.getDouble(KEY_OFFSET_Y));
         this.offsetZ = clampOffset(tag.getDouble(KEY_OFFSET_Z));
+        // 老存档（P3 之前）没有这两个键 → getDouble 返回 0，再经钳制仍是 0
+        this.pitchDeg = clampPitch(tag.getDouble(KEY_PITCH_DEG));
+        this.rollDeg = clampRoll(tag.getDouble(KEY_ROLL_DEG));
         triggerAsyncLoading();
     }
 
@@ -538,6 +710,61 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
                 || Block.byItem(item) instanceof com.fangsu.blocks.BlockMultiDirectionNode;
     }
 
+    /**
+     * 节点模型的倾斜约定（P3 起，下一步「外轨超高」必须沿用）。
+     * <p>
+     * <b>角度定义</b>：
+     * <ul>
+     *   <li>{@code pitchDeg}（俯仰 / 纵坡）= 节点处轨道切线的竖向坡角，
+     *       <b>正 = 沿节点方向前进时上坡（爬升）</b>；范围 ±{@value #MAX_PITCH_DEG}°。</li>
+     *   <li>{@code rollDeg}（翻滚 / 外轨超高）= 绕节点<b>前进轴</b>的旋转，
+     *       <b>正 = 前进方向的右手侧抬高</b>；范围 ±{@value #MAX_ROLL_DEG}°。
+     *       与 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 以及几何内核
+     *       {@code rollLift = 半轨距·|sin(roll)|} 的约定一致。</li>
+     * </ul>
+     * <b>局部坐标与朝向</b>：{@code node.obj} 是沿局部 X 轴拉长的横杆（局部 X 长 1 格、Z 厚 0.25 格），
+     * 而本类给模型施加的偏航是 {@code rotation = -direction + π/2}。把局部 +X 过一遍该偏航即可验证：
+     * <pre>yaw(rotation) · (1,0,0) = (sin θ, 0, −cos θ)</pre>
+     * 其中 θ = {@code direction}（0=E、90=S）。对 θ=0 得 (0,0,−1) → 北，对 θ=90 得 (1,0,0) → 东，
+     * 两者都逆着 {@code direction} 的罗盘朝向；也就是说<b>局部 +X 与节点前进方向（轨道切线）相反</b>,
+     * 这正是下面俯仰角要取负号的原因。
+     * <p>
+     * <b>施加顺序</b>（对 {@code Matrices} 依次调用；{@code rotateX/Y/Z} 是右乘 = 在「当前模型坐标系」里内旋，
+     * 因此先偏航定朝向，之后的两次旋转都发生在朝向坐标系内）：
+     * <pre>
+     *   translate(offset)          // 节点平移 g = (offsetX, offsetY, offsetZ)
+     *   rotateY(yaw)               // 偏航 = 方向：R_y(ψ)，ψ = −direction + π/2
+     *   rotateZ(+rollRad)          // 翻滚：R_z(ρ)，ρ = +rollDeg
+     *   rotateX(−pitchRad)         // 俯仰：R_x(φ)，φ = −pitchDeg
+     * </pre>
+     * 整体合成 {@code M = T(g) · R_y(ψ) · R_z(ρ) · R_x(φ)} = {@code T · R_yaw · R_roll · R_pitch}，
+     * 即世界语义下<b>先 yaw、再 roll、最后 pitch</b>。为什么这两个符号能对上定义，逐个验算：
+     * <pre>
+     * 前进方向（切线）t = R_y(ψ)·(−1,0,0)                         = (sin θ, 0, −cos θ)   // θ = direction
+     * 1) 翻滚 R_z(ρ≈0)：R_z(ρ)·(−1,0,0) = (−cos ρ, −sin ρ, 0)
+     *    → 前进向量被压向 −Y ⇒ 前进方向的局部左侧（局部 +Z）下沉、右手侧（局部 −Z）抬升
+     *    → 正 ρ = 右手侧抬高 ✔ 与 rollDeg 定义一致（绕前进轴旋转，t 本身是转轴不动）
+     * 2) 俯仰 R_x(φ)：R_x(φ)·(−1,0,0) = (−1,0,0)（局部 ±X 是转轴）
+     *    被抬起的是局部 −Z（前进方向右手侧），其 Y 分量 = −sin φ
+     *    → 只有 φ &lt; 0 才让前进右手侧上抬 = 节点朝前进方向抬头 = 上坡
+     *    → 故取 φ = −pitchDeg，正 pitchDeg = 上坡 ✔
+     * </pre>
+     * 顺带说明：局部 −Z 就是前进方向的右手侧，所以翻滚「抬高右手侧」等价于「抬高模型的 −Z 面」，
+     * 下一步在轨道截面上做外轨超高时用的就是同一条右手侧法向。
+     * <p>
+     * <b>P3 阶段边界</b>：以上倾斜只作用于节点自己的标记模型。轨道姿态
+     * （{@code NodeConnector.readRailPose} / {@code readNodePose}）仍固定传 0，
+     * {@code RailPoseExtra} 不会因为这里的值变化 —— 轨道截面与车体的倾斜是下一步的事。
+     */
+    private void applyNodeModelTilt(Matrices mat) {
+        if (!hasTilt()) {
+            // 无倾斜时不发旋转调用，保持与 P2 逐字节相同的矩阵（便于回归对比）
+            return;
+        }
+        mat.rotateZ((float) Math.toRadians(rollDeg));
+        mat.rotateX((float) -Math.toRadians(pitchDeg));
+    }
+
     @Override
     public void whenRendering() {
         // 客户端 MTR 数据就绪后的延迟重试：数据未同步时角度刷新顺延到数据到位后执行
@@ -567,6 +794,8 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
                         // 已连接时方向必定已绑定，按固定方向渲染（与 MTR renderNode rotateYDegrees(-angle) 对齐）
                         final double rotation = -Math.toRadians(direction) + Math.PI / 2;
                         mat.rotateY((float) rotation);
+                        // P3：俯仰 / 翻滚（约定与推导见 applyNodeModelTilt），偏航之后在内旋坐标系里施加
+                        applyNodeModelTilt(mat);
                         ctx.drawModel(holder, mat);
                     }
                 }
@@ -598,6 +827,9 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
             rotation = -Math.toRadians(direction) + Math.PI / 2;
         }
         mat.rotateY((float) rotation);
+        // P3：俯仰 / 翻滚（约定与推导见 applyNodeModelTilt）。未绑定时也跟着一起倾斜：
+        // 角度是节点数据而非方向数据，解绑只影响「绕 Y 轴是否继续旋转」。
+        applyNodeModelTilt(mat);
 
         ctx.drawModel(holder, mat);
     }

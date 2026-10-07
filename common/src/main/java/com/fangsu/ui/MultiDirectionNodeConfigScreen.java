@@ -36,11 +36,15 @@ import java.util.stream.Collectors;
  * 界面基于仓库通用的可滚动配置框架 {@link BasicConfigScreen}，但采用<b>双列布局</b>：
  * <ul>
  *   <li>左列 = 平移（X / Y / Z 偏移）</li>
- *   <li>右列 = 旋转（方向）与「旋转绑定」开关</li>
+ *   <li>右列 = 旋转（俯仰角 / 方向 / 翻滚角）与「旋转绑定」开关</li>
  *   <li>两列下方 = 轨道编辑（占满两列宽度）</li>
  *   <li>顶部输入模式切换与底部「保存并退出」按钮横跨两列</li>
  * </ul>
  * 双列是为了避免单列纵向堆叠导致的频繁滚动。
+ * <p>
+ * <b>角度语义</b>（P3）：俯仰角（±15°）正 = 沿节点方向前进时上坡；翻滚角（±20°）正 = 前进方向
+ * 右手侧抬高（外轨超高约定）。两者目前只倾斜节点自身的标记模型，<b>不</b>写入轨道姿态、
+ * 也不参与几何预检（几何预检只看水平姿态：平移 + 方向）。
  * <p>
  * <b>写入顺序</b>：{@code BE_SYNC} → {@code NODE_REFRESH_RAIL}。姿态（平移）现在也随刷新请求一起发送，
  * 所以顺序不再影响正确性（见 {@code ModNetwork.handleNodeRefreshRail} 的说明），这里保持固定顺序只为数据流统一。
@@ -78,6 +82,22 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     private static final float DIRECTION_MAX = 180f;
     private static final float DIRECTION_STEP = 0f;
 
+    /**
+     * 俯仰角（纵坡）取值区间（度），与 {@link BlockEntityMultiDirectionNode#MAX_PITCH_DEG} 保持一致，
+     * 步进 0.5°。正值 = 沿节点方向前进时上坡。
+     */
+    private static final float PITCH_MIN = -15f;
+    private static final float PITCH_MAX = 15f;
+    private static final float PITCH_STEP = 0.5f;
+
+    /**
+     * 翻滚角（外轨超高）取值区间（度），与 {@link BlockEntityMultiDirectionNode#MAX_ROLL_DEG} 保持一致，
+     * 步进 0.5°。正值 = 前进方向右手侧抬高。
+     */
+    private static final float ROLL_MIN = -20f;
+    private static final float ROLL_MAX = 20f;
+    private static final float ROLL_STEP = 0.5f;
+
     /** 半径步进按钮（沿用旧 NodeAngleScreen / 原版 RailModifierScreen 的六档）。 */
     private static final String[] RADIUS_BUTTON_LABELS = {"-10", "-1", "-.1", "+.1", "+1", "+10"};
     private static final double[] RADIUS_BUTTON_STEPS = {-10, -1, -0.1, 0.1, 1, 10};
@@ -90,8 +110,16 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     private double offsetX;
     private double offsetY;
     private double offsetZ;
-    /** 方向（度）。 */
     private double direction;
+    /**
+     * 俯仰角（度，纵坡）。正 = 沿方向前进时上坡。
+     * <p>
+     * <b>P3 阶段</b>：只写进节点（BE 数据 + 节点模型倾斜），不会触发轨道重建，
+     * 也不参与 {@link #refreshPoseValidity()} 的几何预检。
+     */
+    private double pitchDeg;
+    /** 翻滚角（度，外轨超高）。正 = 前进方向右手侧抬高。阶段约束同 {@link #pitchDeg}。 */
+    private double rollDeg;
     /**
      * 旋转绑定开关（仅右列，锁定时恒为 true）。
      * <p>
@@ -119,6 +147,8 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         this.offsetY = node.getOffsetY();
         this.offsetZ = node.getOffsetZ();
         this.direction = node.getDirectionDegrees();
+        this.pitchDeg = node.getPitchDegrees();
+        this.rollDeg = node.getRollDegrees();
         // 已连接的节点方向必须保持绑定：开关强制为「是」且不可点击（见 addRotationBindRow）
         this.rotationBonded = node.isDirectionBonded() || node.isConnected();
         this.rail = resolveRail(node);
@@ -223,11 +253,16 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         yLeft = addAxisRow(leftX, yLeft, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.offset_z"),
                 (float) offsetZ, TRANSLATE_MIN, TRANSLATE_MAX, TRANSLATE_STEP, v -> setOffset(2, v), this::applyOffsets);
 
-        // ---- 右列：节点旋转（仅 Y 轴有效，X / Z 预留）+ 旋转绑定开关 ----
-        yRight = addReservedRow(rightX, yRight, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.rotX"));
+        // ---- 右列：节点旋转（方向 + 俯仰 + 翻滚）+ 旋转绑定开关 ----
+        // 俯仰 / 翻滚取代原先的两行「预留轴」占位（addReservedRow 已不再用于本界面）。
+        // 标签按概念命名（俯仰角 / 翻滚角）而不是轴字母：这两个量是铁路语义，
+        // 不是「绕方块 X/Z 轴转」，用轴字母会误导用户与后续维护者。
+        yRight = addAxisRow(rightX, yRight, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.pitch"),
+                (float) pitchDeg, PITCH_MIN, PITCH_MAX, PITCH_STEP, v -> setPitch(v), this::applyAngles);
         yRight = addAxisRow(rightX, yRight, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.rotY"),
                 (float) direction, DIRECTION_MIN, DIRECTION_MAX, DIRECTION_STEP, v -> setDirection(v), this::applyDirection);
-        yRight = addReservedRow(rightX, yRight, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.rotZ"));
+        yRight = addAxisRow(rightX, yRight, columnWidth, ComponentHelper.translatable("ui.fangsu.multi_direction_node.roll"),
+                (float) rollDeg, ROLL_MIN, ROLL_MAX, ROLL_STEP, v -> setRoll(v), this::applyAngles);
         yRight = addRotationBindRow(rightX, yRight, columnWidth);
 
         // ---- 轨道编辑：两列下方，占满两列宽度 ----
@@ -298,7 +333,8 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         addEntry(buttonFlip, y);
         y += 24;
 
-        // 外轨超高：本步骤只占位（active=false），不实现任何 roll 行为
+        // 外轨超高：本步骤只占位（active=false）。节点侧的俯仰 / 翻滚编辑已在右列接好，
+        // 但「让角度真正作用到轨道截面与车体」属于下一步，所以这里仍然保持灰显不接线。
         final Button buttonSuperelevation = addButton(leftX, y, fullWidth, 20,
                 ComponentHelper.translatable("ui.fangsu.multi_direction_node.superelevation"), b -> {
                 });
@@ -319,10 +355,14 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     }
 
     /**
-     * 预留轴（旋转 X / Z）：控件按当前输入模式的位置摆放，但 {@code active = false}，
-     * 视觉上灰显且不响应点击，明确表示「功能预留、尚未接线」。
-     * 标签也用灰色，与可用轴（白色）区分。
+     * 预留按钮（当前界面已不再使用）。
+     * <p>
+     * P3 之前「旋转 X / Z」用本方法摆放两行灰显占位按钮；P3 把它们换成了真实可编辑的
+     * 俯仰角 / 翻滚角（见 {@link #addAxisRow}），轨道编辑区的「外轨超高」按钮则仍直接
+     * 设 {@code active = false}，不需要这个方法。保留实现是为了后续再出现「预留功能」
+     * 时不必重写（语法上与 {@link #addAxisRow} 的行高保持一致）。
      */
+    @SuppressWarnings("unused")
     private int addReservedRow(int areaLeft, int y, int rowWidth, Component label) {
         addEntry(createTextLabel(areaLeft, y, label, TextLabel.Align.LEFT, 0x888888, false), y);
         y += 8;
@@ -418,6 +458,31 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         direction = Mth.clamp(value, DIRECTION_MIN, DIRECTION_MAX);
     }
 
+    /** 俯仰角：钳制到 ±15°（与 BE 的 clampPitch 同一上限，双重保险）。 */
+    private void setPitch(float value) {
+        pitchDeg = BlockEntityMultiDirectionNode.clampPitch(Mth.clamp(value, PITCH_MIN, PITCH_MAX));
+    }
+
+    /** 翻滚角：钳制到 ±20°（与 BE 的 clampRoll 同一上限）。 */
+    private void setRoll(float value) {
+        rollDeg = BlockEntityMultiDirectionNode.clampRoll(Mth.clamp(value, ROLL_MIN, ROLL_MAX));
+    }
+
+    /**
+     * 俯仰 / 翻滚实时写入：写数据 + 立即 BE_SYNC，<b>不</b>请求轨道重建。
+     * <p>
+     * <b>P3 阶段边界</b>：这两个角度还没有写进轨道姿态（{@code RailPoseExtra}），
+     * 重建出来的轨道与旧轨逐字节相同，发 {@code NODE_REFRESH_RAIL} 只会白做一次删+建，
+     * 所以这里刻意不调用 {@link #tryRefreshRails()}，也就自然不会经过几何预检。
+     * 下一步把角度接进轨道姿态时，再在这里补上 {@code tryRefreshRails()}。
+     * <p>
+     * 与平移 / 方向一致：即时保存（不点「保存并退出」也生效）。
+     */
+    private void applyAngles() {
+        if (node == null) return;
+        node.setAnglesAndSync(pitchDeg, rollDeg);
+    }
+
     /**
      * 平移实时写入。顺序：写平移（本地）→ 写方向并发 BE_SYNC → 预检通过才请求重建轨道。
      * <p>
@@ -508,6 +573,8 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     private void save() {
         if (node == null) return;
         node.setNodeOffset(offsetX, offsetY, offsetZ);
+        // P3：俯仰 / 翻滚一起兜底落盘（不触发轨道重建，理由见 applyAngles）
+        node.setAnglesAndSync(pitchDeg, rollDeg);
         writeDirection();
         tryRefreshRails();
         Main.debug("[MultiDirectionNode] node config saved at {}", node.getBlockPos());

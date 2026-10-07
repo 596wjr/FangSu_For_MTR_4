@@ -194,6 +194,8 @@
   "ui.fangsu.multi_direction_node.rotX": "X 旋转（预留）",
   "ui.fangsu.multi_direction_node.rotY": "Y 旋转（方向，度）",
   "ui.fangsu.multi_direction_node.rotZ": "Z 旋转（预留）",
+  "ui.fangsu.multi_direction_node.pitch": "俯仰角（上坡为正，度）",
+  "ui.fangsu.multi_direction_node.roll": "翻滚角（右侧抬高为正，度）",
   "ui.fangsu.multi_direction_node.reserved": "预留 · 暂未实现",
   "ui.fangsu.multi_direction_node.railSection": "轨道编辑",
   "ui.fangsu.multi_direction_node.superelevation": "外轨超高（预留）",

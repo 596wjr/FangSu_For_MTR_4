@@ -212,7 +212,10 @@ public final class NodeConnector {
      * {@code RailPoseExtra} 的端点语义对应，无需关心 MTR 内部的 {@code reversePositions}
      * （那段对调只影响 {@code railMath} 的参数化方向，由 {@code FangSuRailMath} 处理）。
      * <p>
-     * P2 只做平移：俯仰 / 滚转字段一律留 0（P3+ 再填）。
+     * <b>阶段边界（P3）</b>：这里只搬运平移，俯仰 / 滚转字段<b>固定传 0</b> ——
+     * 万向节点 BE 虽然已经存储了 {@code pitchDeg/rollDeg}（供节点模型倾斜），
+     * 但把它们写进轨道姿态（外轨超高 / 纵坡在轨道截面与车体上生效）是下一步的事。
+     * 在这条线上填非零值之前，{@code RailPoseExtra} 与轨道几何必须保持 P2 的行为。
      */
     public static RailPoseExtra readRailPose(Level level, BlockPos pos1, BlockPos pos2) {
         final double[] offset1 = readNodeOffset(level, pos1);

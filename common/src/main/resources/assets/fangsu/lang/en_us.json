@@ -194,6 +194,8 @@
   "ui.fangsu.multi_direction_node.rotX": "X rotation (reserved)",
   "ui.fangsu.multi_direction_node.rotY": "Y rotation (direction, deg)",
   "ui.fangsu.multi_direction_node.rotZ": "Z rotation (reserved)",
+  "ui.fangsu.multi_direction_node.pitch": "Pitch (climb positive, deg)",
+  "ui.fangsu.multi_direction_node.roll": "Roll (right side up positive, deg)",
   "ui.fangsu.multi_direction_node.reserved": "Reserved - not implemented",
   "ui.fangsu.multi_direction_node.railSection": "Rail Editing",
   "ui.fangsu.multi_direction_node.superelevation": "Superelevation (reserved)",

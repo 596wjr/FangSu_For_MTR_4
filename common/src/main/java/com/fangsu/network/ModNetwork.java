@@ -78,6 +78,7 @@ public class ModNetwork {
      *   BlockPos nodePos
      *   double   newDirection
      *   double   offsetX / offsetY / offsetZ   ← 姿态随刷新请求同行
+     *   double   pitchDeg / rollDeg            ← P3 新增：俯仰 / 翻滚（正上坡 / 右手侧抬高）
      *   boolean  directionBonded               ← 「旋转绑定：否」时只重建几何、不绑定方向
      *   int      count
      *   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
@@ -86,6 +87,9 @@ public class ModNetwork {
      * 姿态（平移）之所以放进刷新包，而不是继续依赖另一个 BE_SYNC 包：服务端重建轨道时读的是
      * 服务端方块实体里的偏移，两个独立包的到达/应用顺序不定，就会出现「节点已经拖走、轨道留在原地」。
      * 现在客户端把刚编辑好的偏移直接随请求发来，跨包竞态不复存在。
+     * <p>
+     * 本包<b>不做版本探测</b>：客户端与服务端永远运行同一份 FangSu 构建，字段顺序必须与写侧逐字对应。
+     * 俯仰 / 翻滚在 P3 只是被写进服务端方块实体（供节点模型倾斜），还不参与建轨几何。
      */
     private static void handleNodeRefreshRail(
             FriendlyByteBuf buf,
@@ -98,6 +102,9 @@ public class ModNetwork {
         final double offsetX = buf.readDouble();
         final double offsetY = buf.readDouble();
         final double offsetZ = buf.readDouble();
+        // P3：俯仰 / 翻滚（读侧顺序必须与写侧一致）
+        final double pitchDeg = buf.readDouble();
+        final double rollDeg = buf.readDouble();
         final boolean directionBonded = buf.readBoolean();
         final int count = buf.readInt();
         final java.util.List<BlockPos> others = new java.util.ArrayList<>();
@@ -138,6 +145,9 @@ public class ModNetwork {
             // 先落姿态：必须在重建循环之前写入，后面 refreshNodeRail 才会按新偏移算几何
             // （setNodeOffset 内部已做 ±MAX_OFFSET 钳制，并 setChanged + 方块更新）
             node.setNodeOffset(offsetX, offsetY, offsetZ);
+            // P3：俯仰 / 翻滚同样先落盘（钳制 ±15° / ±20°）。本阶段它们不参与几何，
+            // 只是让服务端 BE 与客户端编辑结果一致、节点模型在别的客户端也倾斜。
+            node.setNodeAngles(pitchDeg, rollDeg);
             // 应用方向：绑定开关为「是」才绑定；为「否」时只写值，保持未绑定语义
             if (directionBonded) {
                 node.setDirectionBonded(newDirection);
