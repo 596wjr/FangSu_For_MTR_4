@@ -43,8 +43,8 @@ import static com.fangsu.blocks.ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE;
  * <p>
  * 未绑定时 {@link #whenRendering()} 让模型绕 Y 轴匀速 360° 旋转；绑定后按 {@code direction} 固定。
  * 已连接时默认隐藏模型，仅手持轨道连接器或刷子时显示 node_connected.obj（与原版 MTR 节点行为一致）。
- * 扳手右键打开角度配置界面，刷子右键在已连接时打开轨道形状/功能界面（与原版节点一致），
- * 未连接时打开角度配置界面。
+ * 扳手右键打开 FangSu 万向节点配置界面（{@code MultiDirectionNodeConfigScreen}：平移 / 方向 / 轨道编辑）；
+ * 刷子右键与 MTR 原版节点一致，打开 MTR 自带的轨道形状修改界面。
  */
 public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements Syncable {
 
@@ -55,11 +55,33 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     private static final String KEY_DIRECTION = "direction";
     private static final String KEY_CONNECTED = "connected";
     private static final String KEY_DIRECTION_BONDED = "directionBonded";
+    /** 节点锚点平移（格，double，钳制到 ±{@value #MAX_OFFSET}）。 */
+    private static final String KEY_OFFSET_X = "offsetX";
+    private static final String KEY_OFFSET_Y = "offsetY";
+    private static final String KEY_OFFSET_Z = "offsetZ";
+
+    /** 锚点平移上限（格）：超过 1 格就会跳出宿主方块，且与相邻方块的语义冲突。 */
+    public static final double MAX_OFFSET = 1.0D;
+
+    /**
+     * C2S 载荷版本（{@code ModNetwork.BE_SYNC}）。
+     * <p>
+     * <b>布局只追加不修改</b>：v1 = direction/connected/directionBonded，v2 在其后追加 3 个 double。
+     * 接收侧用"剩余可读字节数"判断版本，因此旧客户端（只写 v1）与新客户端可以互通，
+     * 不会出现读串位。注意 {@code ModNetwork.handleBeSync} 是把 BlockPos 之后的字节
+     * 原样包成一个新 buffer 交给 {@link #readC2S}，所以这里的字节数判断是准确的。
+     */
+    private static final int C2S_PAYLOAD_VERSION = 2;
 
     // ==================== 运行时状态 ====================
     private double direction;
     private boolean connected;
     private boolean directionBonded;
+
+    /** 节点锚点平移（格）。导轨中心线、车辆路径与节点模型都跟随该偏移。 */
+    private double offsetX;
+    private double offsetY;
+    private double offsetZ;
 
     // ==================== 刷新重试状态（客户端） ====================
     /** 客户端 MTR 数据未同步时，角度刷新（refreshConnectedRailsIfNeeded）延迟重试的待处理标记。 */
@@ -132,6 +154,116 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     }
 
     /**
+     * 只写方向、<b>不</b>改变绑定状态（界面「旋转绑定：否」使用）。
+     * <p>
+     * 方向值可以照常写下来（相连轨道重建时要用它算几何），但 {@code directionBonded} 保持原值，
+     * 模型继续绕 Y 轴旋转，表示用户并未把方向固定下来。与 {@link #setDirectionAndBind(double)}
+     * 的唯一区别就是不动绑定标志；{@link #writeC2S} 的载荷布局完全不变。
+     */
+    public void setDirectionUnbound(double degrees) {
+        this.direction = degrees;
+        this.setChanged();
+        this.sendUpdateC2S();
+    }
+
+    /**
+     * 单独写入绑定标志（需要解绑时使用），方向值不变。
+     * <p>
+     * 「旋转绑定」开关由「是」切到「否」时调用，让服务端与其它客户端立即看到解绑状态。
+     */
+    public void setRotationBonded(boolean bonded) {
+        this.directionBonded = bonded;
+        this.setChanged();
+        this.sendUpdateC2S();
+    }
+
+    // ==================== 锚点平移（P2：节点平移） ====================
+
+    /** 锚点 X 平移（格）。 */
+    public double getOffsetX() {
+        return offsetX;
+    }
+
+    /** 锚点 Y 平移（格）。 */
+    public double getOffsetY() {
+        return offsetY;
+    }
+
+    /** 锚点 Z 平移（格）。 */
+    public double getOffsetZ() {
+        return offsetZ;
+    }
+
+    /** 是否设置了非零平移。 */
+    public boolean hasOffset() {
+        return offsetX != 0.0D || offsetY != 0.0D || offsetZ != 0.0D;
+    }
+
+    /**
+     * 写入三个分量的平移（自动钳制到 ±{@value #MAX_OFFSET}），只改数据并 {@code setChanged()}，
+     * <b>不</b>发包。需要立刻同步到服务端时用 {@link #setOffsetAndSync(double, double, double)}，
+     * 或在写完后调用一次 {@link #sendUpdateC2S()}（{@code writeC2S} 的载荷已包含平移全量）。
+     */
+    public void setNodeOffset(double x, double y, double z) {
+        final double newX = clampOffset(x);
+        final double newY = clampOffset(y);
+        final double newZ = clampOffset(z);
+        if (newX == offsetX && newY == offsetY && newZ == offsetZ) {
+            return;
+        }
+        this.offsetX = newX;
+        this.offsetY = newY;
+        this.offsetZ = newZ;
+        this.setChanged();
+        this.syncToPeer();
+    }
+
+    /**
+     * 从界面保存平移：先写本地数据，再把 {@link #writeC2S} 载荷同步到服务端。
+     * <p>
+     * 旧实现要求这个 C2S 包必须先于 {@code NODE_REFRESH_RAIL} 到达服务端，因为服务端重建轨道时
+     * 是从服务端方块实体读偏移的；这一「跨包顺序」依赖正是轨道漂移 bug 的根因。
+     * 现在平移随刷新请求一起发送（见 {@link #refreshConnectedRailsIfNeeded()}），顺序不再影响正确性，
+     * 调用方仍按 BE_SYNC → NODE_REFRESH_RAIL 的固定顺序发送，只是为了让数据流保持统一。
+     */
+    public void setOffsetAndSync(double x, double y, double z) {
+        setNodeOffset(x, y, z);
+        if (level != null && level.isClientSide) {
+            sendUpdateC2S();
+        }
+    }
+
+    /**
+     * 配置界面的平移写入入口：一次完成「写数据 + setChanged + BE_SYNC + 重建相连轨道」。
+     * <p>
+     * 参数来源不变，但重建请求里已经带上了最新平移，服务端不再依赖 BE_SYNC 的到达顺序。
+     * 界面是即时保存的（不点按钮也生效），所以拖动滑块会逐步触发重建；
+     * 万向节点相连轨道通常只有 1~2 条，该开销可接受。
+     */
+    public void applyOffsetAndSync(double x, double y, double z) {
+        setNodeOffset(x, y, z);
+        if (level == null || !level.isClientSide) {
+            return;
+        }
+        sendUpdateC2S();
+        refreshConnectedRailsIfNeeded();
+    }
+
+    /** 把平移分量钳制到 ±{@link #MAX_OFFSET}，并消除 NaN / 无穷。 */
+    public static double clampOffset(double value) {
+        if (Double.isNaN(value)) {
+            return 0.0D;
+        }
+        if (value > MAX_OFFSET) {
+            return MAX_OFFSET;
+        }
+        if (value < -MAX_OFFSET) {
+            return -MAX_OFFSET;
+        }
+        return value;
+    }
+
+    /**
      * 当方向改变且已连接轨道时，刷新重建连接到本节点的轨道。
      * <p>
      * 该方法由客户端角度界面在确认新角度后调用：先收集连接到本节点的其他端点，
@@ -174,6 +306,15 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(worldPosition);
         buf.writeDouble(direction);
+        // 姿态（平移）随刷新请求一起发送，紧跟在 direction 之后。
+        // 旧实现让平移走另一个 BE_SYNC 包，服务端重建轨道时从 BE 读偏移，
+        // 于是重建结果取决于「两个独立包的到达/应用顺序」——这就是「拖了节点但轨道留在原地」的根因。
+        // 现在刷新包里自带偏移，服务端用客户端刚编辑好的值重建，不再存在跨包竞态。
+        buf.writeDouble(offsetX);
+        buf.writeDouble(offsetY);
+        buf.writeDouble(offsetZ);
+        // 方向是否绑定：旋转绑定开关为「否」时，服务端只按新方向重建几何，不得把方向绑定。
+        buf.writeBoolean(directionBonded);
         buf.writeInt(connected.size());
         for (net.minecraft.core.BlockPos o : connected) {
             buf.writeBlockPos(o);
@@ -239,9 +380,17 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
 
     @Override
     public void writeC2S(FriendlyByteBuf buf) {
+        // ---- v1 段（布局冻结，不可增删改）----
         buf.writeDouble(direction);
         buf.writeBoolean(connected);
         buf.writeBoolean(directionBonded);
+        // ---- v2 段（追加字段）----
+        // 追加而非插入：旧发送方只写 v1，接收方按剩余字节数判断，双方都不读串位。
+        buf.writeDouble(offsetX);
+        buf.writeDouble(offsetY);
+        buf.writeDouble(offsetZ);
+        // 版本号本身不写进流（写了会让旧接收方把版本字节当成 direction 的首字节）；
+        // C2S_PAYLOAD_VERSION 只在代码内标记当前布局，真实判据是接收侧的字节数检查。
     }
 
     @Override
@@ -249,6 +398,12 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         this.direction = buf.readDouble();
         this.connected = buf.readBoolean();
         this.directionBonded = buf.readBoolean();
+        // v2：3 个 double = 24 字节。v1 发送方这里剩余 0 字节，直接跳过，偏移保持原值（不静默清零）。
+        if (buf.readableBytes() >= 24) {
+            this.offsetX = clampOffset(buf.readDouble());
+            this.offsetY = clampOffset(buf.readDouble());
+            this.offsetZ = clampOffset(buf.readDouble());
+        }
         this.setChanged();
         syncToPeer();
     }
@@ -262,6 +417,11 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         tag.putDouble(KEY_DIRECTION, direction);
         tag.putBoolean(KEY_CONNECTED, connected);
         tag.putBoolean(KEY_DIRECTION_BONDED, directionBonded);
+        // 与 direction 不同，平移分量总是写：客户端区块加载时要靠它渲染偏移后的模型。
+        // 全零写入的开销可忽略，换来的是"读侧不需要判空"。
+        tag.putDouble(KEY_OFFSET_X, offsetX);
+        tag.putDouble(KEY_OFFSET_Y, offsetY);
+        tag.putDouble(KEY_OFFSET_Z, offsetZ);
     }
 
     @Override
@@ -271,6 +431,10 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         this.direction = tag.getDouble(KEY_DIRECTION);
         this.connected = tag.getBoolean(KEY_CONNECTED);
         this.directionBonded = tag.getBoolean(KEY_DIRECTION_BONDED);
+        // 老存档没有这三个键 → getDouble 返回 0（原版行为）
+        this.offsetX = clampOffset(tag.getDouble(KEY_OFFSET_X));
+        this.offsetY = clampOffset(tag.getDouble(KEY_OFFSET_Y));
+        this.offsetZ = clampOffset(tag.getDouble(KEY_OFFSET_Z));
         triggerAsyncLoading();
     }
 
@@ -396,8 +560,10 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
                     final DynamicModelHolder holder = connectedModelHolder;
                     if (holder != null && holder.getUploadedModel() != null) {
                         // 原点平移已由 BaseBlockEntityRender 统一施加（candyPose.translate(0.5, 0, 0.5)），
-                        // 这里不能再平移，否则模型会再偏移半格到方块角落；node_connected.obj 本身以原点为中心
+                        // 这里不能再平移半格，否则模型会再偏移半格到方块角落；node_connected.obj 本身以原点为中心。
+                        // 节点平移只叠加用户设置的 offset（不加 0.5）。
                         Matrices mat = new Matrices();
+                        mat.translate(offsetX, offsetY, offsetZ);
                         // 已连接时方向必定已绑定，按固定方向渲染（与 MTR renderNode rotateYDegrees(-angle) 对齐）
                         final double rotation = -Math.toRadians(direction) + Math.PI / 2;
                         mat.rotateY((float) rotation);
@@ -416,10 +582,12 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         }
 
         // 原点平移已由 BaseBlockEntityRender 统一施加（candyPose.translate(0.5, 0, 0.5)），
-        // 这里不能再平移：否则叠加后模型会整体偏移半格，落在方块的角落而不是中心。
+        // 这里不能再平移半格：否则叠加后模型会整体偏移半格，落在方块的角落而不是中心。
         // node.obj / node_connected.obj 的几何本身以原点为旋转中心（X -0.5..0.5，Y 0..1），
         // 因此直接在原点处绕 Y 轴旋转即可保证模型始终居于方块中央。
         Matrices mat = new Matrices();
+        // 节点平移：只叠加用户设置的 offset（不含 0.5，那部分由 BaseBlockEntityRender 负责）
+        mat.translate(offsetX, offsetY, offsetZ);
 
         final double rotation;
         if (!directionBonded) {
@@ -468,31 +636,54 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     @Override
     public InteractionResult useWithWrench(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Player player, @NotNull InteractionHand hand, @NotNull BlockHitResult hit) {
         if (level.isClientSide) {
-            ClientHooks.openNodeAngleScreen(this);
+            // 扳手右键：打开 FangSu 万向节点配置界面（平移 / 方向 / 轨道编辑）
+            ClientHooks.openMultiDirectionNodeConfig(this);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
+    /**
+     * 刷子右键：与 MTR 原版 {@code org.mtr.mod.block.BlockNode#onUse2}（客户端持刷子分支）保持一致，
+     * 打开 MTR 自带的轨道形状/功能修改界面（{@code RailShapeModifierScreen}）。
+     * <p>
+     * 原版逻辑（4.0.5 字节码）：
+     * <pre>
+     * if (world.isClient() &amp;&amp; player.isHolding(Items.BRUSH.get())) {
+     *     final ObjectObjectImmutablePair&lt;Rail, BlockPos&gt; pair =
+     *             MinecraftClientData.getInstance().getFacingRailAndBlockPos(false);
+     *     if (pair == null) return ActionResult.FAIL;
+     *     ClientPacketHelper.openRailShapeModifierScreen(pair.left().getHexId());
+     *     return ActionResult.SUCCESS;
+     * }
+     * return ActionResult.FAIL;
+     * </pre>
+     * 注意 {@code Rail.getHexId()} 是 4.0.5 里 {@code TwoPositionsBase} 的 public 方法
+     * （{@code javap org.mtr.core.data.TwoPositionsBase} 可验证），传的是轨道 id 而不是轨道对象，
+     * 因为界面是在客户端另开屏、由服务端数据驱动。
+     */
     @Override
     public InteractionResult whenUseWithBrush(Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (level.isClientSide) {
-            // 尝试获取与此节点连接的轨道：先用视线追踪，失败则从 MTR 数据直接查询
-            org.mtr.core.data.Rail rail = null;
+            // 视线追踪面对的轨道（与原版完全一致）
             final var railAndBlockPos = org.mtr.mod.client.MinecraftClientData.getInstance().getFacingRailAndBlockPos(false);
             if (railAndBlockPos != null) {
-                rail = railAndBlockPos.left();
+                org.mtr.mod.packet.ClientPacketHelper.openRailShapeModifierScreen(railAndBlockPos.left().getHexId());
+                return InteractionResult.SUCCESS;
             }
-            if (rail == null && connected) {
-                // 视线未命中但节点已连接 → 从 MTR 数据中查找连接到本节点的第一条轨道
+            // ---- 以下为 FangSu 便利回退，MTR 原版没有这段 ----
+            // 已连接时，本节点的判定盒（0.1~0.9 的薄片，见 setShape）可能先被点击命中，
+            // 使原版的视线追踪拿不到轨道；此时直接从 MTR 客户端数据里取连接到此节点的第一条轨道。
+            if (connected) {
                 final var connections = org.mtr.mod.client.MinecraftClientData.getInstance()
                         .positionsToRail.get(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos)));
                 if (connections != null && !connections.isEmpty()) {
-                    rail = connections.values().iterator().next();
+                    org.mtr.mod.packet.ClientPacketHelper.openRailShapeModifierScreen(connections.values().iterator().next().getHexId());
+                    return InteractionResult.SUCCESS;
                 }
             }
-            ClientHooks.openNodeAngleScreen(this, rail);
         }
-        return InteractionResult.sidedSuccess(level.isClientSide);
+        // 与 MTR 原版一致：未命中轨道时返回 FAIL
+        return InteractionResult.FAIL;
     }
 
     // ==================== BaseObjBlockEntity 抽象方法 ====================
@@ -504,15 +695,50 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
 
     @Override
     public VoxelShape setCollisionShape(BlockState state) {
+        // 与原版 MTR 节点一致：不参与碰撞
         return Shapes.empty();
     }
 
     @Override
     public VoxelShape setShape(BlockState state) {
         // 已连接时形状极薄，与原版 MTR 节点一致，避免阻挡玩家视线追踪轨道
-        if (connected) {
-            return Shapes.box(0.1, 0, 0.1, 0.9, 0.0625, 0.9);
+        final VoxelShape base = connected
+                ? Shapes.box(0.1, 0, 0.1, 0.9, 0.0625, 0.9)
+                : Shapes.block();
+        return shiftIntoBlock(base);
+    }
+
+    /**
+     * 把点击判定盒按节点平移整体挪动，并钳制在宿主方块内（{@code [0,1]}）。
+     * <p>
+     * 逐轴取「不越出方块」的最大可用位移：整块形状（未连接时的 {@code Shapes.block()}）本身
+     * 已经占满方块，任何方向都挪不动，因此保持不变；连接后的薄片可以跟随 ±0.5 以内的偏移。
+     * 这样点击判定与视觉上的节点位置一致，又不会把 AABB 伸进相邻方块。
+     */
+    private VoxelShape shiftIntoBlock(VoxelShape base) {
+        if (!hasOffset()) {
+            return base;
         }
-        return Shapes.block();
+        final net.minecraft.world.phys.AABB bounds = base.bounds();
+        final double dx = clampShift(offsetX, bounds.minX, bounds.maxX);
+        final double dy = clampShift(offsetY, bounds.minY, bounds.maxY);
+        final double dz = clampShift(offsetZ, bounds.minZ, bounds.maxZ);
+        if (dx == 0.0D && dy == 0.0D && dz == 0.0D) {
+            return base;
+        }
+        return base.move(dx, dy, dz);
+    }
+
+    /** 单轴可用位移：{@code [min, max]} 是形状在当前轴上的范围，结果保证形状仍落在 [0,1] 内。 */
+    private static double clampShift(double requested, double min, double max) {
+        final double lower = -min;
+        final double upper = 1.0D - max;
+        if (requested < lower) {
+            return lower;
+        }
+        if (requested > upper) {
+            return upper;
+        }
+        return requested;
     }
 }

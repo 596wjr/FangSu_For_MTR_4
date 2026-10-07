@@ -11,12 +11,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
-import org.mtr.core.data.Rail;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -59,8 +56,8 @@ public final class ClientHooks {
             = be -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
-    public static BiConsumer<com.fangsu.blockEntities.BlockEntityMultiDirectionNode, Rail> OPEN_NODE_ANGLE_SCREEN
-            = (be, rail) -> {
+    public static Consumer<com.fangsu.blockEntities.BlockEntityMultiDirectionNode> OPEN_MULTI_DIRECTION_NODE_CONFIG
+            = be -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             };
 
@@ -126,14 +123,9 @@ public final class ClientHooks {
         OPEN_ROTATING_RAIL_MODEL_SELECT_SCREEN.accept(be);
     }
 
-    /** 打开角度配置界面（无轨道信息，如扳手右键）。 */
-    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be) {
-        OPEN_NODE_ANGLE_SCREEN.accept(be, null);
-    }
-
-    /** 打开角度配置界面（含轨道信息，如刷子右键）。 */
-    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be, @Nullable Rail rail) {
-        OPEN_NODE_ANGLE_SCREEN.accept(be, rail);
+    /** 打开万向节点配置界面（扳手右键；轨道由界面内部按视线自行解析）。 */
+    public static void openMultiDirectionNodeConfig(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be) {
+        OPEN_MULTI_DIRECTION_NODE_CONFIG.accept(be);
     }
 
     /** 打开图形化积木编辑器。 */

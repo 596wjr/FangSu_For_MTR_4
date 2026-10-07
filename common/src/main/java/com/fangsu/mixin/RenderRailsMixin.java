@@ -112,6 +112,9 @@ public class RenderRailsMixin {
         );
 
         if (rail != null && rail.railMath.getLength() > 0) {
+            // 预览也要带上节点平移：实际建轨走 NodeConnector.createAndSendRail → readRailPose，
+            // 这里用同一份数据，ghost rail 才不会与真正建出来的轨道错开。
+            NodeConnector.applyPose(rail, NodeConnector.readRailPose(mc.level, posStart, posEnd));
             MainRenderer.scheduleRender(QueuedRenderLayer.LINES, (graphicsHolder, offset) -> {
                 rail.railMath.render(
                         (x1, z1, x2, z2, x3, z3, x4, z4, y1, y2) ->
@@ -143,6 +146,11 @@ public class RenderRailsMixin {
         final float startAngle = getNodeAngle(level, posStart, stateStart);
         final float endAngle = getNodeAngle(level, posEnd, stateEnd);
 
+        // 节点平移（P2）：角度按「方块坐标 + 节点偏移」的锚点算，与实际建轨（ItemNodeModifierBaseMixin
+        // → NodeConnector.straightAngle/maxRadiusTangentAngle 的双精度重载）保持同一套几何。
+        final double[] startOffset = NodeConnector.readNodeOffset(level, posStart);
+        final double[] endOffset = NodeConnector.readNodeOffset(level, posEnd);
+
         // 与 ItemNodeModifierBaseMixin.handleRailConnect 的角度语义保持一致：
         // 万向节点已绑定、或普通节点（blockstate 角度即其绑定方向，与原版节点一致）都视为固定；
         // 未绑定的万向节点端取最大半径圆弧切向自适应。预览采用固定角度优先
@@ -152,14 +160,14 @@ public class RenderRailsMixin {
 
         if (!startFixed && !endFixed) {
             // 两端均无固定角度 → 直线
-            final float straight = (float) NodeConnector.straightAngle(posStart, posEnd);
+            final float straight = (float) NodeConnector.straightAngle(posStart, startOffset, posEnd, endOffset);
             return new float[]{straight, straight};
         } else if (!startFixed) {
             // 起点无固定角度，终点固定 → 起点取最大半径圆弧切向
-            return new float[]{(float) NodeConnector.maxRadiusTangentAngle(posEnd, endAngle, posStart), endAngle};
+            return new float[]{(float) NodeConnector.maxRadiusTangentAngle(posEnd, endOffset, endAngle, posStart, startOffset), endAngle};
         } else if (!endFixed) {
             // 终点无固定角度，起点固定 → 终点取最大半径圆弧切向
-            return new float[]{startAngle, (float) NodeConnector.maxRadiusTangentAngle(posStart, startAngle, posEnd)};
+            return new float[]{startAngle, (float) NodeConnector.maxRadiusTangentAngle(posStart, startOffset, startAngle, posEnd, endOffset)};
         } else {
             // 两端均已绑定 → 使用既有角度
             return new float[]{startAngle, endAngle};

@@ -71,13 +71,55 @@ public class ModNetwork {
     }
 
     /**
-     * 服务端：万向节点方向改变后刷新重建连接到该节点的轨道。
-     * 收到客户端 [nodePos, newDirection, otherPos...]，对每个其他端点删除旧轨道并以新方向重建。
+     * 服务端：万向节点方向/平移改变后刷新重建连接到该节点的轨道。
+     * <p>
+     * 载荷（客户端 {@code BlockEntityMultiDirectionNode#refreshConnectedRailsIfNeeded} 写入）：
+     * <pre>
+     *   BlockPos nodePos
+     *   double   newDirection
+     *   double   offsetX / offsetY / offsetZ   ← 姿态随刷新请求同行
+     *   boolean  directionBonded               ← 「旋转绑定：否」时只重建几何、不绑定方向
+     *   int      count
+     *   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
+     *             byte flags, int styleCount, styleCount × String }
+     * </pre>
+     * 姿态（平移）之所以放进刷新包，而不是继续依赖另一个 BE_SYNC 包：服务端重建轨道时读的是
+     * 服务端方块实体里的偏移，两个独立包的到达/应用顺序不定，就会出现「节点已经拖走、轨道留在原地」。
+     * 现在客户端把刚编辑好的偏移直接随请求发来，跨包竞态不复存在。
      */
     private static void handleNodeRefreshRail(
             FriendlyByteBuf buf,
             NetworkManager.PacketContext ctx
     ) {
+        // 全部载荷在主线程排队之前读完：排队回调可能在网络缓冲区释放之后才执行
+        final BlockPos nodePos = buf.readBlockPos();
+        final double newDirection = buf.readDouble();
+        // 姿态与刷新请求同行（布局见方法注释）
+        final double offsetX = buf.readDouble();
+        final double offsetY = buf.readDouble();
+        final double offsetZ = buf.readDouble();
+        final boolean directionBonded = buf.readBoolean();
+        final int count = buf.readInt();
+        final java.util.List<BlockPos> others = new java.util.ArrayList<>();
+        final java.util.List<com.fangsu.util.NodeConnector.RailAttrs> attrsList = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            others.add(buf.readBlockPos());
+            // 解析客户端打包的旧轨道属性，重建时保持限速/单向/类型/样式
+            long speedAtNode = buf.readLong();
+            long speedAtOther = buf.readLong();
+            org.mtr.core.data.Rail.Shape shape = org.mtr.core.data.Rail.Shape.values()[buf.readInt()];
+            int flags = buf.readByte();
+            int styleCount = buf.readInt();
+            java.util.List<String> styles = new java.util.ArrayList<>(styleCount);
+            for (int j = 0; j < styleCount; j++) {
+                styles.add(buf.readUtf());
+            }
+            attrsList.add(new com.fangsu.util.NodeConnector.RailAttrs(
+                    speedAtNode, speedAtOther, shape,
+                    (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0,
+                    styles));
+        }
+
         ctx.queue(() -> {
             ServerPlayer player = (ServerPlayer) ctx.getPlayer();
             if (player == null) return;
@@ -86,13 +128,6 @@ public class ModNetwork {
             //#else
             //$$ Level level = player.level;
             //#endif
-            BlockPos nodePos = buf.readBlockPos();
-            double newDirection = buf.readDouble();
-            int count = buf.readInt();
-            java.util.List<BlockPos> others = new java.util.ArrayList<>();
-            for (int i = 0; i < count; i++) {
-                others.add(buf.readBlockPos());
-            }
 
             BlockEntity be = level.getBlockEntity(nodePos);
             if (!(be instanceof com.fangsu.blockEntities.BlockEntityMultiDirectionNode node)) {
@@ -100,26 +135,38 @@ public class ModNetwork {
                 Main.LOGGER.warn("[NodeConnector] handleNodeRefreshRail: no MultiDirectionNode BE at {}", nodePos);
                 return;
             }
-            // 应用新的绑定方向
-            node.setDirectionBonded(newDirection);
+            // 先落姿态：必须在重建循环之前写入，后面 refreshNodeRail 才会按新偏移算几何
+            // （setNodeOffset 内部已做 ±MAX_OFFSET 钳制，并 setChanged + 方块更新）
+            node.setNodeOffset(offsetX, offsetY, offsetZ);
+            // 应用方向：绑定开关为「是」才绑定；为「否」时只写值，保持未绑定语义
+            if (directionBonded) {
+                node.setDirectionBonded(newDirection);
+            } else {
+                node.setDirectionUnbound(newDirection);
+            }
             node.setConnected(true);
+            // 通知所有客户端最新的方向/绑定/平移状态
+            node.setChanged();
+            level.sendBlockUpdated(nodePos, node.getBlockState(), node.getBlockState(),
+                    net.minecraft.world.level.block.Block.UPDATE_ALL);
 
-            for (BlockPos otherPos : others) {
-                // 解析客户端打包的旧轨道属性，重建时保持限速/单向/类型/样式
-                long speedAtNode = buf.readLong();
-                long speedAtOther = buf.readLong();
-                org.mtr.core.data.Rail.Shape shape = org.mtr.core.data.Rail.Shape.values()[buf.readInt()];
-                int flags = buf.readByte();
-                int styleCount = buf.readInt();
-                java.util.List<String> styles = new java.util.ArrayList<>(styleCount);
-                for (int i = 0; i < styleCount; i++) {
-                    styles.add(buf.readUtf());
+            for (int i = 0; i < others.size(); i++) {
+                final BlockPos otherPos = others.get(i);
+                // refreshNodeRail 现在「先校验后删除」：姿态非法时返回 false 且保留旧轨道
+                final boolean refreshed =
+                        com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrsList.get(i));
+                if (!refreshed) {
+                    Main.LOGGER.warn("[NodeConnector] handleNodeRefreshRail: rail {}->{} NOT rebuilt (invalid pose/geometry), old rail kept",
+                            nodePos, otherPos);
+                    continue;
                 }
-                com.fangsu.util.NodeConnector.RailAttrs attrs = new com.fangsu.util.NodeConnector.RailAttrs(
-                        speedAtNode, speedAtOther, shape,
-                        (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0,
-                        styles);
-                com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrs);
+                // 重建成功后再把两端标回「已连接」：删除旧轨时 MTR 的 PacketDeleteData 会对端点调用
+                // BlockNode.resetRailNode，而 BlockNodeMixin 会把万向节点的 connected 清成 false
+                // （javap 已核对调用链）。上面的 setConnected(true) 在删除之前，会被这一步覆盖，
+                // 于是节点错误地显示为未连接（模型重新出现、「旋转绑定」从锁定变为可改）。
+                // 只在刷新成功时标记：失败分支没有删除动作（validate-before-delete），无需也不应改动状态。
+                com.fangsu.util.NodeConnector.markConnected(level, nodePos);
+                com.fangsu.util.NodeConnector.markConnected(level, otherPos);
             }
         });
     }

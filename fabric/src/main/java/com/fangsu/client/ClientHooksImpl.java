@@ -11,8 +11,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
-import org.mtr.core.data.Rail;
 
 import java.util.List;
 import java.util.Map;
@@ -54,8 +52,9 @@ public final class ClientHooksImpl {
         ));
     }
 
-    public static void openNodeAngleScreen(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be, @Nullable Rail rail) {
-        Minecraft.getInstance().setScreen(new NodeAngleScreen(be, rail, angle -> be.refreshConnectedRailsIfNeeded()));
+    public static void openMultiDirectionNodeConfig(com.fangsu.blockEntities.BlockEntityMultiDirectionNode be) {
+        // 轨道由界面内部按视线/连接数据自行解析（见 MultiDirectionNodeConfigScreen#resolveRail）
+        Minecraft.getInstance().setScreen(new MultiDirectionNodeConfigScreen(be));
     }
 
     public static void openSignConfigScreen(

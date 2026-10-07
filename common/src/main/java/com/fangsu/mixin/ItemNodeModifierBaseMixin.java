@@ -147,19 +147,24 @@ public abstract class ItemNodeModifierBaseMixin {
         final boolean startFixed = startBonded;
         final boolean endFixed = endBonded;
 
+        // 节点平移（P2）：锚点 = 方块坐标 + 节点偏移。角度必须按锚点算，
+        // 否则偏移 0.25 格时算出的"直线方向"与实际画出来的轨道对不上（整数方块坐标丢掉了亚格偏移）。
+        final double[] startOffset = NodeConnector.readNodeOffset(level, posStart);
+        final double[] endOffset = NodeConnector.readNodeOffset(level, endPos);
+
         // 按优先级尝试的候选角度组合（退化时依次降级）
         final java.util.List<double[]> candidates = new java.util.ArrayList<>();
-        final double straight = NodeConnector.straightAngle(posStart, endPos);
+        final double straight = NodeConnector.straightAngle(posStart, startOffset, endPos, endOffset);
         if (!startFixed && !endFixed) {
             // 两端均未绑定 → 直线
             candidates.add(new double[]{straight, straight});
         } else if (!startFixed) {
             // 起点未绑定，终点固定 → 起点取最大半径圆弧切向（平滑衔接），失败退化为直线
-            candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart), endAngle});
+            candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endOffset, endAngle, posStart, startOffset), endAngle});
             candidates.add(new double[]{straight, straight});
         } else if (!endFixed) {
             // 终点未绑定，起点固定 → 终点取最大半径圆弧切向（平滑衔接），失败退化为直线
-            candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos)});
+            candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startOffset, startAngle, endPos, endOffset)});
             candidates.add(new double[]{straight, straight});
         } else {
             // 两端均已绑定 → 使用既有角度。几何不成立且有一端是普通节点（无绑定意图）时，
@@ -167,9 +172,9 @@ public abstract class ItemNodeModifierBaseMixin {
             // （绑定角度是用户明确意图，冲突时提示"无效方向"而非静默改变语义）。
             candidates.add(new double[]{startAngle, endAngle});
             if (!startIsNode) {
-                candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endAngle, posStart), endAngle});
+                candidates.add(new double[]{NodeConnector.maxRadiusTangentAngle(endPos, endOffset, endAngle, posStart, startOffset), endAngle});
             } else if (!endIsNode) {
-                candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startAngle, endPos)});
+                candidates.add(new double[]{startAngle, NodeConnector.maxRadiusTangentAngle(posStart, startOffset, startAngle, endPos, endOffset)});
             }
             if (!startIsNode || !endIsNode) {
                 candidates.add(new double[]{straight, straight});
