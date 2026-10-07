@@ -2,6 +2,7 @@ package com.fangsu.blockEntities;
 
 import com.fangsu.Main;
 import com.fangsu.client.ClientHooks;
+import com.fangsu.mappings.rail.RailPoseExtra;
 import com.fangsu.network.ModNetwork;
 import com.fangsu.render.scripting.util.DynamicModelHolder;
 import com.fangsu.render.sowcer.math.Matrices;
@@ -42,11 +43,14 @@ import static com.fangsu.blocks.ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE;
  *   <li>{@code offsetX/offsetY/offsetZ} (double) — 锚点平移（格，钳制 ±1.0）</li>
  *   <li>{@code pitchDeg} (double) — 俯仰角（度，钳制 ±15），正 = 沿方向前进时上坡</li>
  *   <li>{@code rollDeg} (double) — 翻滚角（度，钳制 ±20），正 = 前进方向右手侧抬高</li>
+ *   <li>{@code superelevation} (bool) — 外轨超高开关，默认 true；<b>只</b>门控滚转对轨道几何的贡献</li>
+ *   <li>{@code rollOffsetM} (double) — 半轨距（米，默认 0.7175，钳制 0.5~1.0），滚转抬升系数</li>
  * </ul>
  * <p>
- * <b>P3 阶段边界</b>：{@code pitchDeg/rollDeg} 目前<b>只</b>用于倾斜节点自身的标记模型，
- * 不写入轨道姿态（{@code NodeConnector.readRailPose / readNodePose} 仍传 0），
- * 轨道截面与车体的倾斜留到下一步「外轨超高」。
+ * <b>P4a 阶段边界</b>：{@code pitchDeg/rollDeg/rollOffsetM} 既倾斜节点自身的标记模型，
+ * 也经 {@code NodeConnector.readRailPose / readNodePose} 写进 {@code RailPoseExtra}，
+ * 由几何内核消费（俯仰 → 三次 Hermite 竖向剖面；滚转 → {@code 半轨距·|sin(roll)|} 中心线抬升）。
+ * 轨道<b>截面</b>与车体的视觉倾斜仍属下一步（P4b）。
  * <p>
  * 未绑定时 {@link #whenRendering()} 让模型绕 Y 轴匀速 360° 旋转；绑定后按 {@code direction} 固定。
  * 已连接时默认隐藏模型，仅手持轨道连接器或刷子时显示 node_connected.obj（与原版 MTR 节点行为一致）。
@@ -80,6 +84,26 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
      * 与 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 及几何内核的 {@code |sin(roll)|} 中心线抬升一致）。
      */
     private static final String KEY_ROLL_DEG = "rollDeg";
+    /**
+     * 外轨超高开关（bool，默认 true）。
+     * <p>
+     * <b>只门控滚转</b>对轨道几何的贡献：关闭时翻滚角照常保存、节点模型照常倾斜，
+     * 但写进 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 的值强制为 0，
+     * 于是几何内核的中心线抬升 {@code 半轨距·|sin(roll)|} 消失（{@code hasRoll()==false}）。
+     * <p>
+     * 纵坡（pitch）是独立功能，<b>不受本开关影响</b>：俯仰角始终写入
+     * {@code RailPoseExtra.pitch1Degrees/pitch2Degrees} 并驱动三次 Hermite 竖向剖面。
+     */
+    private static final String KEY_SUPERELEVATION = "superelevation";
+    /**
+     * 半轨距（米，double，默认 {@link RailPoseExtra#DEFAULT_HALF_GAUGE}，钳制到
+     * [{@value #MIN_HALF_GAUGE}, {@value #MAX_HALF_GAUGE}]）。
+     * <p>
+     * 外轨超高的几何量：滚转时中心线抬高 {@code 半轨距·|sin(翻滚角)|}，使内轨保持标高（ANTE 语义）。
+     * 默认 0.7175 = 1435 mm 标准轨距的一半。整条轨道只取一个值，由贡献端点提供（见
+     * {@code NodeConnector.readRailPose}）。
+     */
+    private static final String KEY_ROLL_OFFSET_M = "rollOffsetM";
 
     /** 锚点平移上限（格）：超过 1 格就会跳出宿主方块，且与相邻方块的语义冲突。 */
     public static final double MAX_OFFSET = 1.0D;
@@ -100,17 +124,32 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     public static final double MAX_ROLL_DEG = 20.0D;
 
     /**
+     * 半轨距下限（米）。
+     * <p>
+     * 0.5 m 对应 1000 mm 窄轨，已经比任何现实铁路都窄；再小则超高抬升不可见。
+     */
+    public static final double MIN_HALF_GAUGE = 0.5D;
+
+    /**
+     * 半轨距上限（米）。
+     * <p>
+     * 1.0 m 对应 2000 mm 宽轨，已超过现实最宽轨距；上限存在的意义是防止误输入把截面尺寸算飞。
+     */
+    public static final double MAX_HALF_GAUGE = 1.0D;
+
+    /**
      * C2S 载荷版本（{@code ModNetwork.BE_SYNC}）。
      * <p>
      * <b>布局只追加不修改</b>：v1 = direction/connected/directionBonded，v2 在其后追加 3 个 double（平移），
-     * v3 再追加 2 个 double（俯仰角 + 翻滚角）。
-     * 接收侧用"剩余可读字节数"判断版本，因此旧客户端（只写 v1 / v2）与新客户端可以互通，
+     * v3 再追加 2 个 double（俯仰角 + 翻滚角），v4 再追加 1 个 boolean + 1 个 double
+     * （外轨超高开关 + 半轨距）。
+     * 接收侧用"剩余可读字节数"判断版本，因此旧客户端（只写 v1 / v2 / v3）与新客户端可以互通，
      * 不会出现读串位。注意 {@code ModNetwork.handleBeSync} 是把 BlockPos 之后的字节
      * 原样包成一个新 buffer 交给 {@link #readC2S}，所以这里的字节数判断是准确的。
      * <p>
-     * 字节数：v1 = 10、v2 = 10 + 24 = 34、v3 = 34 + 16 = 50（不含 BlockPos）。
+     * 字节数：v1 = 10、v2 = 10 + 24 = 34、v3 = 34 + 16 = 50、v4 = 50 + 1 + 8 = 59（不含 BlockPos）。
      */
-    private static final int C2S_PAYLOAD_VERSION = 3;
+    private static final int C2S_PAYLOAD_VERSION = 4;
 
     // ==================== 运行时状态 ====================
     private double direction;
@@ -125,13 +164,36 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     /**
      * 俯仰角（度）：节点处轨道切线的竖向坡角，正 = 沿方向前进时上坡。
      * <p>
-     * <b>P3 阶段边界</b>：本值目前只影响节点自身的标记模型，<b>不</b>写入轨道姿态
-     * （{@code NodeConnector.readRailPose} / {@code readNodePose} 仍传 0），
-     * 轨道截面与车体的实际倾斜留到下一步「外轨超高」。
+     * <b>P4a</b>：本值现在既影响节点自身的标记模型，也写进
+     * {@code RailPoseExtra.pitch1Degrees/pitch2Degrees}，由几何内核的三次 Hermite
+     * 竖向剖面（端点高度 + 端点切线 {@code tan(俯仰角)}）消费，从而真正改变轨道几何。
+     * 轨道截面与车体的视觉倾斜仍属下一步（P4b）。
      */
     private double pitchDeg;
-    /** 翻滚角（度）：绕前进轴旋转，正 = 前进方向右手侧抬高。阶段边界同 {@link #pitchDeg}。 */
+    /**
+     * 翻滚角（度）：绕前进轴旋转，正 = 前进方向右手侧抬高。
+     * <p>
+     * <b>P4a</b>：在 {@link #superelevation} 开关为开时写进
+     * {@code RailPoseExtra.roll1Degrees/roll2Degrees}，由几何内核的中心线抬升
+     * {@code 半轨距·|sin(roll)|} 消费；开关为关时对几何贡献 0（见 {@link #superelevation}）。
+     */
     private double rollDeg;
+
+    /**
+     * 外轨超高开关：只门控滚转对轨道几何的贡献（纵坡不受影响）。
+     * <p>
+     * 默认 true（老存档没有该键 → 取默认值 true）。关闭后翻滚角仍被保存、节点模型仍倾斜，
+     * 但轨道姿态里的 roll 端点值写 0，几何回到无超高的水平截面。
+     */
+    private boolean superelevation = true;
+
+    /**
+     * 半轨距（米）：外轨超高的几何量，滚转时中心线抬高 {@code 半轨距·|sin(roll)|}（ANTE 语义）。
+     * <p>
+     * 默认 {@link RailPoseExtra#DEFAULT_HALF_GAUGE}（= 0.7175，1435 mm 标准轨距的一半），
+     * 存入 NBT 前钳制到 [{@link #MIN_HALF_GAUGE}, {@link #MAX_HALF_GAUGE}]。
+     */
+    private double rollOffsetM = RailPoseExtra.DEFAULT_HALF_GAUGE;
 
     // ==================== 刷新重试状态（客户端） ====================
     /** 客户端 MTR 数据未同步时，角度刷新（refreshConnectedRailsIfNeeded）延迟重试的待处理标记。 */
@@ -313,13 +375,14 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         return value;
     }
 
-    // ==================== 俯仰角 / 翻滚角（P3：节点侧） ====================
+    // ==================== 俯仰角 / 翻滚角（P3 节点侧 → P4a 作用到轨道几何） ====================
 
     /**
      * 节点俯仰角（度，纵坡）。
      * <p>
      * <b>约定</b>：节点处轨道切线的竖向坡角，沿节点方向前进时<b>正 = 上坡</b>（爬升）。
-     * 下一步写进 {@code RailPoseExtra.pitch1Degrees/pitch2Degrees} 时必须沿用该符号。
+     * 该符号被原样写进 {@code RailPoseExtra.pitch1Degrees/pitch2Degrees}，喂给几何内核的
+     * 三次 Hermite 竖向剖面（端点切线 = {@code tan(俯仰角)}）。
      */
     public double getPitchDegrees() {
         return pitchDeg;
@@ -329,7 +392,8 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
      * 节点翻滚角（度，外轨超高）。
      * <p>
      * <b>约定</b>：绕节点前进轴的旋转，<b>正 = 前进方向右手侧抬高</b>。
-     * 与 {@code RailPoseExtra.roll1Degrees/roll2Degrees} 的约定一致（下一步直接复用）。
+     * 该符号被原样写进 {@code RailPoseExtra.roll1Degrees/roll2Degrees}（外轨超高开关开启时），
+     * 由几何内核按 {@code 半轨距·|sin(roll)|} 抬升中心线。
      */
     public double getRollDegrees() {
         return rollDeg;
@@ -360,11 +424,16 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     }
 
     /**
-     * 配置界面的俯仰 / 翻滚写入入口：写数据 + {@code setChanged()} + 立即 BE_SYNC。
+     * 俯仰 / 翻滚写入入口：写数据 + {@code setChanged()} + 立即 BE_SYNC（<b>不发</b>轨道重建包）。
      * <p>
-     * <b>刻意不调用</b> {@link #refreshConnectedRailsIfNeeded()}：P3 阶段这两个角度还没有进入轨道姿态，
-     * 重建出来的轨道与旧轨道逐字节相同，发刷新包只是白做一次「删旧轨 + 建新轨」。
-     * 等下一步把角度写进 {@code RailPoseExtra} 时再在这里补上重建调用。
+     * <b>P4a</b>：两个角度现在会写进轨道姿态（{@code NodeConnector.readRailPose}），轨道几何因此真的会变，
+     * 所以调用方在写完本方法后<b>必须</b>触发一次重建。配置界面刻意<b>不</b>在这里重建，而是走
+     * {@code MultiDirectionNodeConfigScreen#tryRefreshRails()}：
+     * 那条路径会先做几何预检（只看平移 + 方向 + 形状），姿态非法时跳过重建。
+     * 若在这里直接调 {@link #refreshConnectedRailsIfNeeded()}，界面就会绕过预检、多发一次注定失败的重建包。
+     * <p>
+     * {@link #writeC2S} 的载荷是<b>全量</b>（方向 + 绑定 + 平移 + 俯仰 / 翻滚 + 超高开关 + 半轨距），
+     * 所以调用方应先把开关 / 半轨距等其它字段写好，最后调本方法，一次包就带齐全部改动。
      */
     public void setAnglesAndSync(double pitch, double roll) {
         setNodeAngles(pitch, roll);
@@ -399,6 +468,74 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         }
         if (value < -limit) {
             return -limit;
+        }
+        return value;
+    }
+
+    // ==================== 外轨超高开关 + 半轨距（P4a：作用到轨道几何） ====================
+
+    /**
+     * 外轨超高开关是否开启。
+     * <p>
+     * <b>只门控滚转</b>：关闭时 {@code NodeConnector.readRailPose} 把该端点的
+     * {@code roll*Degrees} 写成 0，几何内核的中心线抬升 {@code 半轨距·|sin(roll)|} 随之消失。
+     * 纵坡（pitch）不受影响，照常驱动 Hermite 剖面。
+     */
+    public boolean isSuperelevationEnabled() {
+        return superelevation;
+    }
+
+    /** 半轨距（米）：外轨超高抬升中心线时用的 {@code 半轨距·|sin(roll)|} 系数。 */
+    public double getRollOffsetM() {
+        return rollOffsetM;
+    }
+
+    /**
+     * 写入外轨超高开关，只改数据并 {@code setChanged()}，<b>不</b>发包也不重建。
+     * <p>
+     * 开关会改变轨道几何（门控滚转贡献），所以调用方写完必须触发一次重建；
+     * 配置界面把它与俯仰 / 翻滚 / 半轨距一起写好，再调 {@link #setAnglesAndSync(double, double)}
+     * 发一次全量 BE_SYNC（{@link #writeC2S} 载荷含开关），最后走几何预检 + 重建。
+     */
+    public void setSuperelevation(boolean enabled) {
+        if (this.superelevation == enabled) {
+            return;
+        }
+        this.superelevation = enabled;
+        this.setChanged();
+        this.syncToPeer();
+    }
+
+    /**
+     * 写入半轨距（米，自动钳制到 [{@value #MIN_HALF_GAUGE}, {@value #MAX_HALF_GAUGE}]），
+     * 只改数据并 {@code setChanged()}，<b>不</b>发包也不重建。
+     */
+    public void setRollOffsetM(double metres) {
+        final double clamped = clampHalfGauge(metres);
+        if (clamped == rollOffsetM) {
+            return;
+        }
+        this.rollOffsetM = clamped;
+        this.setChanged();
+        this.syncToPeer();
+    }
+
+    /**
+     * 半轨距钳制：NaN / 无穷归默认值，其余钳制到 [{@value #MIN_HALF_GAUGE}, {@value #MAX_HALF_GAUGE}]。
+     * <p>
+     * 与 {@link #clampAngle(double, double)} 不同，非法输入这里退回
+     * {@link RailPoseExtra#DEFAULT_HALF_GAUGE} 而不是 0：半轨距是「轨距的一半」这种物理尺寸，
+     * 0 会让 {@code RailPoseExtra} 的构造器回退到默认值、与节点存储值不一致，语义上更混乱。
+     */
+    public static double clampHalfGauge(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return RailPoseExtra.DEFAULT_HALF_GAUGE;
+        }
+        if (value < MIN_HALF_GAUGE) {
+            return MIN_HALF_GAUGE;
+        }
+        if (value > MAX_HALF_GAUGE) {
+            return MAX_HALF_GAUGE;
         }
         return value;
     }
@@ -449,6 +586,8 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         //   double   direction
         //   double   offsetX / offsetY / offsetZ
         //   double   pitchDeg / rollDeg          ← P3 新增，紧跟平移之后
+        //   boolean  superelevation              ← P4a 新增：外轨超高开关（只门控滚转）
+        //   double   rollOffsetM                 ← P4a 新增：半轨距（米），滚转抬升系数
         //   boolean  directionBonded
         //   int      count
         //   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
@@ -463,11 +602,15 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         buf.writeDouble(offsetX);
         buf.writeDouble(offsetY);
         buf.writeDouble(offsetZ);
-        // P3：俯仰 / 翻滚也随刷新请求同行。本阶段服务端只把它写进方块实体（节点模型倾斜），
-        // 还不参与建轨几何；放在这里是为了让「界面写入 → 服务端 BE」这条链路一次到位，
-        // 下一步把它接进 RailPoseExtra 时不必再改包布局。
+        // P3：俯仰 / 翻滚也随刷新请求同行，服务端据此写进方块实体（节点模型倾斜）。
+        // P4a：这两个角度现在会经 NodeConnector.readRailPose 进入轨道姿态（俯仰 → Hermite 纵坡剖面，
+        // 翻滚 → 半轨距·|sin| 中心线抬升），所以刷新包里必须带上它们，否则服务端几何与界面不一致。
         buf.writeDouble(pitchDeg);
         buf.writeDouble(rollDeg);
+        // P4a：外轨超高开关与半轨距同样随刷新请求同行、同样进入轨道姿态，理由同上。
+        // 开关只门控滚转：服务端 readRailPose 会在开关为关时把 roll 端点值写成 0。
+        buf.writeBoolean(superelevation);
+        buf.writeDouble(rollOffsetM);
         // 方向是否绑定：旋转绑定开关为「否」时，服务端只按新方向重建几何，不得把方向绑定。
         buf.writeBoolean(directionBonded);
         buf.writeInt(connected.size());
@@ -545,10 +688,17 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         buf.writeDouble(offsetY);
         buf.writeDouble(offsetZ);
         // ---- v3 段（P3 追加字段）----
-        // 与 v2 同样只在尾部追加：v1 / v2 发送方的剩余字节数分别比 v3 少 16 字节，
-        // 接收侧两段检查依次失败，两个角度保持原值（不静默清零）。
+        // 与 v2 同样只在尾部追加：v1 / v2 发送方的负载总长分别比 v3 少 40 / 16 字节
+        // （v1 / v2 / v3 依次为 10 / 34 / 50 字节），
+        // 接收侧两段检查（>= 24、>= 16）依次失败，两个角度保持原值（不静默清零）。
         buf.writeDouble(pitchDeg);
         buf.writeDouble(rollDeg);
+        // ---- v4 段（P4a 追加字段）----
+        // 同样只在尾部追加：v1 / v2 / v3 发送方的负载总长分别比 v4 少 49 / 25 / 9 字节
+        // （v1 / v2 / v3 / v4 依次为 10 / 34 / 50 / 59 字节），
+        // 接收侧逐段检查（>= 24、>= 16、>= 9）依次失败，新增的两个字段保持原值（不静默清零）。
+        buf.writeBoolean(superelevation);
+        buf.writeDouble(rollOffsetM);
         // 版本号本身不写进流（写了会让旧接收方把版本字节当成 direction 的首字节）；
         // C2S_PAYLOAD_VERSION 只在代码内标记当前布局，真实判据是接收侧的字节数检查。
     }
@@ -569,6 +719,12 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         if (buf.readableBytes() >= 16) {
             this.pitchDeg = clampPitch(buf.readDouble());
             this.rollDeg = clampRoll(buf.readDouble());
+        }
+        // v4：再 1 个 boolean + 1 个 double = 9 字节。v1 / v2 / v3 发送方读到这里都是 0 字节，
+        // 直接跳过；只有 v4 发送方才读写外轨超高开关与半轨距。判据同样是剩余字节数。
+        if (buf.readableBytes() >= 9) {
+            this.superelevation = buf.readBoolean();
+            this.rollOffsetM = clampHalfGauge(buf.readDouble());
         }
         this.setChanged();
         syncToPeer();
@@ -591,6 +747,10 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         // 同理总是写俯仰 / 翻滚：客户端区块加载后节点模型要靠它倾斜
         tag.putDouble(KEY_PITCH_DEG, pitchDeg);
         tag.putDouble(KEY_ROLL_DEG, rollDeg);
+        // P4a：外轨超高开关与半轨距也总是写 —— 客户端区块加载后轨道几何与界面都要靠它们，
+        // 且「总是写」让读侧不必判空（与平移/角度一致）。
+        tag.putBoolean(KEY_SUPERELEVATION, superelevation);
+        tag.putDouble(KEY_ROLL_OFFSET_M, rollOffsetM);
     }
 
     @Override
@@ -607,6 +767,13 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
         // 老存档（P3 之前）没有这两个键 → getDouble 返回 0，再经钳制仍是 0
         this.pitchDeg = clampPitch(tag.getDouble(KEY_PITCH_DEG));
         this.rollDeg = clampRoll(tag.getDouble(KEY_ROLL_DEG));
+        // P4a：外轨超高开关<b>默认 true</b>，而 CompoundTag.getBoolean 对缺失键返回 false，
+        // 直接用会把所有老存档静默改成「关闭超高」，所以先用 contains 判断再取值。
+        this.superelevation = !tag.contains(KEY_SUPERELEVATION) || tag.getBoolean(KEY_SUPERELEVATION);
+        // 半轨距缺失（P4a 之前的存档）→ 退回标准轨距的一半，而不是 0（0 会被 RailPoseExtra 兜成默认值）
+        this.rollOffsetM = tag.contains(KEY_ROLL_OFFSET_M)
+                ? clampHalfGauge(tag.getDouble(KEY_ROLL_OFFSET_M))
+                : RailPoseExtra.DEFAULT_HALF_GAUGE;
         triggerAsyncLoading();
     }
 
@@ -711,7 +878,7 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
     }
 
     /**
-     * 节点模型的倾斜约定（P3 起，下一步「外轨超高」必须沿用）。
+     * 节点模型的倾斜约定（P3 起；P4a 把同一批角度接进轨道几何，约定必须严丝合缝地沿用）。
      * <p>
      * <b>角度定义</b>：
      * <ul>
@@ -723,45 +890,57 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
      *       {@code rollLift = 半轨距·|sin(roll)|} 的约定一致。</li>
      * </ul>
      * <b>局部坐标与朝向</b>：{@code node.obj} 是沿局部 X 轴拉长的横杆（局部 X 长 1 格、Z 厚 0.25 格），
-     * 而本类给模型施加的偏航是 {@code rotation = -direction + π/2}。把局部 +X 过一遍该偏航即可验证：
-     * <pre>yaw(rotation) · (1,0,0) = (sin θ, 0, −cos θ)</pre>
-     * 其中 θ = {@code direction}（0=E、90=S）。对 θ=0 得 (0,0,−1) → 北，对 θ=90 得 (1,0,0) → 东，
-     * 两者都逆着 {@code direction} 的罗盘朝向；也就是说<b>局部 +X 与节点前进方向（轨道切线）相反</b>,
-     * 这正是下面俯仰角要取负号的原因。
+     * 而本类给模型施加的偏航是 {@code rotation = -direction + π/2}。把局部 +X / +Z 过一遍该偏航：
+     * <pre>
+     *   yaw(rotation) · (1,0,0) = (sin θ, 0, −cos θ)   // θ = direction（0=E、90=S、180=W、270=N）
+     *   yaw(rotation) · (0,0,1) = (cos θ, 0,  sin θ)   // = 节点前进方向（轨道切线）d
+     * </pre>
+     * 其中 θ = {@code direction}（0=E、90=S）。对 θ=0 得 yaw·(0,0,1) = (1,0,0) → 东 = 前进方向，
+     * yaw·(1,0,0) = (0,0,−1) → 北 = 东向的<b>左侧</b>；也就是说<b>局部 +Z 才是前进轴、局部 +X 指左侧</b>
+     * （世界右手侧 = (−sin θ, 0, cos θ) = d × 上 = −(局部 +X 的世界像)）。
+     * 所以翻滚只能绕局部 Z（前进轴）旋转，俯仰只能绕局部 X（横向轴）旋转 —— 这正是下面两次旋转轴的来源。
      * <p>
      * <b>施加顺序</b>（对 {@code Matrices} 依次调用；{@code rotateX/Y/Z} 是右乘 = 在「当前模型坐标系」里内旋，
      * 因此先偏航定朝向，之后的两次旋转都发生在朝向坐标系内）：
      * <pre>
      *   translate(offset)          // 节点平移 g = (offsetX, offsetY, offsetZ)
      *   rotateY(yaw)               // 偏航 = 方向：R_y(ψ)，ψ = −direction + π/2
-     *   rotateZ(+rollRad)          // 翻滚：R_z(ρ)，ρ = +rollDeg
+     *   rotateZ(−rollRad)          // 翻滚：R_z(ρ)，ρ = −rollDeg（正 rollDeg = 右手侧抬高）
      *   rotateX(−pitchRad)         // 俯仰：R_x(φ)，φ = −pitchDeg
      * </pre>
      * 整体合成 {@code M = T(g) · R_y(ψ) · R_z(ρ) · R_x(φ)} = {@code T · R_yaw · R_roll · R_pitch}，
      * 即世界语义下<b>先 yaw、再 roll、最后 pitch</b>。为什么这两个符号能对上定义，逐个验算：
      * <pre>
-     * 前进方向（切线）t = R_y(ψ)·(−1,0,0)                         = (sin θ, 0, −cos θ)   // θ = direction
-     * 1) 翻滚 R_z(ρ≈0)：R_z(ρ)·(−1,0,0) = (−cos ρ, −sin ρ, 0)
-     *    → 前进向量被压向 −Y ⇒ 前进方向的局部左侧（局部 +Z）下沉、右手侧（局部 −Z）抬升
-     *    → 正 ρ = 右手侧抬高 ✔ 与 rollDeg 定义一致（绕前进轴旋转，t 本身是转轴不动）
-     * 2) 俯仰 R_x(φ)：R_x(φ)·(−1,0,0) = (−1,0,0)（局部 ±X 是转轴）
-     *    被抬起的是局部 −Z（前进方向右手侧），其 Y 分量 = −sin φ
-     *    → 只有 φ &lt; 0 才让前进右手侧上抬 = 节点朝前进方向抬头 = 上坡
+     * 前进方向（切线）t = R_y(ψ)·(0,0,1)                          = (cos θ, 0,  sin θ)   // θ = direction
+     * 1) 翻滚 R_z(ρ)：R_z(ρ)·(1,0,0) = (cos ρ, sin ρ, 0)，即局部 +X（= 前进方向的左侧）
+     *    在 ρ &gt; 0 时被抬起；局部 +Z 是转轴、不动
+     *    → 世界语义下 ρ &gt; 0 抬升的是前进方向的<b>左侧</b>，与「正 = 右手侧抬高」相反
+     *    → 故取 ρ = −rollDeg，正 rollDeg = 右手侧抬高 ✔ 与 rollDeg 定义一致
+     *      （JOML 数值验算：θ=0/45/90/180/270、roll=+10° 时 R_z(+ρ) 一律抬左、
+     *        R_z(−ρ) 一律抬右，且与 railFrameAngle 的 angle = −roll 同侧）
+     * 2) 俯仰 R_x(φ)：R_x(φ)·(0,0,1) = (0, −sin φ, cos φ)（局部 ±X 是转轴）
+     *    前进方向 t 的 Y 分量 = −sin φ
+     *    → 只有 φ &lt; 0 才让前进方向抬头 = 节点朝前进方向抬头 = 上坡
      *    → 故取 φ = −pitchDeg，正 pitchDeg = 上坡 ✔
      * </pre>
-     * 顺带说明：局部 −Z 就是前进方向的右手侧，所以翻滚「抬高右手侧」等价于「抬高模型的 −Z 面」，
-     * 下一步在轨道截面上做外轨超高时用的就是同一条右手侧法向。
+     * 顺带说明：前进方向的右手侧 = −(局部 +X 的世界像) = 局部 −X，所以翻滚「抬高右手侧」
+     * 等价于「抬高模型的 −X 面」，下一步在轨道截面上做外轨超高时用的就是同一条右手侧法向。
      * <p>
-     * <b>P3 阶段边界</b>：以上倾斜只作用于节点自己的标记模型。轨道姿态
-     * （{@code NodeConnector.readRailPose} / {@code readNodePose}）仍固定传 0，
-     * {@code RailPoseExtra} 不会因为这里的值变化 —— 轨道截面与车体的倾斜是下一步的事。
+     * <b>P4a</b>：以上倾斜只作用于节点自己的标记模型（视觉）；轨道<b>几何</b>上的等效效果由
+     * {@code NodeConnector.readRailPose} 把同一批角度写进 {@code RailPoseExtra} 实现 ——
+     * 俯仰角喂给内核的三次 Hermite 竖向剖面，滚转角（外轨超高开关开启时）喂给
+     * {@code 半轨距·|sin(roll)|} 中心线抬升。轨道截面与车体的视觉倾斜仍是下一步（P4b）。
      */
     private void applyNodeModelTilt(Matrices mat) {
         if (!hasTilt()) {
             // 无倾斜时不发旋转调用，保持与 P2 逐字节相同的矩阵（便于回归对比）
             return;
         }
-        mat.rotateZ((float) Math.toRadians(rollDeg));
+        // 翻滚：约定「正 = 前进方向右手侧抬高」（railFrameAngle / RailRollRenderHelper、
+        // RailPoseExtra 与界面文案「翻滚角（右侧抬高为正，度）」都按这条约定）。
+        // 局部 +X 是前进方向的左侧，rotateZ(+roll) 抬的却是它 → 必须取 −rollDeg 才抬右手侧。
+        // 该符号已用 JOML 数值验算（θ=0/45/90/180/270，roll=+10°），请勿改回正号。
+        mat.rotateZ((float) -Math.toRadians(rollDeg));
         mat.rotateX((float) -Math.toRadians(pitchDeg));
     }
 

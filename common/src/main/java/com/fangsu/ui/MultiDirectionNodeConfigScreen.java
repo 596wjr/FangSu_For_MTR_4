@@ -37,20 +37,30 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>左列 = 平移（X / Y / Z 偏移）</li>
  *   <li>右列 = 旋转（俯仰角 / 方向 / 翻滚角）与「旋转绑定」开关</li>
- *   <li>两列下方 = 轨道编辑（占满两列宽度）</li>
+ *   <li>两列下方 = 轨道编辑（占满两列宽度）：轨道形状 / 半径 / 样式 + 外轨超高开关 + 半轨距</li>
  *   <li>顶部输入模式切换与底部「保存并退出」按钮横跨两列</li>
  * </ul>
  * 双列是为了避免单列纵向堆叠导致的频繁滚动。
  * <p>
- * <b>角度语义</b>（P3）：俯仰角（±15°）正 = 沿节点方向前进时上坡；翻滚角（±20°）正 = 前进方向
- * 右手侧抬高（外轨超高约定）。两者目前只倾斜节点自身的标记模型，<b>不</b>写入轨道姿态、
- * 也不参与几何预检（几何预检只看水平姿态：平移 + 方向）。
+ * <b>角度语义</b>（P3 定义，P4a 起作用于轨道几何）：俯仰角（±15°）正 = 沿节点方向前进时上坡；
+ * 翻滚角（±20°）正 = 前进方向右手侧抬高（外轨超高约定）。两者都会写进
+ * {@code RailPoseExtra}：俯仰驱动几何内核的三次 Hermite 竖向剖面，
+ * 翻滚（外轨超高开关开启时）驱动 {@code 半轨距·|sin(roll)|} 的中心线抬升。
+ * 节点自身标记模型的倾斜仍由 {@code BlockEntityMultiDirectionNode#applyNodeModelTilt} 负责。
+ * 轨道<b>截面</b>与车体的视觉倾斜属于下一步（P4b），本界面不涉及。
  * <p>
- * <b>写入顺序</b>：{@code BE_SYNC} → {@code NODE_REFRESH_RAIL}。姿态（平移）现在也随刷新请求一起发送，
- * 所以顺序不再影响正确性（见 {@code ModNetwork.handleNodeRefreshRail} 的说明），这里保持固定顺序只为数据流统一。
+ * <b>外轨超高开关</b>只门控翻滚对轨道几何的贡献（关 → 几何里的 roll 端点值写 0）；
+ * 俯仰是独立功能（纵坡），<b>不</b>受该开关影响。半轨距（米）是同一个几何公式里的系数，
+ * 因此开关关闭时它整行灰显不可编辑。
  * <p>
- * <b>几何预检</b>：每次改动平移或旋转都会用 {@link NodeConnector#hasValidGeometry} 做一次纯客户端、
+ * <b>写入顺序</b>：{@code BE_SYNC} → {@code NODE_REFRESH_RAIL}。姿态（平移 / 俯仰 / 翻滚 / 开关 / 半轨距）
+ * 也随刷新请求一起发送，所以顺序不再影响正确性（见 {@code ModNetwork.handleNodeRefreshRail} 的说明），
+ * 这里保持固定顺序只为数据流统一。
+ * <p>
+ * <b>几何预检</b>：每次改动姿态都会用 {@link NodeConnector#hasValidGeometry} 做一次纯客户端、
  * 不发包的几何预检；预检不通过时显示红字警告并<b>跳过</b>重建请求，避免触发一次注定失败的重建。
+ * 预检只看<b>水平</b>姿态（平移 + 方向 + 形状），俯仰 / 翻滚 / 半轨距<b>不</b>参与，
+ * 所以它们再极端也不会触发红字或阻断重建（{@link #refreshPoseValidity()} 保持原样）。
  */
 public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
 
@@ -98,6 +108,19 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     private static final float ROLL_MAX = 20f;
     private static final float ROLL_STEP = 0.5f;
 
+    /**
+     * 半轨距（米）取值区间与步进，与 {@link BlockEntityMultiDirectionNode#MIN_HALF_GAUGE} /
+     * {@link BlockEntityMultiDirectionNode#MAX_HALF_GAUGE} 保持一致（界面与 BE 双重钳制）。
+     * <p>
+     * 步进 0.005 m = 5 mm：轨距按毫米调整，5 mm 足够精细，又不会因为太小而拖不准。
+     * 注意默认值 0.7175 不是 0.005 的整数倍：控件初值原样显示 {@code 0.7175}，
+     * 用户一旦拖动就吸附到 0.005 的网格（例如 0.7200），这是刻意的 ——
+     * 默认值要保持「标准轨距的一半」这一精确语义，而手动调整用整齐的毫米网格更方便。
+     */
+    private static final float HALF_GAUGE_MIN = (float) BlockEntityMultiDirectionNode.MIN_HALF_GAUGE;
+    private static final float HALF_GAUGE_MAX = (float) BlockEntityMultiDirectionNode.MAX_HALF_GAUGE;
+    private static final float HALF_GAUGE_STEP = 0.005f;
+
     /** 半径步进按钮（沿用旧 NodeAngleScreen / 原版 RailModifierScreen 的六档）。 */
     private static final String[] RADIUS_BUTTON_LABELS = {"-10", "-1", "-.1", "+.1", "+1", "+10"};
     private static final double[] RADIUS_BUTTON_STEPS = {-10, -1, -0.1, 0.1, 1, 10};
@@ -114,12 +137,24 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     /**
      * 俯仰角（度，纵坡）。正 = 沿方向前进时上坡。
      * <p>
-     * <b>P3 阶段</b>：只写进节点（BE 数据 + 节点模型倾斜），不会触发轨道重建，
-     * 也不参与 {@link #refreshPoseValidity()} 的几何预检。
+     * <b>P4a</b>：写进节点后会经 {@code NodeConnector.readRailPose} 进入轨道姿态，
+     * 驱动几何内核的三次 Hermite 竖向剖面，因此改动<b>必须</b>触发轨道重建
+     * （走 {@link #applyRailPose()} → {@link #tryRefreshRails()}）。
+     * 它<b>不</b>参与 {@link #refreshPoseValidity()} 的几何预检（预检只看平移 + 方向 + 形状）。
      */
     private double pitchDeg;
-    /** 翻滚角（度，外轨超高）。正 = 前进方向右手侧抬高。阶段约束同 {@link #pitchDeg}。 */
+    /** 翻滚角（度，外轨超高）。正 = 前进方向右手侧抬高。重建与预检约束同 {@link #pitchDeg}。 */
     private double rollDeg;
+    /**
+     * 外轨超高开关（镜像 BE 的 {@code superelevation}，默认 true）。
+     * <p>
+     * 只门控<b>滚转</b>对轨道几何的贡献（关 → {@code RailPoseExtra} 的 roll 端点值写 0，
+     * 中心线抬升 {@code 半轨距·|sin(roll)|} 消失）；纵坡不受影响。
+     * 关闭时「半轨距」一行灰显不可编辑，因为此时它没有任何几何效果。
+     */
+    private boolean superelevation;
+    /** 半轨距（米，镜像 BE 的 {@code rollOffsetM}）：外轨超高抬升中心线的系数。 */
+    private double halfGaugeM;
     /**
      * 旋转绑定开关（仅右列，锁定时恒为 true）。
      * <p>
@@ -149,6 +184,8 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         this.direction = node.getDirectionDegrees();
         this.pitchDeg = node.getPitchDegrees();
         this.rollDeg = node.getRollDegrees();
+        this.superelevation = node.isSuperelevationEnabled();
+        this.halfGaugeM = node.getRollOffsetM();
         // 已连接的节点方向必须保持绑定：开关强制为「是」且不可点击（见 addRotationBindRow）
         this.rotationBonded = node.isDirectionBonded() || node.isConnected();
         this.rail = resolveRail(node);
@@ -333,13 +370,54 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
         addEntry(buttonFlip, y);
         y += 24;
 
-        // 外轨超高：本步骤只占位（active=false）。节点侧的俯仰 / 翻滚编辑已在右列接好，
-        // 但「让角度真正作用到轨道截面与车体」属于下一步，所以这里仍然保持灰显不接线。
-        final Button buttonSuperelevation = addButton(leftX, y, fullWidth, 20,
-                ComponentHelper.translatable("ui.fangsu.multi_direction_node.superelevation"), b -> {
-                });
-        buttonSuperelevation.active = false;
+        // 外轨超高：开启 / 关闭开关（P4a 起真正接线）。它只门控滚转对轨道几何的贡献
+        // （关 → RailPoseExtra 的 roll 端点值写 0，内核的 半轨距·|sin(roll)| 中心线抬升消失）；
+        // 俯仰（纵坡）是独立功能，无论开关如何都照常生效。
+        final Component superelevationLabel = ComponentHelper.translatable(
+                "ui.fangsu.multi_direction_node.superelevation",
+                ComponentHelper.translatable(superelevation
+                        ? "ui.fangsu.multi_direction_node.superelevationOn"
+                        : "ui.fangsu.multi_direction_node.superelevationOff"));
+        final Button buttonSuperelevation = addButton(leftX, y, fullWidth, 20, superelevationLabel,
+                b -> toggleSuperelevation());
         addEntry(buttonSuperelevation, y);
+        y += 24;
+
+        // 半轨距（米）：外轨超高抬升中心线的系数，只有开关开启时才可编辑。
+        y = addHalfGaugeRow(leftX, y, fullWidth, superelevation);
+    }
+
+    /**
+     * 「半轨距」一行：标签 + 米制数值控件（滑块 / 输入框跟随全局输入模式），
+     * 步进 {@link #HALF_GAUGE_STEP}，区间 [{@link #HALF_GAUGE_MIN}, {@link #HALF_GAUGE_MAX}]。
+     * <p>
+     * <b>外轨超高开关关闭时整行灰显、不可编辑</b>：半轨距只在外轨超高（滚转抬升）里起作用，
+     * 开关关闭时改它没有任何几何效果，留着可点只会误导用户。
+     * <p>
+     * 灰显用「换成 {@code active = false} 的按钮」，而不是给滑块置 {@code active = false}：
+     * {@code SliderWidget.mouseClicked / mouseDragged} 直接转发给内部的 {@code AbstractSliderButton}，
+     * 内层仍是 active，外层置 false 既挡不住点击、也不改变内层的绘制颜色；按钮才是真正点不动的控件。
+     * 开关翻转会 {@code requestRebuild()}，本行随之在「可编辑」与「灰显」之间切换。
+     */
+    private int addHalfGaugeRow(int areaLeft, int y, int rowWidth, boolean enabled) {
+        final Component label = ComponentHelper.translatable("ui.fangsu.multi_direction_node.halfGauge");
+        if (!enabled) {
+            addEntry(createTextLabel(areaLeft, y, label, TextLabel.Align.LEFT, 0x888888, false), y);
+            y += 8;
+            final Button disabled = addButton(areaLeft, y, Math.min(rowWidth, 80), 20,
+                    ComponentHelper.literal(formatHalfGauge()), b -> {
+                    });
+            disabled.active = false;
+            addEntry(disabled, y);
+            return y + 22;
+        }
+        return addAxisRow(areaLeft, y, rowWidth, label, (float) halfGaugeM,
+                HALF_GAUGE_MIN, HALF_GAUGE_MAX, HALF_GAUGE_STEP, this::setHalfGauge, this::applyRailPose);
+    }
+
+    /** 灰显态下显示当前半轨距，例如 {@code 0.7175 M}（与滑块模式的数值格式一致，保留 4 位小数）。 */
+    private String formatHalfGauge() {
+        return String.format("%.4f M", halfGaugeM);
     }
 
     /**
@@ -358,9 +436,10 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
      * 预留按钮（当前界面已不再使用）。
      * <p>
      * P3 之前「旋转 X / Z」用本方法摆放两行灰显占位按钮；P3 把它们换成了真实可编辑的
-     * 俯仰角 / 翻滚角（见 {@link #addAxisRow}），轨道编辑区的「外轨超高」按钮则仍直接
-     * 设 {@code active = false}，不需要这个方法。保留实现是为了后续再出现「预留功能」
-     * 时不必重写（语法上与 {@link #addAxisRow} 的行高保持一致）。
+     * 俯仰角 / 翻滚角（见 {@link #addAxisRow}），P4a 又把轨道编辑区的「外轨超高」按钮接成了
+     * 真开关（{@link #addHalfGaugeRow} 里的灰显用的是 {@code active = false} 的按钮，
+     * 但那是「开关关闭时的半轨距」这一行的正常状态，不需要这个方法）。
+     * 保留实现是为了后续再出现「预留功能」时不必重写（语法上与 {@link #addAxisRow} 的行高保持一致）。
      */
     @SuppressWarnings("unused")
     private int addReservedRow(int areaLeft, int y, int rowWidth, Component label) {
@@ -469,18 +548,57 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     }
 
     /**
-     * 俯仰 / 翻滚实时写入：写数据 + 立即 BE_SYNC，<b>不</b>请求轨道重建。
+     * 半轨距（米）：钳制到 [{@link #HALF_GAUGE_MIN}, {@link #HALF_GAUGE_MAX}]，
+     * 并与 BE 的 {@code clampHalfGauge} 走同一条钳制（NaN / 无穷 → 标准轨距的一半）。
+     */
+    private void setHalfGauge(float value) {
+        halfGaugeM = BlockEntityMultiDirectionNode.clampHalfGauge(Mth.clamp(value, HALF_GAUGE_MIN, HALF_GAUGE_MAX));
+    }
+
+    /**
+     * 翻转外轨超高开关：立即写 BE + 重建轨道，并重建界面。
      * <p>
-     * <b>P3 阶段边界</b>：这两个角度还没有写进轨道姿态（{@code RailPoseExtra}），
-     * 重建出来的轨道与旧轨逐字节相同，发 {@code NODE_REFRESH_RAIL} 只会白做一次删+建，
-     * 所以这里刻意不调用 {@link #tryRefreshRails()}，也就自然不会经过几何预检。
-     * 下一步把角度接进轨道姿态时，再在这里补上 {@code tryRefreshRails()}。
+     * 重建界面是必须的：开关只门控滚转，翻转后「半轨距」一行要在可编辑 / 灰显之间切换，
+     * 而控件是在 {@link #buildScrollableContent} 里按当前开关状态构造的。
+     */
+    private void toggleSuperelevation() {
+        superelevation = !superelevation;
+        applyRailPose();
+        requestRebuild();
+    }
+
+    /**
+     * 俯仰 / 翻滚实时写入。现在直接走 {@link #applyRailPose()}（写 BE → BE_SYNC → 预检 → 重建）。
+     * <p>
+     * <b>P4a</b>：这两个角度会经 {@code NodeConnector.readRailPose} 进入轨道姿态
+     * （俯仰 → 内核的三次 Hermite 纵坡剖面；翻滚 → {@code 半轨距·|sin(roll)|} 中心线抬升），
+     * 轨道几何真的会变，所以 P3 时期「刻意不重建」的理由已经不成立，本方法必须触发重建。
      * <p>
      * 与平移 / 方向一致：即时保存（不点「保存并退出」也生效）。
      */
     private void applyAngles() {
+        applyRailPose();
+    }
+
+    /**
+     * 轨道姿态（俯仰 / 翻滚 / 外轨超高开关 / 半轨距）的整体写入路径，与
+     * {@link #applyOffsets()} / {@link #applyDirection()} 完全同构：
+     * <ol>
+     *   <li>写 BE 数据（四个 setter 都是纯数据 + {@code setChanged()}，不发包）；</li>
+     *   <li>用 {@code setAnglesAndSync} 发一次 BE_SYNC —— v4 载荷是全量
+     *       （方向 + 绑定 + 平移 + 俯仰 / 翻滚 + 开关 + 半轨距），所以开关与半轨距也一起同步过去；</li>
+     *   <li>{@link #tryRefreshRails()}：先几何预检再重建。预检只看平移 + 方向 + 形状
+     *       （{@code refreshPoseValidity} → {@code NodeConnector.hasValidGeometry}），
+     *       俯仰 / 翻滚 / 半轨距<b>不</b>参与，因此这些值再极端也不会触发红字或阻断重建。</li>
+     * </ol>
+     */
+    private void applyRailPose() {
         if (node == null) return;
+        // 先写开关与半轨距（纯数据），最后 setAnglesAndSync 发的那一个包才带得上它们（载荷是全量）
+        node.setSuperelevation(superelevation);
+        node.setRollOffsetM(halfGaugeM);
         node.setAnglesAndSync(pitchDeg, rollDeg);
+        tryRefreshRails();
     }
 
     /**
@@ -566,15 +684,19 @@ public class MultiDirectionNodeConfigScreen extends BasicConfigScreen {
     }
 
     /**
-     * 关闭前兜底：把方向与平移整体再写一次，避免切换输入模式等重建过程丢失最后一次输入。
+     * 关闭前兜底：把方向、平移与轨道姿态整体再写一次，避免切换输入模式等重建过程丢失最后一次输入。
      * <p>
      * 顺序仍是 BE_SYNC → NODE_REFRESH_RAIL；姿态非法时同样跳过重建（旧轨道保持不动）。
+     * P4a 起俯仰 / 翻滚 / 外轨超高开关 / 半轨距也在这里落盘（它们都会进入轨道姿态）。
      */
     private void save() {
         if (node == null) return;
         node.setNodeOffset(offsetX, offsetY, offsetZ);
-        // P3：俯仰 / 翻滚一起兜底落盘（不触发轨道重建，理由见 applyAngles）
-        node.setAnglesAndSync(pitchDeg, rollDeg);
+        // P4a：俯仰 / 翻滚 + 外轨超高开关 + 半轨距一起兜底落盘（纯数据）；
+        // 全量 BE_SYNC 由下面的 writeDirection() 发出（v4 载荷包含这四个字段）。
+        node.setNodeAngles(pitchDeg, rollDeg);
+        node.setSuperelevation(superelevation);
+        node.setRollOffsetM(halfGaugeM);
         writeDirection();
         tryRefreshRails();
         Main.debug("[MultiDirectionNode] node config saved at {}", node.getBlockPos());

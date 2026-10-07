@@ -79,6 +79,8 @@ public class ModNetwork {
      *   double   newDirection
      *   double   offsetX / offsetY / offsetZ   ← 姿态随刷新请求同行
      *   double   pitchDeg / rollDeg            ← P3 新增：俯仰 / 翻滚（正上坡 / 右手侧抬高）
+     *   boolean  superelevation                ← P4a 新增：外轨超高开关（只门控滚转贡献）
+     *   double   rollOffsetM                   ← P4a 新增：半轨距（米），滚转抬升系数
      *   boolean  directionBonded               ← 「旋转绑定：否」时只重建几何、不绑定方向
      *   int      count
      *   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
@@ -88,8 +90,11 @@ public class ModNetwork {
      * 服务端方块实体里的偏移，两个独立包的到达/应用顺序不定，就会出现「节点已经拖走、轨道留在原地」。
      * 现在客户端把刚编辑好的偏移直接随请求发来，跨包竞态不复存在。
      * <p>
+     * <b>P4a</b>：俯仰 / 翻滚 / 外轨超高开关 / 半轨距都会写进轨道姿态
+     * （{@code NodeConnector.readRailPose} → {@code RailPoseExtra}），所以它们同样必须随刷新请求同行；
+     * 服务端先把它们落进方块实体，随后的 {@code refreshNodeRail} 才会按客户端刚编辑的几何重建。
+     * <p>
      * 本包<b>不做版本探测</b>：客户端与服务端永远运行同一份 FangSu 构建，字段顺序必须与写侧逐字对应。
-     * 俯仰 / 翻滚在 P3 只是被写进服务端方块实体（供节点模型倾斜），还不参与建轨几何。
      */
     private static void handleNodeRefreshRail(
             FriendlyByteBuf buf,
@@ -105,6 +110,9 @@ public class ModNetwork {
         // P3：俯仰 / 翻滚（读侧顺序必须与写侧一致）
         final double pitchDeg = buf.readDouble();
         final double rollDeg = buf.readDouble();
+        // P4a：外轨超高开关 + 半轨距（同样必须与写侧逐字对应）
+        final boolean superelevation = buf.readBoolean();
+        final double rollOffsetM = buf.readDouble();
         final boolean directionBonded = buf.readBoolean();
         final int count = buf.readInt();
         final java.util.List<BlockPos> others = new java.util.ArrayList<>();
@@ -145,9 +153,13 @@ public class ModNetwork {
             // 先落姿态：必须在重建循环之前写入，后面 refreshNodeRail 才会按新偏移算几何
             // （setNodeOffset 内部已做 ±MAX_OFFSET 钳制，并 setChanged + 方块更新）
             node.setNodeOffset(offsetX, offsetY, offsetZ);
-            // P3：俯仰 / 翻滚同样先落盘（钳制 ±15° / ±20°）。本阶段它们不参与几何，
-            // 只是让服务端 BE 与客户端编辑结果一致、节点模型在别的客户端也倾斜。
+            // P3：俯仰 / 翻滚同样先落盘（钳制 ±15° / ±20°）。P4a 起它们会经 readRailPose 进入轨道姿态，
+            // 所以必须在重建循环之前写入，重建才会按新纵坡 / 超高算几何。
             node.setNodeAngles(pitchDeg, rollDeg);
+            // P4a：外轨超高开关与半轨距（半轨距内部钳制 0.5~1.0、NaN/Inf → 默认）。
+            // 开关为「关」时，随后 readRailPose 会把 roll 端点值写成 0，几何不再有中心线抬升。
+            node.setSuperelevation(superelevation);
+            node.setRollOffsetM(rollOffsetM);
             // 应用方向：绑定开关为「是」才绑定；为「否」时只写值，保持未绑定语义
             if (directionBonded) {
                 node.setDirectionBonded(newDirection);
@@ -162,7 +174,7 @@ public class ModNetwork {
 
             for (int i = 0; i < others.size(); i++) {
                 final BlockPos otherPos = others.get(i);
-                // refreshNodeRail 现在「先校验后删除」：姿态非法时返回 false 且保留旧轨道
+                // refreshNodeRail 先校验候选几何、再做写操作：姿态非法时返回 false 且旧轨道原样保留
                 final boolean refreshed =
                         com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrsList.get(i));
                 if (!refreshed) {
@@ -170,11 +182,11 @@ public class ModNetwork {
                             nodePos, otherPos);
                     continue;
                 }
-                // 重建成功后再把两端标回「已连接」：删除旧轨时 MTR 的 PacketDeleteData 会对端点调用
-                // BlockNode.resetRailNode，而 BlockNodeMixin 会把万向节点的 connected 清成 false
-                // （javap 已核对调用链）。上面的 setConnected(true) 在删除之前，会被这一步覆盖，
-                // 于是节点错误地显示为未连接（模型重新出现、「旋转绑定」从锁定变为可改）。
-                // 只在刷新成功时标记：失败分支没有删除动作（validate-before-delete），无需也不应改动状态。
+                // 重建成功后再把两端标回「已连接」。刷新路径现在**不删除旧轨**（见
+                // NodeConnector.refreshNodeRail：同 hexId 的 UPDATE_DATA 在 core 里是原地替换），
+                // 因此不会触发 MTR 的 resetRailNode 复位；这里保留一次显式标记，
+                // 让「轨道存在 → 节点已连接」这条不变式在本方法内自明（服务端仍是 connected 的权威来源）。
+                // 只在刷新成功时标记：失败分支没有做任何写操作，无需也不应改动状态。
                 com.fangsu.util.NodeConnector.markConnected(level, nodePos);
                 com.fangsu.util.NodeConnector.markConnected(level, otherPos);
             }

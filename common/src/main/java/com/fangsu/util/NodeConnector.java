@@ -34,7 +34,7 @@ import java.util.UUID;
  *   <li>{@link #getDirectionDegrees(Level, BlockPos)} / {@link #isConnectedAt(Level, BlockPos)} — 读取节点状态</li>
  *   <li>{@link #findConnectedEndpoints(BlockPos)} — 客户端查找连接到节点位置的其他端点</li>
  *   <li>{@link #createAndSendRail} — 服务端按连接器类型（限速/单向/站台/侧线/折返）构建并派发铁轨</li>
- *   <li>{@link #refreshNodeRail} — 服务端先校验候选几何、再删除旧轨道并按旧轨道属性（限速/单向/类型/样式）重建</li>
+ *   <li>{@link #refreshNodeRail} — 服务端先校验候选几何、再按旧轨道属性（限速/单向/类型/样式）原地替换旧轨道</li>
  *   <li>{@link #hasValidGeometry} — 客户端安全（不发包、不改世界）的几何预检，供配置界面红字警告使用</li>
  * </ul>
  */
@@ -190,17 +190,136 @@ public final class NodeConnector {
     }
 
     /**
-     * 读取某方块位置处的「单端附加姿态」：只有端点 1 带平移，端点 2 为零。
+     * 读取某方块位置处的万向节点方块实体；非万向节点（普通 MTR 节点或别的方块）返回 {@code null}。
+     * <p>
+     * 客户端 / 服务端都安全：只做一次 {@code getBlockEntity} 查询，不发包、不改世界、不加载区块。
+     * 姿态读取（平移 / 俯仰 / 翻滚 / 外轨超高开关 / 半轨距）共用本方法，避免每个量各查一次方块实体。
+     */
+    @Nullable
+    private static BlockEntityMultiDirectionNode multiDirectionNodeAt(Level level, BlockPos pos) {
+        if (level == null || pos == null) {
+            return null;
+        }
+        final BlockEntity be = level.getBlockEntity(pos);
+        return be instanceof BlockEntityMultiDirectionNode node ? node : null;
+    }
+
+    /**
+     * 端点的滚转贡献（外轨超高开关的唯一作用点）。
+     * <p>
+     * <b>开关关闭时返回 0</b>，于是 {@code RailPoseExtra.hasRoll()} 为 false，
+     * 几何内核的中心线抬升 {@code 半轨距·|sin(roll)|} 整体消失，轨道回到无超高的水平截面。
+     * 节点自身仍保留 {@code rollDeg}（模型照常倾斜、界面照常显示），只是不再参与轨道几何。
+     * <p>
+     * <b>俯仰（纵坡）不经过本方法</b>：纵坡是独立功能，无论开关如何都照常进入
+     * {@code RailPoseExtra.pitch1Degrees/pitch2Degrees}（它另有自己的节点帧 → 轨道帧换算，
+     * 见 {@link #readRailPose}）。
+     */
+    private static double rollContribution(BlockEntityMultiDirectionNode node) {
+        return node.isSuperelevationEnabled() ? node.getRollDegrees() : 0.0D;
+    }
+
+    // ==================== 翻滚角的节点帧 → 轨道帧换算（P4b-3 / FIX 3） ====================
+    //
+    // 注：俯仰（纵坡）有<b>同类但不等价</b>的换算，见 readRailPose 里的「俯仰角的节点帧 → 轨道帧换算」。
+    // 两者都乘 frameSign，但俯仰还必须再乘一个 pSign（参数方向相对 position1→position2 的符号），
+    // 因为内核直接消费俯仰作为参数系斜率，而翻滚在渲染层还有 railFrameAngle 补那一步。
+    //
+    // 问题：节点的翻滚角是「节点自身方向 d 的右手侧抬高」，但轨道几何 / 渲染的翻滚参数是
+    // 定义在**轨道参数系**上的（渲染帧约定：roll > 0 抬升 Rail.position1 → Rail.position2
+    // 的右手侧，见 RailRollRenderHelper 的「滚转符号约定」）。而 MTR 的
+    // Rail.position1/position2 是**玩家建轨顺序**，且 MTR 用
+    // reversePositions = position1.compareTo(position2) > 0（Position 按 x → y → z 字典序）
+    // 决定 railMath 的参数方向 —— 也就是说轨道参数方向与「节点的方向」毫无关系，
+    // 同一条连线换个方向建、或换个端点先点，参数方向就可能整个反过来。
+    // 于是同一个节点的同一个翻滚角，会在两条相邻轨道上落到相反的一侧（Symptom 2 的 V 形扭结）。
+    //
+    // 解法：把节点方向投影到轨道方向上，用投影的符号把角度换算到轨道帧。定义
+    //     dx/dz = 从 Rail.position1 指向 Rail.position2 的水平向量（= 建轨方向 A，两端同用）
+    //     s     = sign(dot(d, A)) —— d 与 A 同向 → +1，反向 → -1
+    // 依据：渲染帧抬升的是 A 的右手侧；在 position1 端 A 是**出发**方向、在 position2 端 A 是
+    // **到达**方向，两者都是「轨道参数增大方向」，所以两端都用同一个 A，不需要再翻符号。
+    // （若改为「各端点指向另一端」的向量，position2 端会等于 -A，符号正好反掉 —— 那是错的。）
+    // 换算后的值随即由 FangSuRailMath 的 firstIsPosition1 交换写进内核剖面，
+    // 因此 com/fangsu/mappings/rail/* 内核保持逐字节不变。
+    //
+    // 不变量：本换算只是对单个端点值乘 ±1，
+    //   - 正是 ±1 所以「是否为 0」「|·| 的大小比较」全部不变 → 下面的半轨距权威判据不受影响；
+    //   - 内核的中心线抬升 半轨距·|sin(roll)| 对符号不敏感 → 几何抬升量不变；
+    //   - 只有渲染帧的「抬哪一侧」会跟着变，这正是本修复的目的。
+
+    /** 方向投影判定的死区：|dot| 小于它时视为「节点方向与轨道方向近乎垂直」，不翻转符号。 */
+    private static final double FRAME_SIGN_DEADBAND = 1.0E-3D;
+
+    /** 上述死区回退是否已经报告过（一次性日志，避免刷屏）。 */
+    private static boolean warnedFrameSignDeadband = false;
+
+    /**
+     * 单端点帧符号：把「节点自身方向的右手侧抬高」换算成「轨道参数系的某一侧抬高」。
+     *
+     * @param dx   从 {@code Rail.position1} 指向 {@code Rail.position2} 的水平向量 X 分量（不必归一化）
+     * @param dz   同上，Z 分量
+     * @param node 该端点的万向节点（{@code null} 表示普通 MTR 节点 / 非节点方块 → 恒为 +1）
+     * @return {@code +1}（节点方向与轨道方向同向）或 {@code -1}（反向）；
+     *         两者近乎垂直（|dot| &lt; {@link #FRAME_SIGN_DEADBAND}）时回退为 {@code +1}，
+     *         并打印一次性 warn 让「从没转过方向的节点」可见。
+     *         <p>
+     *         <b>这是本换算唯一改动符号的地方</b>，不要在别处再翻一次。
+     */
+    private static double frameSign(double dx, double dz, BlockEntityMultiDirectionNode node) {
+        if (node == null) {
+            return 1.0D;
+        }
+        final double len = Math.hypot(dx, dz);
+        if (len < 1.0E-9D) {
+            return 1.0D;
+        }
+        // 节点方向的水平单位向量：getDirectionDegrees() 是与 straightAngle 同一套的罗盘角
+        // （0=E、90=S、180=W、270=N，即 atan2(dz, dx) 的度数），所以方向向量就是 (cos, sin)。
+        final double nodeRadians = Math.toRadians(node.getDirectionDegrees());
+        final double dot = (dx / len) * Math.cos(nodeRadians) + (dz / len) * Math.sin(nodeRadians);
+        if (Math.abs(dot) < FRAME_SIGN_DEADBAND) {
+            // 节点方向与轨道方向近乎垂直（例如从未旋转绑定过的节点，方向仍是默认 0=东，
+            // 却连了一条南北向的轨道）。此时「节点方向的右手侧」在轨道横断面上没有明确对应，
+            // 保持角度符号不变（等价于按参数方向右侧处理），并一次性报出来。
+            if (!warnedFrameSignDeadband) {
+                warnedFrameSignDeadband = true;
+                com.fangsu.Main.LOGGER.warn("[NodeRoll] 万向节点 {} 的方向 {}° 与轨道方向近乎垂直（dot={}），"
+                                + "翻滚角无法换算到轨道帧，按 +1 处理；请检查该节点是否已旋转绑定到轨道方向",
+                        node.getBlockPos(), node.getDirectionDegrees(), dot);
+            }
+            return 1.0D;
+        }
+        return Math.signum(dot);
+    }
+
+    /**
+     * 读取某方块位置处的「单端附加姿态」：只有端点 1 的字段被填充，端点 2 全零。
      * 调用方需要自行决定这个姿态属于轨道的哪一端（见 {@link #readRailPose}）。
+     * <p>
+     * <b>P4a</b>：俯仰 / 翻滚 / 半轨距从这里开始进入轨道姿态：
+     * <ul>
+     *   <li>{@code pitch1Degrees} = 节点 {@code pitchDeg} 换算到内核参数系后的值
+     *       （{@code frameSign · pSign · pitchDeg}，见 {@link #readRailPose} 方法尾部的推导）——
+     *       驱动几何内核的三次 Hermite 竖向剖面（纵坡），<b>不受外轨超高开关影响</b>；</li>
+     *   <li>{@code roll1Degrees} = 节点 {@code rollDeg} —— 但外轨超高开关关闭时写 0（见
+     *       {@link #rollContribution}），驱动内核的 {@code 半轨距·|sin(roll)|} 中心线抬升；</li>
+     *   <li>{@code halfGauge} = 节点 {@code rollOffsetM}（半轨距，米）。</li>
+     * </ul>
+     * 非万向节点（普通 MTR 节点 / 空位置）贡献全零 + 默认半轨距，即 {@link RailPoseExtra#DEFAULT}，
+     * 完全等价于原版行为。
      */
     public static RailPoseExtra readNodePose(Level level, BlockPos pos) {
-        final double[] offset = readNodeOffset(level, pos);
+        final BlockEntityMultiDirectionNode node = multiDirectionNodeAt(level, pos);
+        if (node == null) {
+            return RailPoseExtra.DEFAULT;
+        }
         return new RailPoseExtra(
-                offset[0], offset[1], offset[2],
+                node.getOffsetX(), node.getOffsetY(), node.getOffsetZ(),
                 0.0D, 0.0D, 0.0D,
-                RailPoseExtra.DEFAULT_HALF_GAUGE,
-                0.0D, 0.0D,
-                0.0D, 0.0D
+                node.getRollOffsetM(),
+                node.getPitchDegrees(), 0.0D,
+                rollContribution(node), 0.0D
         );
     }
 
@@ -212,20 +331,127 @@ public final class NodeConnector {
      * {@code RailPoseExtra} 的端点语义对应，无需关心 MTR 内部的 {@code reversePositions}
      * （那段对调只影响 {@code railMath} 的参数化方向，由 {@code FangSuRailMath} 处理）。
      * <p>
-     * <b>阶段边界（P3）</b>：这里只搬运平移，俯仰 / 滚转字段<b>固定传 0</b> ——
-     * 万向节点 BE 虽然已经存储了 {@code pitchDeg/rollDeg}（供节点模型倾斜），
-     * 但把它们写进轨道姿态（外轨超高 / 纵坡在轨道截面与车体上生效）是下一步的事。
-     * 在这条线上填非零值之前，{@code RailPoseExtra} 与轨道几何必须保持 P2 的行为。
+     * <b>P4a：端点 → 姿态字段的完整映射</b>
+     * <ul>
+     *   <li>{@code pitch1/2Degrees} = 该端点万向节点的 {@code pitchDeg}（非万向节点端点 → 0），
+     *       <b>但先按 {@link #frameSign} 与「参数方向符号」{@code pSign} 换算到内核参数系</b>
+     *       （推导见方法尾部「俯仰角的节点帧 → 轨道帧换算」）。写入内核的三次 Hermite 纵坡剖面
+     *       （端点切线 = {@code tan(轨道帧俯仰角)}），<b>不受外轨超高开关门控</b>。</li>
+     *   <li>{@code roll1/2Degrees} = 该端点万向节点的 {@code rollDeg}，<b>但当该端点的外轨超高开关
+     *       关闭时写 0</b>（{@link #rollContribution}）。开关是按节点存的，所以门控也是逐端点的：
+     *       一端关、另一端开时，只有关闭端的滚转被抹掉，另一端照常贡献。
+     *       写 0 使 {@code hasRoll()} 为 false，内核的 {@code 半轨距·|sin(roll)|} 抬升随之消失。
+     *       <p>
+     *       <b>P4b-3 / FIX 3</b>：写入前还要乘一次「端点帧符号」{@link #frameSign}，
+     *       把「节点自身方向的右手侧抬高」换算成「轨道参数系的某一侧抬高」。
+     *       纯 ±1 缩放：0 / 非 0 与 {@code |·|} 的全部比较都不受影响，
+     *       但对渲染的「抬哪一侧」是决定性的（修 Symptom 2 的 V 形扭结）。
+     *       注意 {@code roll1Degrees/roll2Degrees} 因此是<b>轨道帧</b>的值，
+     *       不再是节点方向的原始角度符号。</li>
+     *   <li>{@code halfGauge} = <b>整条轨道只取一个值</b>（{@code RailPoseExtra} 就是这么设计的）。
+     *       取值来源是「<b>实际贡献滚转</b>的端点」，贡献判定复用 {@link #rollContribution}：
+     *       该端点 {@code superelevation} 开关打开<b>且</b> {@code rollDeg != 0}。规则：
+     *       <ul>
+     *         <li>只有一端贡献滚转 → 用那一端的 {@code rollOffsetM}；</li>
+     *         <li>两端都贡献滚转 → 用 {@code |rollDeg|} 较大的一端（{@code |rollContribution|} 等价）；
+     *             两者完全相等时取端点 1（{@code Rail.position1}）；</li>
+     *         <li>两端都不贡献（纯普通 MTR 轨道、或开关全关 / 角度全为 0）→
+     *             {@link RailPoseExtra#DEFAULT_HALF_GAUGE}。</li>
+     *       </ul>
+     *       因此结果<b>不依赖两个端点的传入顺序</b>，唯一例外是两端 {@code |rollDeg|} <b>完全相等</b>
+     *       的平局情形，那时固定取端点 1 以保证确定性。
+     *       注意判据是「实际贡献」而非「是不是万向节点」：端点 1 的开关关着而端点 2 开着时，
+     *       用的是端点 2 的半轨距，避免「已关闭节点的轨距」去配「另一端的滚转」。</li>
+     * </ul>
+     * <b>默认姿态不变式</b>：两端都是普通 MTR 节点、或万向节点的俯仰 / 翻滚都是 0 时，
+     * 返回的姿态仍满足 {@link RailPoseExtra#isDefault()}（{@code isDefault()} 不看 {@code halfGauge}），
+     * 因此 {@code RailMixin} 会继续安装 MTR 原生 {@code RailMath}，原版轨道几何逐位不变。
      */
     public static RailPoseExtra readRailPose(Level level, BlockPos pos1, BlockPos pos2) {
-        final double[] offset1 = readNodeOffset(level, pos1);
-        final double[] offset2 = readNodeOffset(level, pos2);
+        final BlockEntityMultiDirectionNode node1 = multiDirectionNodeAt(level, pos1);
+        final BlockEntityMultiDirectionNode node2 = multiDirectionNodeAt(level, pos2);
+        final double[] offset1 = node1 == null
+                ? new double[]{0.0D, 0.0D, 0.0D}
+                : new double[]{node1.getOffsetX(), node1.getOffsetY(), node1.getOffsetZ()};
+        final double[] offset2 = node2 == null
+                ? new double[]{0.0D, 0.0D, 0.0D}
+                : new double[]{node2.getOffsetX(), node2.getOffsetY(), node2.getOffsetZ()};
+        // 翻滚贡献：复用 rollContribution（开关关闭 → 0），再乘端点帧符号换算到轨道参数系
+        // （见 frameSign 上方的「翻滚角的节点帧 → 轨道帧换算」）。
+        // 换算只乘 ±1，所以下面半轨距判据里的「是否为 0」「|·| 大小比较」全部不变。
+        // 末尾的 + 0.0D 只为把 「0 × (-1) = -0.0」 归一成 +0.0：
+        // 默认姿态必须逐位等于 RailPoseExtra.DEFAULT（isDefault() 对 ±0 都成立，但序列化出来
+        // 的字符串会差一个负号，没必要引入这种差异）。
+        final double frameDx = (pos2.getX() + offset2[0]) - (pos1.getX() + offset1[0]);
+        final double frameDz = (pos2.getZ() + offset2[2]) - (pos1.getZ() + offset1[2]);
+        final double contribution1 = node1 == null
+                ? 0.0D
+                : frameSign(frameDx, frameDz, node1) * rollContribution(node1) + 0.0D;
+        final double contribution2 = node2 == null
+                ? 0.0D
+                : frameSign(frameDx, frameDz, node2) * rollContribution(node2) + 0.0D;
+        // 半轨距：整条轨道一个值，只从「实际贡献滚转」的端点取，与传入顺序无关
+        // （唯一例外：两端 |rollDeg| 完全相等时固定取端点 1，保证确定性）
+        final double halfGauge;
+        if (contribution1 != 0.0D && contribution2 == 0.0D) {
+            // 只有端点 1 贡献滚转
+            halfGauge = node1.getRollOffsetM();
+        } else if (contribution2 != 0.0D && contribution1 == 0.0D) {
+            // 只有端点 2 贡献滚转（端点 1 开关关闭或其角度为 0 时不再抢占权威值）
+            halfGauge = node2.getRollOffsetM();
+        } else if (contribution1 != 0.0D) {
+            // 两端都贡献滚转：|rollDeg| 大者优先；完全相等时取端点 1
+            halfGauge = Math.abs(contribution1) >= Math.abs(contribution2)
+                    ? node1.getRollOffsetM()
+                    : node2.getRollOffsetM();
+        } else {
+            // 两端都不贡献滚转：纯普通 MTR 轨道，或开关全关 / 角度全为 0
+            halfGauge = RailPoseExtra.DEFAULT_HALF_GAUGE;
+        }
+        // ==================== 俯仰角的节点帧 → 轨道帧换算（D-A 修复） ====================
+        //
+        // 与翻滚同理：节点的俯仰角定义在「沿节点自身方向 d 前进时上坡」这个帧里
+        // （见 BlockEntityMultiDirectionNode.applyNodeModelTilt 的推导），而内核的三次 Hermite
+        // 纵坡剖面的端点切线就是 dh/d(参数)，参数方向 P 与节点的 d 毫无关系。因此写进内核前必须换算。
+        //
+        // 推导（P = 内核参数方向）：
+        //   1) MTR 的 reversePositions = position1.compareTo(position2) > 0 为真时，Rail 用
+        //      (position2, angle2, position1, angle1) 构造 RailMath，而内核参数 0 端就是
+        //      firstPosition、参数增大方向由 firstPosition 指向 secondPosition，所以
+        //        P = pSign · (position1→position2)，  pSign = (pos1.compareTo(pos2) <= 0 ? +1 : -1)
+        //      （Position.compareTo 与 BlockPos.compareTo 同为 x→y→z 字典序，已用 javap 核对）。
+        //   2) 「沿 d 上坡」的物理含义是：沿 d 方向水平前进时高度上升。以参数表示即
+        //        sign(dh/d(param)) = sign(dot(d, P)) · sign(pitch)
+        //      而 dot(d, P) = pSign · dot(d, chord) = pSign · frameSign。
+        //   3) 于是 slope(内核端点切线) = frameSign(frameDx, frameDz, node) · pSign · tan(pitch)。
+        //
+        // 为什么 pSign 不能折进 frameSign（也不该由 FangSuRailMath 的 firstIsPosition1 代劳）：
+        //   - firstIsPosition1 只负责「哪个端点拥有哪个 pitch 字段」的配对，不改变角度所在帧；
+        //   - 翻滚的帧约定以「position1→position2 的右手侧」为基准（RailPoseExtra / 渲染层），
+        //     它到内核参数系的换算由渲染层的 railFrameAngle 的 (p ? 1 : -1) 补上，所以翻滚<b>只</b>乘
+        //     frameSign，绝不能再乘 pSign（否则两处 pSign 互相抵消）；
+        //   - 俯仰则被内核直接当作「参数系端点斜率」消费，没有 railFrameAngle 那一步，
+        //     所以 pSign 必须在<b>这里</b>补，且只补一次。
+        //
+        // 数值验证（build/tmp/pitchfix，真实内核 + 真实 FangSuRailMath 映射）：
+        //   forward/reverse × 正/负俯仰 共 8 个端点，修复前有 4 个端点斜率符号与节点方向相反
+        //   （反向建轨时<b>两端都反</b>），修复后 8/8 全部满足 sign(dh/ds(d)) = sign(pitch)。
+        //
+        // 不变量：本换算同样只是对每个端点值乘 ±1，
+        //   - 0 仍是 0（末尾 + 0.0D 把 0 × -1 = -0.0 归一成 +0.0，默认姿态逐位等于 DEFAULT）；
+        //   - |pitch| 不变 → 内核 hermite 开关与剖面幅度不变；
+        //   - 不触碰翻滚，也不触碰半轨距判据。
+        final double pSign = pos1.compareTo(pos2) <= 0 ? 1.0D : -1.0D;
         return new RailPoseExtra(
                 offset1[0], offset1[1], offset1[2],
                 offset2[0], offset2[1], offset2[2],
-                RailPoseExtra.DEFAULT_HALF_GAUGE,
-                0.0D, 0.0D,
-                0.0D, 0.0D
+                halfGauge,
+                // 俯仰：纵坡不受外轨超高开关影响；按上面的推导换算到内核参数系（非万向节点端点贡献 0）
+                node1 == null ? 0.0D : frameSign(frameDx, frameDz, node1) * node1.getPitchDegrees() * pSign + 0.0D,
+                node2 == null ? 0.0D : frameSign(frameDx, frameDz, node2) * node2.getPitchDegrees() * pSign + 0.0D,
+                // 翻滚：按各端点自己的外轨超高开关门控（关闭 → 0）
+                contribution1,
+                contribution2
         );
     }
 
@@ -238,14 +464,16 @@ public final class NodeConnector {
      * 把某个端点标记为「已连接」：万向节点写 BE 的 {@code connected}，普通 MTR 节点写 blockstate
      * 的 {@code IS_CONNECTED}。
      * <p>
-     * <b>为什么刷新轨道后必须再调一次</b>：MTR 删除轨道时，{@code PacketDeleteData} 会对所有受影响端点
-     * 调用 {@code BlockNode.resetRailNode}（已用 javap 核对到
+     * <b>何时需要它</b>：MTR 删除轨道时会调用 {@code BlockNode.resetRailNode}（已用 javap 核对到
      * {@code PacketDeleteData.lambda$runServerInbound$0 → BlockNode.resetRailNode}），
-     * 而本项目的 {@code BlockNodeMixin} 把万向节点的 {@code connected} 也一并清成 false。
-     * 轨道刷新是「先删旧轨、再建新轨」，所以若只在删除**之前**置 true，删除时的复位会把它覆盖掉，
-     * 结果是：节点被错误地显示为未连接 —— 模型重新出现（旋转或固定），
-     * 界面里「旋转绑定」也会因为 {@code isConnected()} 为假而从锁定变为可改。
-     * 因此每成功重建一条轨道后，都要把这条轨道两端的端点重新标为已连接。
+     * 本项目的 {@code BlockNodeMixin} 把万向节点的 {@code connected} 也一并清成 false。
+     * 该复位只对「删除后已无轨道」的端点发生，而且整条回调链是<b>延迟</b>执行的
+     * （{@code Init.sendMessageC2S → minecraftServer.execute}），所以凡是「新建/重建出轨道」的路径
+     * 都应在成功之后显式标记一次，让 {@code connected} 与「节点确实有轨道」保持一致。
+     * <p>
+     * <b>注意</b>：轨道刷新（{@link #refreshNodeRail}）走的是原地替换、不删除旧轨，
+     * 因此它本身不会触发 {@code resetRailNode}；调用方仍会补一次本方法，
+     * 使「轨道存在 → 节点已连接」这条不变式在任何时序下都成立（服务端始终是 {@code connected} 的权威）。
      */
     public static void markConnected(Level level, BlockPos pos) {
         if (level == null || pos == null) {
@@ -427,10 +655,10 @@ public final class NodeConnector {
     }
 
     /**
-     * 服务端：删除并重建连接 nodePos 与 otherPos 的单条轨道。
+     * 服务端：原地替换连接 nodePos 与 otherPos 的单条轨道（<b>不删除</b>，理由见方法末尾）。
      * <p>
      * nodePos 为万向节点且已绑定新方向 newDirection；otherPos 为另一端（万向节点或普通节点）。
-     * 删除旧轨道后，以新方向与另一端既有角度，按旧轨道属性（限速/单向/类型/样式）重建，
+     * 以新方向与另一端既有角度，按旧轨道属性（限速/单向/类型/样式）重建并原地替换旧轨道，
      * 保证角度调整后轨道外观与功能不丢失。
      * <p>
      * 另一端角度语义与 {@code com.fangsu.mixin.ItemNodeModifierBaseMixin#handleRailConnect} 一致：
@@ -443,7 +671,7 @@ public final class NodeConnector {
      * @param newDirection 万向节点新方向（度）
      * @param otherPos     另一端位置
      * @param attrs        旧轨道属性（速度按端点位置对号入座，单向轨的 0 限速端跟随位置）
-     * @return true = 已删除旧轨道并派发新轨道；false = 所有候选几何都非法，<b>旧轨道原样保留</b>
+     * @return true = 已派发替换轨道；false = 所有候选几何都非法，<b>旧轨道原样保留</b>
      */
     public static boolean refreshNodeRail(Level level, BlockPos nodePos, double newDirection, BlockPos otherPos, RailAttrs attrs) {
         if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return false;
@@ -473,7 +701,8 @@ public final class NodeConnector {
 
         // ---- 先构建并校验候选轨道，全部非法就原样保留旧轨道 ----
         // 旧实现是「先按 hexId 删旧轨、再试几何」：几何非法时旧轨已经没了，
-        // 轨道凭空消失且无法恢复（日志只留一句 invalid geometry）。删除必须推迟到候选通过校验之后。
+        // 轨道凭空消失且无法恢复（日志只留一句 invalid geometry）。
+        // 因此所有写操作（派发替换轨道）都必须排在候选校验通过之后。
         Rail candidate = buildRailForAngles(p1, p2, deg1, deg2, attrs, styles);
         if (candidate == null && !otherIsMultiDirectionNode) {
             // 另一端是普通节点（无绑定意图）时按旧行为降级：取最大半径圆弧切向与本端平滑衔接
@@ -485,16 +714,25 @@ public final class NodeConnector {
             com.fangsu.Main.LOGGER.warn("[NodeConnector] refreshNodeRail failed (invalid geometry) {}->{}: existing rail kept", nodePos, otherPos);
             return false;
         }
-        // 附加姿态必须在派发前写入；写入后几何仍须有效，否则同样放弃（绝不先删后建）
+        // 附加姿态必须在派发前写入；写入后几何仍须有效，否则同样放弃
         RailPoseExtraHolder.apply(candidate, pose);
         if (!candidate.isValid()) {
             com.fangsu.Main.LOGGER.warn("[NodeConnector] refreshNodeRail failed (invalid geometry after pose) {}->{}: existing rail kept", nodePos, otherPos);
             return false;
         }
 
-        // 候选轨道通过全部校验，此刻才真正删除旧轨道并派发新轨道
-        org.mtr.mod.packet.PacketDeleteData.sendDirectlyToServerRailId(
-                serverWorld, org.mtr.core.data.TwoPositionsBase.getHexId(p1, p2));
+        // 候选轨道通过全部校验，此刻才真正替换旧轨道。
+        // 这里**只发 UPDATE_DATA，刻意不再先发 DELETE_DATA**：同一个 hexId 的轨道在 core 的
+        // UpdateDataRequest.update 里是「先 remove 旧对象、再 add 新对象」的原地替换
+        // （javap 4.0.5 权威 jar：lambda$update$6 -> update(...) -> ObjectSet.remove(existing) + add(new)），
+        // 所以删除纯属多余，却带来一个致命副作用：
+        //   DeleteDataRequest.delete 只把「删除后 positionsToRail 里已无轨道」的位置回报给 resetRailNode，
+        //   于是**只有一条轨道**的节点会在删旧轨的那一刻被误判为「已无轨道」而被复位 connected；
+        //   更糟的是这条回报是延迟回调（Init.sendMessageC2S -> minecraftServer.execute），
+        //   落地时间晚于 ModNetwork.handleNodeRefreshRail 里的 markConnected，
+        //   复位反而覆盖了刚写好的「已连接」。
+        //   现象即：单轨节点平移/旋转后模型变回未连接、界面「旋转绑定」被解锁。
+        // 不删就没有这个误报，也不再有「旧轨已删、新轨未到」的瞬时无轨窗口。
         PacketUpdateData.sendDirectlyToServerRail(serverWorld, candidate);
         com.fangsu.Main.LOGGER.info("[NodeConnector] refreshed rail {}->{} hexId={}", nodePos, otherPos, candidate.getHexId());
         return true;

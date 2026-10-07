@@ -2,6 +2,7 @@ package com.fangsu.mtr.rail;
 
 import com.fangsu.mappings.rail.RailGeometryCore;
 import com.fangsu.mappings.rail.RailPoseExtra;
+import com.fangsu.mappings.rail.RailRollProfile;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
 import org.mtr.core.data.RailMath;
@@ -23,8 +24,8 @@ import org.mtr.libraries.it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair
  * <b>端点顺序</b>：MTR 的 {@code Rail} 构造器在 {@code position1.compareTo(position2) > 0}
  * （{@code reversePositions}）时，用 {@code (position2, angle2, position1, angle1)} 的顺序
  * 构造 {@code RailMath}，因此 {@code railMath} 的参数 0 端点不一定是 {@code Rail.position1}。
- * 本类通过 {@code firstIsPosition1} 把 {@code RailPoseExtra} 的两端偏移映射到「railMath 参数顺序」
- * 上，调用方（{@code RailMixin}）负责传入与 MTR 完全一致的端点顺序。
+ * 本类通过 {@code firstIsPosition1} 把 {@code RailPoseExtra} 的两端偏移、俯仰与滚转剖面映射到
+ * 「railMath 参数顺序」上，调用方（{@code RailMixin}）负责传入与 MTR 完全一致的端点顺序。
  * <p>
  * <b>未覆盖的方法</b>：{@code RailMath.isValid()} 是包级私有（{@code boolean isValid()}），
  * 无法从 {@code com.fangsu.*} 覆盖。本类构造时调用了 {@code super(...)}，因此父类
@@ -89,6 +90,19 @@ public class FangSuRailMath extends RailMath {
         final double offsetZ2 = firstIsPosition1 ? pose.offsetZ2 : pose.offsetZ1;
         final double pitch1 = Math.toRadians(firstIsPosition1 ? pose.pitch1Degrees : pose.pitch2Degrees);
         final double pitch2 = Math.toRadians(firstIsPosition1 ? pose.pitch2Degrees : pose.pitch1Degrees);
+        // 滚转剖面：必须与 pitch1/pitch2 走同一套端点映射。剖面以「归一化位置 = 参数 / 长度」为键
+        // （见 RailRollProfile / RailGeometryCore.getRollRadians），所以键 0 对应的是 railMath
+        // 参数 0 的端点（firstPosition），并不恒等于 Rail.position1。原样传 pose.toRollProfile()
+        // 会把 roll1Degrees 永远钉在参数 0 端：在 position1.compareTo(position2) > 0
+        // （即 firstIsPosition1 == false）的轨道上，两端的滚转被接反 —— 中心线抬升、截面网格与
+        // 车体虽然彼此一致，却把滚转施加到了错误的端点。
+        // 依据：MTR 上游更高版本的 Rail 构造器在 reversePositions 时，同样把
+        // tiltAngleDegrees1/tiltAngleDegrees2 随 position1/position2 一起对调
+        // （见 mtr4 参考源码 Rail.java:144-154）；4.0.5 的字节码里该处还没有倾斜参数，
+        // 但端点对调规则完全一致（javap 已核实：reversePositions 时构造 RailMath(position2, angle2, position1, angle1)）。
+        final RailRollProfile rollProfile = firstIsPosition1
+                ? pose.toRollProfile()
+                : RailRollProfile.twoPointDegrees(pose.roll2Degrees, pose.roll1Degrees);
 
         // 锚点 = 方块坐标 + 节点偏移；+0.5 的格心平移留在内核的位置公式里，
         // 所以偏移为 0 时内核与 4.0.5 逐位一致（内核注释与 parity harness 都基于这一点）。
@@ -110,7 +124,7 @@ public class FangSuRailMath extends RailMath {
                 firstAngle.angleRadians, secondAngle.angleRadians,
                 shapeMode(shape), verticalRadius,
                 pitch1, pitch2,
-                pose.toRollProfile(), pose.halfGauge
+                rollProfile, pose.halfGauge
         );
 
         // 包围盒：MTR 的 minX..maxZ 是用未平移的整数锚点采样出来的，平移后必须整体取内核结果，
