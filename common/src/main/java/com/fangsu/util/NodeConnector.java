@@ -671,9 +671,11 @@ public final class NodeConnector {
      * @param newDirection 万向节点新方向（度）
      * @param otherPos     另一端位置
      * @param attrs        旧轨道属性（速度按端点位置对号入座，单向轨的 0 限速端跟随位置）
+     * @param tiltCarry    客户端随刷新请求带来的「作者授权逐轨道超高」；{@code null} 或
+     *                     {@link RailTiltCarry#hasRailTilt()} 为 false 时保持节点派生值
      * @return true = 已派发替换轨道；false = 所有候选几何都非法，<b>旧轨道原样保留</b>
      */
-    public static boolean refreshNodeRail(Level level, BlockPos nodePos, double newDirection, BlockPos otherPos, RailAttrs attrs) {
+    public static boolean refreshNodeRail(Level level, BlockPos nodePos, double newDirection, BlockPos otherPos, RailAttrs attrs, RailTiltCarry tiltCarry) {
         if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return false;
         final org.mtr.mapping.holder.ServerWorld serverWorld = new org.mtr.mapping.holder.ServerWorld(serverLevel);
 
@@ -697,7 +699,17 @@ public final class NodeConnector {
         final double otherAngle = getDirectionDegrees(level, otherPos);
         final double deg2 = normalizeDegrees(otherAngle + (Angle.similarFacing((float) angleDifference, (float) otherAngle) ? 180 : 0));
 
-        final RailPoseExtra pose = readRailPose(serverWorld.data, nodePos, otherPos);
+        // 节点派生姿态：平移 / 俯仰 / 节点翻滚 / 半轨距都按服务端方块实体里的当前值重算。
+        // 注意它<b>不含</b>逐轨道超高（readRailPose 只产出节点派生数据，四点全为「未授权」）。
+        RailPoseExtra pose = readRailPose(serverWorld.data, nodePos, otherPos);
+        // 再合并客户端随刷新请求带来的「作者授权逐轨道超高」：
+        // 只覆盖三点剖面与半轨距，上面刚派生的平移 / 俯仰 / 节点翻滚原样保留。
+        // 未授权（tiltCarry 为 null 或 hasRailTilt 为 false）时不合并，本轨道完全跟随节点值 ——
+        // 这正是「清除」之后应有的行为，因此「未授权」必须由显式标记表达，
+        // 不能用 0/0/0 当哨兵（0/0/0 是「作者显式授权成水平」，要保持不倾斜）。
+        if (tiltCarry != null) {
+            pose = tiltCarry.mergeInto(pose);
+        }
 
         // ---- 先构建并校验候选轨道，全部非法就原样保留旧轨道 ----
         // 旧实现是「先按 hexId 删旧轨、再试几何」：几何非法时旧轨已经没了，

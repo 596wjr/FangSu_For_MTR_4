@@ -35,12 +35,26 @@ import org.mtr.libraries.it.unimi.dsi.fastutil.doubles.DoubleDoubleImmutablePair
  */
 public class FangSuRailMath extends RailMath {
 
+    /**
+     * 判定「某一段几何退化（没有两半径接缝）」的长度阈值，单位格。
+     * 取 1e-6 而非 0：内核的段长是两个 t 边界之差，浮点误差下可能得到 1e-15 这种"名义非零"的
+     * 退化段，那样算出的 {@code count1 / length} 会退化成 0 或 1，中间控制点被挤到端点上。
+     */
+    private static final double DEGENERATE_SEGMENT_LENGTH = 1.0E-6D;
+
     /** 版本无关几何内核。 */
     private final RailGeometryCore core;
     /** 形状（父类字段私有，这里单独留一份用于 {@link #getShape()}）。 */
     private final Rail.Shape shape;
     /** 写入时使用的附加姿态（已按 railMath 参数顺序取值，仅作诊断/后续渲染扩展用）。 */
     private final RailPoseExtra pose;
+    /**
+     * railMath 参数 0 端是否就是 {@code Rail.position1}（构造时由调用方按 MTR 的端点顺序给出）。
+     * <p>
+     * 只给 {@link #middleBreakpointFraction(RailMath)} 用：接缝位置是在「railMath 参数空间」里算出来的，
+     * 而这个实例是唯一同时知道几何与端点顺序的地方，换算成 {@code position1 → position2} 空间要靠它。
+     */
+    private final boolean firstIsPosition1;
 
     /**
      * 一次性日志标记：主钩子（{@code RailMixin} 的 {@code NEW RailMath} 重定向）是否已经
@@ -80,6 +94,7 @@ public class FangSuRailMath extends RailMath {
         super(firstPosition, firstAngle, secondPosition, secondAngle, shape, verticalRadius);
         this.shape = shape;
         this.pose = pose;
+        this.firstIsPosition1 = firstIsPosition1;
 
         // 端点偏移：按 firstIsPosition1 把语义两端的偏移映射到 railMath 的参数顺序
         final double offsetX1 = firstIsPosition1 ? pose.offsetX1 : pose.offsetX2;
@@ -90,19 +105,11 @@ public class FangSuRailMath extends RailMath {
         final double offsetZ2 = firstIsPosition1 ? pose.offsetZ2 : pose.offsetZ1;
         final double pitch1 = Math.toRadians(firstIsPosition1 ? pose.pitch1Degrees : pose.pitch2Degrees);
         final double pitch2 = Math.toRadians(firstIsPosition1 ? pose.pitch2Degrees : pose.pitch1Degrees);
-        // 滚转剖面：必须与 pitch1/pitch2 走同一套端点映射。剖面以「归一化位置 = 参数 / 长度」为键
-        // （见 RailRollProfile / RailGeometryCore.getRollRadians），所以键 0 对应的是 railMath
-        // 参数 0 的端点（firstPosition），并不恒等于 Rail.position1。原样传 pose.toRollProfile()
-        // 会把 roll1Degrees 永远钉在参数 0 端：在 position1.compareTo(position2) > 0
-        // （即 firstIsPosition1 == false）的轨道上，两端的滚转被接反 —— 中心线抬升、截面网格与
-        // 车体虽然彼此一致，却把滚转施加到了错误的端点。
-        // 依据：MTR 上游更高版本的 Rail 构造器在 reversePositions 时，同样把
-        // tiltAngleDegrees1/tiltAngleDegrees2 随 position1/position2 一起对调
-        // （见 mtr4 参考源码 Rail.java:144-154）；4.0.5 的字节码里该处还没有倾斜参数，
-        // 但端点对调规则完全一致（javap 已核实：reversePositions 时构造 RailMath(position2, angle2, position1, angle1)）。
-        final RailRollProfile rollProfile = firstIsPosition1
-                ? pose.toRollProfile()
-                : RailRollProfile.twoPointDegrees(pose.roll2Degrees, pose.roll1Degrees);
+        // 滚转剖面：必须与 pitch1/pitch2 走同一套端点映射，取法与理由集中在
+        // rollProfileFor（含「未编辑逐轨道超高时与引入本特性之前逐位相同」的不变式）。
+        // 早先这里直接写 pose.toRollProfile()，会把 roll1Degrees 永远钉在参数 0 端：
+        // 在 position1.compareTo(position2) > 0（firstIsPosition1 == false）的轨道上两端滚转被接反。
+        final RailRollProfile rollProfile = rollProfileFor(pose, firstIsPosition1);
 
         // 锚点 = 方块坐标 + 节点偏移；+0.5 的格心平移留在内核的位置公式里，
         // 所以偏移为 0 时内核与 4.0.5 逐位一致（内核注释与 parity harness 都基于这一点）。
@@ -153,6 +160,131 @@ public class FangSuRailMath extends RailMath {
     /** 版本无关几何内核（供渲染/测试读取横断面、滚转等扩展量）。 */
     public RailGeometryCore getGeometryCore() {
         return core;
+    }
+
+    /**
+     * 由附加姿态与端点顺序选出实际生效的滚转剖面（几何内核唯一消费的滚转输入）。
+     * <p>
+     * <b>端点映射</b>：剖面以「归一化位置 = 参数 / 长度」为键（见 {@link RailRollProfile} 与
+     * {@link RailGeometryCore#getRollRadians}），所以键 0 对应 railMath 参数 0 端
+     * （{@code firstPosition}），并不恒等于 {@code Rail.position1}。
+     * <ul>
+     *   <li>两点剖面（节点派生滚转）：{@code roll1} 属于 {@code Rail.position1}，
+     *       所以 {@code firstIsPosition1 == false} 时把两端对调；</li>
+     *   <li>三点剖面（逐轨道超高）：{@code start} 属于 {@code position1}、{@code end} 属于
+     *       {@code position2}，同样在 {@code firstIsPosition1 == false} 时对调；中间点的
+     *       <b>归一化位置也要镜像成 {@code 1 - middleFraction}</b>（值本身不变）——
+     *       中间控制点在物理上没有动，参数方向反过来后它的归一化位置正是 1 减去原值。
+     *       于是镜像不变式成立：{@code rollProfileFor(pose,false).getRadians(f)}
+     *       {@code == rollProfileFor(pose,true).getRadians(1 - f)}（已用
+     *       {@code build/tmp_tiltprobe} 的探针数值验证）。<b>前提</b>：{@code middleFraction}
+     *       必须已经以 {@code position1 → position2} 为 0 → 1（存盘约定见
+     *       {@link #middleBreakpointFraction(RailGeometryCore, boolean)}）；存的是 railMath
+     *       参数空间的值时，这一次镜像会把它推到接缝的镜像位置上。</li>
+     * </ul>
+     * 依据：MTR 上游更高版本的 {@code Rail} 构造器在 {@code reversePositions} 时，同样把
+     * {@code tiltAngleDegrees1/tiltAngleDegrees2} 随 {@code position1/position2} 一起对调
+     * （见 mtr4 参考源码 {@code Rail.java:144-154}）；4.0.5 的字节码里该处还没有倾斜参数，
+     * 但端点对调规则完全一致（javap 已核实：{@code reversePositions} 时构造
+     * {@code RailMath(position2, angle2, position1, angle1)}）。
+     * <p>
+     * <b>回退不变式</b>：{@code pose.hasRailTilt()} 为 false（老存档 / 从未编辑过逐轨道超高）
+     * 时返回的剖面与引入本特性之前<b>逐位相同</b>，因此老轨道的渲染结果不会有任何变化。
+     *
+     * @param pose            附加姿态（语义顺序：{@code *1} 属于 {@code Rail.position1}）
+     * @param firstIsPosition1 railMath 参数 0 端是否就是 {@code Rail.position1}
+     */
+    public static RailRollProfile rollProfileFor(RailPoseExtra pose, boolean firstIsPosition1) {
+        if (pose.hasRailTilt()) {
+            // 存盘的 middleFraction 恒以 position1 → position2 为 0 → 1（唯一产出点见
+            // middleBreakpointFraction）；剖面以 railMath 参数为键，所以参数 0 端不是 position1 时
+            // 正好要镜像一次，两次约定必须成对，缺一次峰值就落到接缝的镜像位置。
+            final double middleFraction = pose.railTiltMiddleFraction;
+            return firstIsPosition1
+                    ? RailRollProfile.threePointDegrees(
+                            pose.railTiltStartDegrees, pose.railTiltMiddleDegrees, pose.railTiltEndDegrees,
+                            middleFraction)
+                    : RailRollProfile.threePointDegrees(
+                            pose.railTiltEndDegrees, pose.railTiltMiddleDegrees, pose.railTiltStartDegrees,
+                            1.0D - middleFraction);
+        }
+        return firstIsPosition1
+                ? RailRollProfile.twoPointDegrees(pose.roll1Degrees, pose.roll2Degrees)
+                : RailRollProfile.twoPointDegrees(pose.roll2Degrees, pose.roll1Degrees);
+    }
+
+    /**
+     * 「逐轨道超高」中间控制点应落在的归一化位置。
+     * <p>
+     * <b>不变式（本特性的唯一参考系约定）：这个归一化位置永远以 {@code position1 → position2}
+     * 为 0 → 1。</b>渲染端 {@code rollProfileFor} 就按这个约定消费（剖面以「railMath 参数 / 长度」
+     * 为键，参数 0 端不是 position1 时把中间位置镜像成 {@code 1 - fraction}，见
+     * {@link #rollProfileFor(RailPoseExtra, boolean)}）；界面 {@code RailTiltConfigScreen} 也把它
+     * 当成「从起点（position1）算起的百分比」显示，与渲染端一致。
+     * <p>
+     * 几何量本身是在 <b>railMath 参数空间</b> 里算出来的：参数 0 端在
+     * {@code position1.compareTo(position2) > 0} 时是 position2（MTR 的 {@code Rail} 构造器会反着
+     * 构造 {@code RailMath}）。所以参数空间的接缝位置 <b>不等于</b> position1 → position2 空间的位置，
+     * 这里必须显式换算一次，否则反向建的轨道上中间控制点会落在接缝的<b>镜像</b>位置。
+     * <p>
+     * 曲线的两段圆弧在 {@code count1} 处相切/相接，超高在这里换坡才有物理意义；某一段退化
+     * （{@code count1} 或 {@code count2} 为 0）时退回中点，也就是
+     * {@link RailPoseExtra#DEFAULT_RAIL_TILT_MIDDLE_FRACTION}。
+     * <p>
+     * <b>不要照抄 MAGIC 的硬编码 0.5</b>：那只是直线轨的近似，曲线轨上中间控制点会落在错误的位置。
+     *
+     * @param geometryCore    按 railMath 参数顺序构建的几何内核
+     * @param firstIsPosition1 该内核的参数 0 端是否就是 {@code Rail.position1}
+     * @return 归一化位置（position1 → position2）；几何退化到无法给出接缝位置时为 0.5
+     */
+    public static double middleBreakpointFraction(RailGeometryCore geometryCore, boolean firstIsPosition1) {
+        final double parameterSpaceFraction = parameterSpaceBreakpointFraction(geometryCore);
+        // 参数空间 → position1 → position2 空间：参数 0 端是 position2 时，同一个点从 position1 量起的
+        // 归一化位置正是 1 减去原值。0.5 是自镜像的不动点，所以退化回退值不受影响。
+        return firstIsPosition1 ? parameterSpaceFraction : 1.0D - parameterSpaceFraction;
+    }
+
+    /**
+     * 同上，但直接吃现成的 {@code railMath}（界面按当前几何估计接缝位置时用这个入口）。
+     * <p>
+     * 内核实例自己记着构造时的端点顺序（{@link #firstIsPosition1}），因此这里不需要调用方再传一遍，
+     * 也就不会出现「几何按一种顺序建、参考系按另一种顺序算」的错配。
+     */
+    public static double middleBreakpointFraction(RailMath railMath) {
+        if (railMath instanceof FangSuRailMath) {
+            final FangSuRailMath fangSu = (FangSuRailMath) railMath;
+            return middleBreakpointFraction(fangSu.core, fangSu.firstIsPosition1);
+        }
+        // 没有附加姿态的轨道装的仍是 MTR 原生 RailMath（其 getLength1/getLength2 是包私有，
+        // com.fangsu.* 调不到），此时退回默认中点；服务端在第一次编辑超高时会先按当前几何
+        // 建一个内核实例，因此不会真的用上这个保守值（见 RailTiltPackets）。
+        return RailPoseExtra.DEFAULT_RAIL_TILT_MIDDLE_FRACTION;
+    }
+
+    /**
+     * 两半径接缝在 <b>railMath 参数空间</b> 里的归一化位置 {@code count1 / length}（私有）：
+     * 只作为 {@link #middleBreakpointFraction(RailGeometryCore, boolean)} 的中间量，
+     * 不对外暴露——对外的一律是「以 position1 为 0 端」的值，避免参考系混用。
+     */
+    private static double parameterSpaceBreakpointFraction(RailGeometryCore geometryCore) {
+        if (geometryCore == null) {
+            return RailPoseExtra.DEFAULT_RAIL_TILT_MIDDLE_FRACTION;
+        }
+        final double count1 = geometryCore.getLength1();
+        final double count2 = geometryCore.getLength2();
+        final double length = count1 + count2;
+        if (!(length > 0.0D) || !Double.isFinite(length)) {
+            return RailPoseExtra.DEFAULT_RAIL_TILT_MIDDLE_FRACTION;
+        }
+        if (count1 <= DEGENERATE_SEGMENT_LENGTH || count2 <= DEGENERATE_SEGMENT_LENGTH) {
+            // 退化（单段直线轨 / 圆弧轨）：没有接缝，取中点
+            return RailPoseExtra.DEFAULT_RAIL_TILT_MIDDLE_FRACTION;
+        }
+        final double fraction = count1 / length;
+        if (!(fraction > 0.0D) || fraction >= 1.0D) {
+            return RailPoseExtra.DEFAULT_RAIL_TILT_MIDDLE_FRACTION;
+        }
+        return fraction;
     }
 
     // ==================== 委托：几何查询 ====================

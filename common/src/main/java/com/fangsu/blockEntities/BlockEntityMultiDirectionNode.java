@@ -662,60 +662,88 @@ public class BlockEntityMultiDirectionNode extends BaseObjBlockEntity implements
             return;
         }
 
-        final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
-        // ---- NODE_REFRESH_RAIL 载荷布局（客户端/服务端永远同版本，无需版本探测）----
-        //   BlockPos nodePos
-        //   double   direction
-        //   double   offsetX / offsetY / offsetZ
-        //   double   pitchDeg / rollDeg          ← P3 新增，紧跟平移之后
-        //   boolean  superelevation              ← P4a 新增：外轨超高开关（只门控滚转）
-        //   double   rollOffsetM                 ← P4a 新增：半轨距（米），滚转抬升系数
-        //   boolean  directionBonded
-        //   int      count
-        //   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
-        //             byte flags, int styleCount, styleCount × String }
-        // 读侧：ModNetwork.handleNodeRefreshRail（字段顺序必须逐字对应）。
-        buf.writeBlockPos(worldPosition);
-        buf.writeDouble(direction);
-        // 姿态（平移）随刷新请求一起发送，紧跟在 direction 之后。
-        // 旧实现让平移走另一个 BE_SYNC 包，服务端重建轨道时从 BE 读偏移，
-        // 于是重建结果取决于「两个独立包的到达/应用顺序」——这就是「拖了节点但轨道留在原地」的根因。
-        // 现在刷新包里自带偏移，服务端用客户端刚编辑好的值重建，不再存在跨包竞态。
-        buf.writeDouble(offsetX);
-        buf.writeDouble(offsetY);
-        buf.writeDouble(offsetZ);
-        // P3：俯仰 / 翻滚也随刷新请求同行，服务端据此写进方块实体（节点模型倾斜）。
-        // P4a：这两个角度现在会经 NodeConnector.readRailPose 进入轨道姿态（俯仰 → Hermite 纵坡剖面，
-        // 翻滚 → 半轨距·|sin| 中心线抬升），所以刷新包里必须带上它们，否则服务端几何与界面不一致。
-        buf.writeDouble(pitchDeg);
-        buf.writeDouble(rollDeg);
-        // P4a：外轨超高开关与半轨距同样随刷新请求同行、同样进入轨道姿态，理由同上。
-        // 开关只门控滚转：服务端 readRailPose 会在开关为关时把 roll 端点值写成 0。
-        buf.writeBoolean(superelevation);
-        buf.writeDouble(rollOffsetM);
-        // 方向是否绑定：旋转绑定开关为「否」时，服务端只按新方向重建几何，不得把方向绑定。
-        buf.writeBoolean(directionBonded);
-        buf.writeInt(connected.size());
+        // ---- NODE_REFRESH_RAIL 载荷（客户端/服务端永远同版本，无需版本探测）----
+        // 布局与字段顺序集中在 NodeRefreshRailPayload：写侧（下面这次 write）与读侧
+        // （ModNetwork.handleNodeRefreshRail）是同一个类的两个静态方法，因此「顺序写错但 javac
+        // 编译通过」的读写不对称在结构上不可能出现。本方法只负责把数据整理成 Payload。
+        // ---- 逐轨道超高（P4b）：每条轨道随行携带「作者授权三点剖面 + 半轨距」----
+        // 没有它时，服务端重建用的是 NodeConnector.readRailPose 重新派生的姿态 —— 那个姿态只含
+        // 节点派生数据，逐轨道倾斜字段全是「未授权」，而 RailPoseExtraHolder.apply 是整份写入，
+        // 于是作者编辑过的授权值被抹掉（数据丢失：中点滚转从授权值退回节点值）。
+        final java.util.List<com.fangsu.network.NodeRefreshRailPayload.RailEntry> entries =
+                new java.util.ArrayList<>(connected.size());
         for (net.minecraft.core.BlockPos o : connected) {
-            buf.writeBlockPos(o);
-            final org.mtr.core.data.Rail rail = connections.get(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o)));
+            final org.mtr.core.data.Position otherPosition = org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o));
+            final org.mtr.core.data.Rail rail = connections.get(otherPosition);
             // 限速：m/ms × 3600 → km/h；按端点位置对号入座（单向轨 0 限速端跟随位置，core 内部处理 reversePositions）
-            buf.writeLong(Math.round(rail.getSpeedLimitMetersPerMillisecond(nodePosition) * 3600));
-            buf.writeLong(Math.round(rail.getSpeedLimitMetersPerMillisecond(org.mtr.mod.Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(o))) * 3600));
-            buf.writeInt(rail.railMath.getShape().ordinal());
+            final long speedAtNode = Math.round(rail.getSpeedLimitMetersPerMillisecond(nodePosition) * 3600);
+            final long speedAtOther = Math.round(rail.getSpeedLimitMetersPerMillisecond(otherPosition) * 3600);
             final int flags = (rail.isPlatform() ? 1 : 0) | (rail.isSiding() ? 2 : 0) | (rail.canTurnBack() ? 4 : 0)
                     | (rail.canAccelerate() ? 8 : 0) | (rail.canConnectRemotely() ? 16 : 0);
-            buf.writeByte(flags);
-            final org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectImmutableList<String> styles = rail.getStyles();
-            buf.writeInt(styles.size());
-            for (String style : styles) {
-                buf.writeUtf(style);
-            }
+            entries.add(new com.fangsu.network.NodeRefreshRailPayload.RailEntry(
+                    o, speedAtNode, speedAtOther,
+                    rail.railMath.getShape().ordinal(), flags,
+                    new java.util.ArrayList<>(rail.getStyles()),
+                    carryRailTilt(rail, nodePosition, otherPosition)));
         }
+        // 姿态（平移 / 俯仰 / 翻滚 / 开关 / 半轨距）随刷新请求一起发送：旧实现让平移走另一个 BE_SYNC 包、
+        // 服务端重建轨道时从 BE 读偏移，于是重建结果取决于两个独立包的到达/应用顺序
+        // ——「拖了节点但轨道留在原地」的根因。现在刷新包里自带这些值，不存在跨包竞态。
+        final net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
+        com.fangsu.network.NodeRefreshRailPayload.write(buf, new com.fangsu.network.NodeRefreshRailPayload.Payload(
+                worldPosition, direction, offsetX, offsetY, offsetZ, pitchDeg, rollDeg,
+                superelevation, rollOffsetM, directionBonded, entries));
         dev.architectury.networking.NetworkManager.sendToServer(com.fangsu.network.ModNetwork.NODE_REFRESH_RAIL, buf);
         // 已成功发出刷新包，清除待重试状态
         pendingRefresh = false;
         retryCount = 0;
+    }
+
+    /**
+     * 取出「旧轨道上作者授权的逐轨道超高」，换算到刷新请求所用的参考帧。
+     * <p>
+     * 参考帧必须统一成<b>本节点 → 另一端</b>：服务端 {@code NodeConnector.refreshNodeRail}
+     * 恒以 {@code p1 = nodePos}、{@code p2 = otherPos} 重建，即新轨道的
+     * {@code Rail.position1/position2} 就是这两个位置，而三点剖面的 start/end 属于
+     * {@code position1/position2}（见 {@code RailPoseExtra#toRollProfile()}）。
+     * 旧轨道的 {@code position1} 却可能是另一端（建轨时的点击顺序决定），
+     * 此时不换算就会把「起点 / 终点」两个控制点写反。
+     *
+     * @param rail          客户端 MTR 数据里的这条轨道（带着服务端广播过来的附加姿态）
+     * @param nodePosition  本节点位置
+     * @param otherPosition 另一端位置
+     * @return 未授权时是 {@link com.fangsu.util.RailTiltCarry#NONE}，服务端据此保持节点派生值
+     */
+    private static com.fangsu.util.RailTiltCarry carryRailTilt(
+            org.mtr.core.data.Rail rail,
+            org.mtr.core.data.Position nodePosition,
+            org.mtr.core.data.Position otherPosition
+    ) {
+        final com.fangsu.mappings.rail.RailPoseExtra pose = com.fangsu.mtr.rail.RailPoseExtraHolder.peek(rail);
+        if (!pose.hasRailTilt()) {
+            // 未授权：只需告诉服务端「无授权」（0/0/0 是「作者显式授权成水平」，不能当哨兵用）
+            return com.fangsu.util.RailTiltCarry.NONE;
+        }
+        // RailSchemaMixin 把 position1 暴露在 RailPoseExtraHolder 上，客户端同样可用
+        final org.mtr.core.data.Position oldFirst =
+                ((com.fangsu.mtr.rail.RailPoseExtraHolder) (Object) rail).fangsu$getPosition1();
+        if (samePosition(oldFirst, nodePosition)) {
+            return com.fangsu.util.RailTiltCarry.fromPose(pose, false);
+        }
+        if (samePosition(oldFirst, otherPosition)) {
+            // 参考帧相反：start/end 对调，中间控制点位置镜像（控制点物理上没有移动）
+            return com.fangsu.util.RailTiltCarry.fromPose(pose, true);
+        }
+        // 两端都对不上（数据不一致，理论上不会发生）：保持原样不换算 —— 换错参考帧会把
+        // 起点 / 终点两个控制点对调、并让中间控制点跑到镜像位置，比「不换算」更糟。
+        Main.LOGGER.debug("[MultiDirectionNode] carryRailTilt: 旧轨道 position1 与本节点 / 另一端都不匹配，按未反转处理");
+        return com.fangsu.util.RailTiltCarry.fromPose(pose, false);
+    }
+
+    /** 两个 MTR 位置是否同一个方块位置（{@code Position} 只有整数坐标，逐分量比较即可）。 */
+    private static boolean samePosition(org.mtr.core.data.Position left, org.mtr.core.data.Position right) {
+        return left != null && right != null
+                && left.getX() == right.getX() && left.getY() == right.getY() && left.getZ() == right.getZ();
     }
 
     /**

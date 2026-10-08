@@ -97,11 +97,18 @@ public abstract class RailSchemaMixin implements RailPoseExtraHolder {
         this.fangsu$pose = RailPoseExtra.decode(readerBase.getString(RailPoseExtra.KEY, ""));
     }
 
-    /** 写侧：只在非默认时写单个字符串键，保证默认轨道的存档与原版完全一致。 */
+    /**
+     * 写侧：只在「确实有附加姿态」时写单个字符串键，保证默认轨道的存档与原版完全一致。
+     * <p>
+     * 门控用 {@link RailPoseExtra#shouldPersist()} 而不是 {@code !isDefault()}：后者不看
+     * {@code halfGauge}，于是「只改了半轨距、角度全 0」的轨道不会被写盘，重载后半轨距被静默重置。
+     * 现在两者是同一个判据的一部分（见 {@code shouldPersist()} 的说明），但仍保守 ——
+     * 完全没有附加姿态、半轨距也是默认值时依旧不写。
+     */
     @Inject(method = "serializeData", at = @At("TAIL"), remap = false)
     private void fangsu$writePose(WriterBase writerBase, CallbackInfo ci) {
         final RailPoseExtra pose = getFangSuPose();
-        if (!pose.isDefault()) {
+        if (pose.shouldPersist()) {
             writerBase.writeString(RailPoseExtra.KEY, pose.encode());
         }
     }

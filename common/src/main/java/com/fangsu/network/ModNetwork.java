@@ -50,6 +50,9 @@ public class ModNetwork {
                 NODE_REFRESH_RAIL,
                 ModNetwork::handleNodeRefreshRail
         );
+        // 逐轨道超高编辑（三个倾斜控制点 + 半轨距）：载荷与校验都在 RailTiltPackets 里，
+        // 注册位置紧挨 NODE_REFRESH_RAIL（同属「轨道几何编辑」这一类 C2S 通道）。
+        RailTiltPackets.registerServer();
         NetworkManager.registerReceiver(
                 NetworkManager.Side.C2S,
                 TICKET_MACHINE_SYNC,
@@ -73,67 +76,30 @@ public class ModNetwork {
     /**
      * 服务端：万向节点方向/平移改变后刷新重建连接到该节点的轨道。
      * <p>
-     * 载荷（客户端 {@code BlockEntityMultiDirectionNode#refreshConnectedRailsIfNeeded} 写入）：
-     * <pre>
-     *   BlockPos nodePos
-     *   double   newDirection
-     *   double   offsetX / offsetY / offsetZ   ← 姿态随刷新请求同行
-     *   double   pitchDeg / rollDeg            ← P3 新增：俯仰 / 翻滚（正上坡 / 右手侧抬高）
-     *   boolean  superelevation                ← P4a 新增：外轨超高开关（只门控滚转贡献）
-     *   double   rollOffsetM                   ← P4a 新增：半轨距（米），滚转抬升系数
-     *   boolean  directionBonded               ← 「旋转绑定：否」时只重建几何、不绑定方向
-     *   int      count
-     *   count × { BlockPos otherPos, long speedAtNode, long speedAtOther, int shape,
-     *             byte flags, int styleCount, styleCount × String }
-     * </pre>
-     * 姿态（平移）之所以放进刷新包，而不是继续依赖另一个 BE_SYNC 包：服务端重建轨道时读的是
-     * 服务端方块实体里的偏移，两个独立包的到达/应用顺序不定，就会出现「节点已经拖走、轨道留在原地」。
-     * 现在客户端把刚编辑好的偏移直接随请求发来，跨包竞态不复存在。
+     * 载荷（客户端 {@code BlockEntityMultiDirectionNode#refreshConnectedRailsIfNeeded} 写入）
+     * 的字段布局、写侧与读侧的对应关系全部集中在
+     * {@link NodeRefreshRailPayload}：写与读是同一个类的两个静态方法，因此不可能出现
+     * 「顺序写错但 javac 编译通过」的读写不对称。本方法只负责把解出来的
+     * {@link NodeRefreshRailPayload.Payload} 落到方块实体与轨道上。
      * <p>
-     * <b>P4a</b>：俯仰 / 翻滚 / 外轨超高开关 / 半轨距都会写进轨道姿态
-     * （{@code NodeConnector.readRailPose} → {@code RailPoseExtra}），所以它们同样必须随刷新请求同行；
-     * 服务端先把它们落进方块实体，随后的 {@code refreshNodeRail} 才会按客户端刚编辑的几何重建。
+     * 姿态（平移 / 俯仰 / 翻滚 / 开关 / 半轨距）之所以放进刷新包，而不是继续依赖另一个 BE_SYNC 包：
+     * 服务端重建轨道时读的是服务端方块实体里的值，两个独立包的到达/应用顺序不定，就会出现
+     * 「节点已经拖走、轨道留在原地」。现在客户端把刚编辑好的值直接随请求发来，跨包竞态不复存在。
      * <p>
-     * 本包<b>不做版本探测</b>：客户端与服务端永远运行同一份 FangSu 构建，字段顺序必须与写侧逐字对应。
+     * <b>P4b</b>：每条轨道还随行携带「作者授权逐轨道超高」（{@link NodeRefreshRailPayload.RailEntry#tilt()}）。
+     * 旧实现重建时只写 {@code readRailPose} 派生的姿态（该姿态不含逐轨道超高），
+     * 于是任何一次节点重建都会把作者编辑过的三点剖面与半轨距整份抹掉（数据丢失）。
+     * 现在由 {@link com.fangsu.util.RailTiltCarry#mergeInto} 合并：新派生的平移/俯仰/节点滚转保留，
+     * 授权值也保留；未授权轨道照旧完全跟随节点值。
+     * <p>
+     * 本包<b>不做版本探测</b>：客户端与服务端永远运行同一份 FangSu 构建。
      */
     private static void handleNodeRefreshRail(
             FriendlyByteBuf buf,
             NetworkManager.PacketContext ctx
     ) {
         // 全部载荷在主线程排队之前读完：排队回调可能在网络缓冲区释放之后才执行
-        final BlockPos nodePos = buf.readBlockPos();
-        final double newDirection = buf.readDouble();
-        // 姿态与刷新请求同行（布局见方法注释）
-        final double offsetX = buf.readDouble();
-        final double offsetY = buf.readDouble();
-        final double offsetZ = buf.readDouble();
-        // P3：俯仰 / 翻滚（读侧顺序必须与写侧一致）
-        final double pitchDeg = buf.readDouble();
-        final double rollDeg = buf.readDouble();
-        // P4a：外轨超高开关 + 半轨距（同样必须与写侧逐字对应）
-        final boolean superelevation = buf.readBoolean();
-        final double rollOffsetM = buf.readDouble();
-        final boolean directionBonded = buf.readBoolean();
-        final int count = buf.readInt();
-        final java.util.List<BlockPos> others = new java.util.ArrayList<>();
-        final java.util.List<com.fangsu.util.NodeConnector.RailAttrs> attrsList = new java.util.ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
-            others.add(buf.readBlockPos());
-            // 解析客户端打包的旧轨道属性，重建时保持限速/单向/类型/样式
-            long speedAtNode = buf.readLong();
-            long speedAtOther = buf.readLong();
-            org.mtr.core.data.Rail.Shape shape = org.mtr.core.data.Rail.Shape.values()[buf.readInt()];
-            int flags = buf.readByte();
-            int styleCount = buf.readInt();
-            java.util.List<String> styles = new java.util.ArrayList<>(styleCount);
-            for (int j = 0; j < styleCount; j++) {
-                styles.add(buf.readUtf());
-            }
-            attrsList.add(new com.fangsu.util.NodeConnector.RailAttrs(
-                    speedAtNode, speedAtOther, shape,
-                    (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0,
-                    styles));
-        }
+        final NodeRefreshRailPayload.Payload payload = NodeRefreshRailPayload.read(buf);
 
         ctx.queue(() -> {
             ServerPlayer player = (ServerPlayer) ctx.getPlayer();
@@ -143,6 +109,8 @@ public class ModNetwork {
             //#else
             //$$ Level level = player.level;
             //#endif
+            final BlockPos nodePos = payload.nodePos();
+            final double newDirection = payload.direction();
 
             BlockEntity be = level.getBlockEntity(nodePos);
             if (!(be instanceof com.fangsu.blockEntities.BlockEntityMultiDirectionNode node)) {
@@ -152,19 +120,19 @@ public class ModNetwork {
             }
             // 先落姿态：必须在重建循环之前写入，后面 refreshNodeRail 才会按新偏移算几何
             // （setNodeOffset 内部已做 ±MAX_OFFSET 钳制，并 setChanged + 方块更新）
-            node.setNodeOffset(offsetX, offsetY, offsetZ);
+            node.setNodeOffset(payload.offsetX(), payload.offsetY(), payload.offsetZ());
             // P3：俯仰 / 翻滚同样先落盘（按 BlockEntityMultiDirectionNode 的硬边界钳制，
             // 即 MAX_PITCH_DEG / MAX_ROLL_DEG；服务端钳制只此一份，见该类的「硬边界」说明）。
             // P4a 起它们会经 readRailPose 进入轨道姿态，
             // 所以必须在重建循环之前写入，重建才会按新纵坡 / 超高算几何。
-            node.setNodeAngles(pitchDeg, rollDeg);
+            node.setNodeAngles(payload.pitchDeg(), payload.rollDeg());
             // P4a：外轨超高开关与半轨距（半轨距内部按 MIN_HALF_GAUGE / MAX_HALF_GAUGE 钳制、
             // NaN/Inf → 默认）。
             // 开关为「关」时，随后 readRailPose 会把 roll 端点值写成 0，几何不再有中心线抬升。
-            node.setSuperelevation(superelevation);
-            node.setRollOffsetM(rollOffsetM);
+            node.setSuperelevation(payload.superelevation());
+            node.setRollOffsetM(payload.rollOffsetM());
             // 应用方向：绑定开关为「是」才绑定；为「否」时只写值，保持未绑定语义
-            if (directionBonded) {
+            if (payload.directionBonded()) {
                 node.setDirectionBonded(newDirection);
             } else {
                 node.setDirectionUnbound(newDirection);
@@ -175,11 +143,20 @@ public class ModNetwork {
             level.sendBlockUpdated(nodePos, node.getBlockState(), node.getBlockState(),
                     net.minecraft.world.level.block.Block.UPDATE_ALL);
 
-            for (int i = 0; i < others.size(); i++) {
-                final BlockPos otherPos = others.get(i);
+            for (final NodeRefreshRailPayload.RailEntry entry : payload.rails()) {
+                final BlockPos otherPos = entry.otherPos();
+                // 解析客户端打包的旧轨道属性，重建时保持限速/单向/类型/样式
+                final com.fangsu.util.NodeConnector.RailAttrs attrs = new com.fangsu.util.NodeConnector.RailAttrs(
+                        entry.speedAtNode(), entry.speedAtOther(),
+                        org.mtr.core.data.Rail.Shape.values()[entry.shapeOrdinal()],
+                        (entry.flags() & 1) != 0, (entry.flags() & 2) != 0, (entry.flags() & 4) != 0,
+                        (entry.flags() & 8) != 0, (entry.flags() & 16) != 0,
+                        entry.styles());
+                // 逐轨道超高随行数据：未授权时是 RailTiltCarry.NONE，服务端据此保持节点派生值
+                final com.fangsu.util.RailTiltCarry tiltCarry = entry.tilt();
                 // refreshNodeRail 先校验候选几何、再做写操作：姿态非法时返回 false 且旧轨道原样保留
                 final boolean refreshed =
-                        com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrsList.get(i));
+                        com.fangsu.util.NodeConnector.refreshNodeRail(level, nodePos, newDirection, otherPos, attrs, tiltCarry);
                 if (!refreshed) {
                     Main.LOGGER.warn("[NodeConnector] handleNodeRefreshRail: rail {}->{} NOT rebuilt (invalid pose/geometry), old rail kept",
                             nodePos, otherPos);
