@@ -221,9 +221,11 @@ public final class NodeConnector {
 
     // ==================== 翻滚角的节点帧 → 轨道帧换算（P4b-3 / FIX 3） ====================
     //
-    // 注：俯仰（纵坡）有<b>同类但不等价</b>的换算，见 readRailPose 里的「俯仰角的节点帧 → 轨道帧换算」。
-    // 两者都乘 frameSign，但俯仰还必须再乘一个 pSign（参数方向相对 position1→position2 的符号），
-    // 因为内核直接消费俯仰作为参数系斜率，而翻滚在渲染层还有 railFrameAngle 补那一步。
+    // 注：俯仰（纵坡）走的是<b>另一套</b>换算，见下方「俯仰角的节点帧 → 轨道帧换算（FIX-PITCH-2）」。
+    // 翻滚只要 ±1 的帧符号就够：几何内核的中心线抬升 半轨距·|sin(roll)| 对符号不敏感（抬哪一侧），
+    // 参数方向那一步由渲染层的 railFrameAngle 补上。而俯仰被内核<b>直接</b>当作参数系的端点切线
+    // 消费，没有 railFrameAngle 那一步，所以它必须自己做完整投影（pSign × dot，见 pitchFrameAngle）。
+    // 两个特性因此<b>刻意分成两个函数</b>：改其中一个之前先读清楚另一个，别把两者合并。
     //
     // 问题：节点的翻滚角是「节点自身方向 d 的右手侧抬高」，但轨道几何 / 渲染的翻滚参数是
     // 定义在**轨道参数系**上的（渲染帧约定：roll > 0 抬升 Rail.position1 → Rail.position2
@@ -255,7 +257,8 @@ public final class NodeConnector {
     private static boolean warnedFrameSignDeadband = false;
 
     /**
-     * 单端点帧符号：把「节点自身方向的右手侧抬高」换算成「轨道参数系的某一侧抬高」。
+     * 单端点帧符号（<b>只服务翻滚</b>；俯仰用的是 {@link #pitchFrameAngle}，不要拿本方法算俯仰）：
+     * 把「节点自身方向的右手侧抬高」换算成「轨道参数系的某一侧抬高」。
      *
      * @param dx   从 {@code Rail.position1} 指向 {@code Rail.position2} 的水平向量 X 分量（不必归一化）
      * @param dz   同上，Z 分量
@@ -264,7 +267,11 @@ public final class NodeConnector {
      *         两者近乎垂直（|dot| &lt; {@link #FRAME_SIGN_DEADBAND}）时回退为 {@code +1}，
      *         并打印一次性 warn 让「从没转过方向的节点」可见。
      *         <p>
-     *         <b>这是本换算唯一改动符号的地方</b>，不要在别处再翻一次。
+     *         <b>这个 +1 回退只对翻滚成立</b>（翻滚的抬升量对符号不敏感，回退只是「抬哪一侧」的
+     *         约定问题）。俯仰<b>绝不能</b>这样回退：那会让同一节点两条轨道拿到相同符号并把坡度
+     *         算成 tan(pitch) 而不是 0，渲染出来就是驼峰 —— 这正是 FIX-PITCH-2 修掉的缺陷。
+     *         <p>
+     *         <b>这是翻滚换算唯一改动符号的地方</b>，不要在别处再翻一次。
      */
     private static double frameSign(double dx, double dz, BlockEntityMultiDirectionNode node) {
         if (node == null) {
@@ -293,15 +300,135 @@ public final class NodeConnector {
         return Math.signum(dot);
     }
 
+    // ==================== 俯仰角的节点帧 → 轨道帧换算（P4a / FIX-PITCH-2） ====================
+    //
+    // 【权威表述，请勿「简化」】节点 N 的 pitchDeg 定义的是<b>节点自身方向 d 上的纵坡</b>：
+    // tan(pitch) = 沿 d 水平前进 1 格时的高度增量（语义推导见
+    // BlockEntityMultiDirectionNode.applyNodeModelTilt）。轨道要落在同一个高度场上，因此在节点处
+    // 每条相连轨道的切线必须满足
+    //     slope_kernel(端点) = tan(pitch) · dot(d, incrDir)
+    // 其中 slope_kernel 是内核 Hermite 的端点切线 dy/d(param)（内核 hermitePositionY 用
+    // slope·length，所以写进 RailPoseExtra 的角度取 tan 后<b>就是</b>这个切线值），
+    // incrDir 是该轨道在内核参数系里「参数增大方向」的水平单位向量。
+    //
+    // incrDir 怎么来：内核参数 0 端是 firstPosition、沿 secondPosition 增大；而 MTR 在
+    // reversePositions（position1.compareTo(position2) > 0）时把内核构造成
+    // (position2, …, position1, …)，所以
+    //     incrDir = pSign · chordUnit,   chordUnit = 单位(position1 → position2)（锚点差，含节点平移）
+    //     pSign   = +1（pos1 按 MTR 的 Position 字典序 ≤ pos2）/ -1（否则）
+    // 关键：incrDir 在<b>两端是同一个向量</b>。参数是从 position1 一路增大到 position2，所以位置 2 端的
+    // 切线方向仍然是「从 position1 指向 position2」（到达方向），<b>不是</b>反向。因此不需要任何
+    // 「端点在哪一头就翻一次符号」的额外因子；符号差异全部来自两条轨道各自的 incrDir。
+    //
+    // 关于用户说的「一侧按正值、一侧按负值」：那只是两条轨道参数方向相反时<b>存储值</b>的表现，
+    // 不是要求本身。真正的判据是「节点处纵坡连续」——两条轨道在 N 处落在同一个倾斜平面上。
+    // 共线时 incrDir 相反 → 存储值必然一正一负；两条轨道的建轨顺序相同时（pSign 相同）也可能
+    // 存储成 +/+，那同样是正确的。判定标准只有一条：斜率 = tan(pitch) · dot(d, incrDir)。
+    //
+    // 与 D-A 版（frameSign · pSign，只取符号）的两点区别：
+    //   1) 不再只取符号，而是把 dot 的<b>大小</b>也乘进去：节点方向与轨道斜交时，轨道沿自己的方向
+    //      只分到 cos(夹角) 的坡度（节点方向垂直于轨道时正好 0 = 该处水平）。这是「落在同一个倾斜
+    //      平面上」的必然结果；节点方向沿/逆轨道（自动绑定）时 |dot| = 1，结果与 D-A 逐位相同。
+    //   2) 垂直情形<b>不再回退成 +1</b>。回退会让同一节点的两条轨道因为 pSign 不同而拿到不同的
+    //      存储符号（一条 +tan、一条 −tan），渲染出来正是报告里的驼峰。投影到 0 后两条轨道都水平，
+    //      坡度自然连续；只保留一次 warn 提示「该节点方向与轨道垂直，俯仰在这条轨道上没有分量」。
+    //
+    // 为什么必须用 atan：写进 RailPoseExtra 的是<b>角度</b>，内核会对它取 tan 当切线。要求切线等于
+    // tan(pitch)·k，所以存的角度必须是 atan(tan(pitch)·k)，<b>不能</b>写成 pitch·k ——
+    // 那是角度线性缩放（tan(pitch·k) ≠ tan(pitch)·k）。k = pSign · dot(d, chordUnit) ∈ [-1, 1]，
+    // 所以 |存进去的角度| ≤ |pitch| ≤ MAX_PITCH_DEG，不存在除零、溢出、Hermite 爆掉的风险。
+    //
+    // pSign 的字典序必须照 MTR 的 Position.compareTo（x → y → z），<b>不能</b>用
+    // net.minecraft.core.BlockPos.compareTo：1.20.1 的 Vec3i.compareTo 是 y → z → x，斜向轨道上
+    // 两者会给出相反的顺序（用真实类实测：BlockPos(0,64,5) vs (10,64,0) → +5，Position → -1），
+    // 而 MTR 的 reversePositions 用的就是 Position.compareTo。pSign 反了整条轨道的俯仰会整体反号。
+    //
+    // 数值验证（build/tmp/pitchsign，真实内核 RailGeometryCore + 真实 FangSuRailMath 端点映射）：
+    //   共线直线 × 两条轨道的 2×2 建轨顺序 × {沿 d、逆 d、垂直 d} × pitch = ±10°：
+    //   修复前：垂直方向 8 个组合里 4 个在节点处两侧坡度反号（驼峰），另 4 个两侧一致但坡度应为 0；
+    //   修复后：24 个组合全部满足 slope = tan(pitch)·dot(d, +x)，且节点两侧完全一致。
+
+    /** 俯仰投影中「节点方向与轨道方向近乎垂直」的判定阈值：只用于一次性日志，<b>不影响取值</b>。 */
+    private static final double PITCH_PERPENDICULAR_EPSILON = 1.0E-3D;
+
+    /** 俯仰垂直情形的一次性日志标记（与翻滚的死区标记分开，互不吞掉对方提示）。 */
+    private static boolean warnedPitchPerpendicular = false;
+
+    /**
+     * 单端点纵坡：把「节点方向 d 上的纵坡 pitch」<b>投影</b>到这条轨道的内核参数方向上，
+     * 返回写入 {@code RailPoseExtra.pitchNDegrees} 的角度（推导见上方「俯仰角的节点帧 → 轨道帧换算」）。
+     * <p>
+     * {@code 存进去的角度 = atan( tan(pitch) · pSign · dot(d, chordUnit) )}。
+     *
+     * @param dx    从 {@code Rail.position1} 指向 {@code Rail.position2} 的水平向量 X 分量（锚点差，不必归一化）
+     * @param dz    同上，Z 分量
+     * @param node  该端点的万向节点
+     * @param pSign MTR 的 reversePositions 符号（+1 = 内核参数 0 端是 position1），见 {@link #parameterSign}
+     * @return 内核参数系里的纵坡角（度）；{@code pitch == 0} 或水平方向退化时返回 {@code +0.0}
+     */
+    private static double pitchFrameAngle(double dx, double dz, BlockEntityMultiDirectionNode node, double pSign) {
+        final double pitch = node.getPitchDegrees();
+        if (pitch == 0.0D) {
+            // 默认姿态不变式：0 必须原样返回 +0.0（RailPoseExtra.DEFAULT 逐位相等，isDefault() 才成立）
+            return 0.0D;
+        }
+        final double len = Math.hypot(dx, dz);
+        if (len < 1.0E-9D) {
+            // 水平方向退化（两个锚点重合）：没有 incrDir，就没有可承载的纵坡
+            return 0.0D;
+        }
+        final double nodeRadians = Math.toRadians(node.getDirectionDegrees());
+        final double dot = (dx / len) * Math.cos(nodeRadians) + (dz / len) * Math.sin(nodeRadians);
+        final double k = pSign * dot;
+        if (Math.abs(k) >= 1.0D - 1.0E-12D) {
+            // 节点方向正好沿/逆这条轨道（自动绑定）：直接给出 ±pitch，
+            // 与 D-A 版本的存储角<b>逐位相同</b> —— 这一支保证自动绑定的轨道几何没有任何回归。
+            return k > 0.0D ? pitch : -pitch + 0.0D;
+        }
+        if (Math.abs(dot) < PITCH_PERPENDICULAR_EPSILON && !warnedPitchPerpendicular) {
+            warnedPitchPerpendicular = true;
+            com.fangsu.Main.LOGGER.warn("[NodePitch] 万向节点 {} 的方向 {}° 与轨道方向近乎垂直（dot={}），"
+                            + "俯仰在该轨道上没有分量，节点处按水平处理；请检查该节点是否已旋转绑定到轨道方向",
+                    node.getBlockPos(), node.getDirectionDegrees(), dot);
+        }
+        return Math.toDegrees(Math.atan(Math.tan(Math.toRadians(pitch)) * k));
+    }
+
+    /**
+     * MTR 的 {@code reversePositions} 符号：{@code position1.compareTo(position2) <= 0 ? +1 : -1}。
+     * <p>
+     * <b>必须</b>复刻 {@code org.mtr.core.data.Position.compareTo} 的字典序 <b>x → y → z</b>，
+     * 不能用 {@code net.minecraft.core.BlockPos.compareTo}：1.20.1 的 {@code Vec3i.compareTo} 是
+     * <b>y → z → x</b>，在斜向轨道（dx、dz 都不为 0）上两者会给出相反的顺序，pSign 一错俯仰就整条反号。
+     * 已用真实类实测：{@code BlockPos(0,64,5).compareTo(BlockPos(10,64,0)) = +5} 而
+     * {@code Position(0,64,5).compareTo(Position(10,64,0)) = -1}。
+     */
+    private static double parameterSign(BlockPos pos1, BlockPos pos2) {
+        return compareXyz(pos1, pos2) <= 0 ? 1.0D : -1.0D;
+    }
+
+    /** 与 {@code Position.compareTo} 同为 x → y → z 字典序的整数比较（方块坐标即 MTR 的 Position）。 */
+    private static int compareXyz(BlockPos a, BlockPos b) {
+        if (a.getX() != b.getX()) {
+            return Integer.compare(a.getX(), b.getX());
+        }
+        if (a.getY() != b.getY()) {
+            return Integer.compare(a.getY(), b.getY());
+        }
+        return Integer.compare(a.getZ(), b.getZ());
+    }
+
     /**
      * 读取某方块位置处的「单端附加姿态」：只有端点 1 的字段被填充，端点 2 全零。
      * 调用方需要自行决定这个姿态属于轨道的哪一端（见 {@link #readRailPose}）。
      * <p>
      * <b>P4a</b>：俯仰 / 翻滚 / 半轨距从这里开始进入轨道姿态：
      * <ul>
-     *   <li>{@code pitch1Degrees} = 节点 {@code pitchDeg} 换算到内核参数系后的值
-     *       （{@code frameSign · pSign · pitchDeg}，见 {@link #readRailPose} 方法尾部的推导）——
-     *       驱动几何内核的三次 Hermite 竖向剖面（纵坡），<b>不受外轨超高开关影响</b>；</li>
+     *   <li>{@code pitch1Degrees} = 节点 {@code pitchDeg} <b>原样</b>给出（<b>不做</b>节点帧 → 轨道帧
+     *       换算：这里没有另一端的锚点，算不出轨道弦向）。真正写进轨道的换算在
+     *       {@link #readRailPose} 里，用的是 {@link #pitchFrameAngle}；本方法只给单端诊断/预览用，
+     *       所以它的俯仰是<b>节点帧</b>的值，不是内核参数系的值。驱动几何内核的三次 Hermite
+     *       竖向剖面（纵坡），<b>不受外轨超高开关影响</b>；</li>
      *   <li>{@code roll1Degrees} = 节点 {@code rollDeg} —— 但外轨超高开关关闭时写 0（见
      *       {@link #rollContribution}），驱动内核的 {@code 半轨距·|sin(roll)|} 中心线抬升；</li>
      *   <li>{@code halfGauge} = 节点 {@code rollOffsetM}（半轨距，米）。</li>
@@ -334,9 +461,11 @@ public final class NodeConnector {
      * <b>P4a：端点 → 姿态字段的完整映射</b>
      * <ul>
      *   <li>{@code pitch1/2Degrees} = 该端点万向节点的 {@code pitchDeg}（非万向节点端点 → 0），
-     *       <b>但先按 {@link #frameSign} 与「参数方向符号」{@code pSign} 换算到内核参数系</b>
-     *       （推导见方法尾部「俯仰角的节点帧 → 轨道帧换算」）。写入内核的三次 Hermite 纵坡剖面
-     *       （端点切线 = {@code tan(轨道帧俯仰角)}），<b>不受外轨超高开关门控</b>。</li>
+     *       <b>但先用 {@link #pitchFrameAngle} 投影到内核参数系</b>
+     *       （{@code atan(tan(pitch) · pSign · dot(d, chordUnit))}，推导见方法尾部的
+     *       「俯仰角的节点帧 → 轨道帧换算（FIX-PITCH-2）」）。写入内核的三次 Hermite 纵坡剖面
+     *       （端点切线 = {@code tan(轨道帧俯仰角)}），<b>不受外轨超高开关门控</b>。
+     *       节点方向沿/逆轨道时该投影退化为 ±pitch（与 D-A 版逐位相同）。</li>
      *   <li>{@code roll1/2Degrees} = 该端点万向节点的 {@code rollDeg}，<b>但当该端点的外轨超高开关
      *       关闭时写 0</b>（{@link #rollContribution}）。开关是按节点存的，所以门控也是逐端点的：
      *       一端关、另一端开时，只有关闭端的滚转被抹掉，另一端照常贡献。
@@ -408,47 +537,32 @@ public final class NodeConnector {
             // 两端都不贡献滚转：纯普通 MTR 轨道，或开关全关 / 角度全为 0
             halfGauge = RailPoseExtra.DEFAULT_HALF_GAUGE;
         }
-        // ==================== 俯仰角的节点帧 → 轨道帧换算（D-A 修复） ====================
+        // ==================== 俯仰角的节点帧 → 轨道帧换算（FIX-PITCH-2） ====================
         //
-        // 与翻滚同理：节点的俯仰角定义在「沿节点自身方向 d 前进时上坡」这个帧里
-        // （见 BlockEntityMultiDirectionNode.applyNodeModelTilt 的推导），而内核的三次 Hermite
-        // 纵坡剖面的端点切线就是 dh/d(参数)，参数方向 P 与节点的 d 毫无关系。因此写进内核前必须换算。
+        // 完整推导 / 为什么必须用 atan / 为什么垂直情形不能回退 +1 / 为什么 pSign 必须用 MTR 的
+        // Position 字典序，全部写在 pitchFrameAngle 上方的「俯仰角的节点帧 → 轨道帧换算」注释里，
+        // 这里是它的应用点，不再重复。一句话版本：
+        //     存进内核的角度 = atan( tan(pitch) · pSign · dot(节点方向, 轨道弦单位向量) )
+        // 与 D-A 的关系：D-A 版（frameSign · pSign · pitch，只取 ±1 符号）正是它在 |dot| = 1
+        // （节点方向沿/逆轨道，即自动绑定）时的特例，由 pitchFrameAngle 的饱和分支逐位保持。
         //
-        // 推导（P = 内核参数方向）：
-        //   1) MTR 的 reversePositions = position1.compareTo(position2) > 0 为真时，Rail 用
-        //      (position2, angle2, position1, angle1) 构造 RailMath，而内核参数 0 端就是
-        //      firstPosition、参数增大方向由 firstPosition 指向 secondPosition，所以
-        //        P = pSign · (position1→position2)，  pSign = (pos1.compareTo(pos2) <= 0 ? +1 : -1)
-        //      （Position.compareTo 与 BlockPos.compareTo 同为 x→y→z 字典序，已用 javap 核对）。
-        //   2) 「沿 d 上坡」的物理含义是：沿 d 方向水平前进时高度上升。以参数表示即
-        //        sign(dh/d(param)) = sign(dot(d, P)) · sign(pitch)
-        //      而 dot(d, P) = pSign · dot(d, chord) = pSign · frameSign。
-        //   3) 于是 slope(内核端点切线) = frameSign(frameDx, frameDz, node) · pSign · tan(pitch)。
+        // pSign 的唯一作用：把「position1→position2 的弦向」换成「内核参数增大方向」。
+        // 它不能折进 pitchFrameAngle（那是 per-endpoint 的投影），也不该由 FangSuRailMath 的
+        // firstIsPosition1 代劳 —— 后者只负责「哪个端点拥有哪个 pitch 字段」的配对，不改变角度所在帧。
+        // 翻滚则相反：它只乘 frameSign，绝不能再乘 pSign（参数方向那一步由渲染层 railFrameAngle 补）。
         //
-        // 为什么 pSign 不能折进 frameSign（也不该由 FangSuRailMath 的 firstIsPosition1 代劳）：
-        //   - firstIsPosition1 只负责「哪个端点拥有哪个 pitch 字段」的配对，不改变角度所在帧；
-        //   - 翻滚的帧约定以「position1→position2 的右手侧」为基准（RailPoseExtra / 渲染层），
-        //     它到内核参数系的换算由渲染层的 railFrameAngle 的 (p ? 1 : -1) 补上，所以翻滚<b>只</b>乘
-        //     frameSign，绝不能再乘 pSign（否则两处 pSign 互相抵消）；
-        //   - 俯仰则被内核直接当作「参数系端点斜率」消费，没有 railFrameAngle 那一步，
-        //     所以 pSign 必须在<b>这里</b>补，且只补一次。
-        //
-        // 数值验证（build/tmp/pitchfix，真实内核 + 真实 FangSuRailMath 映射）：
-        //   forward/reverse × 正/负俯仰 共 8 个端点，修复前有 4 个端点斜率符号与节点方向相反
-        //   （反向建轨时<b>两端都反</b>），修复后 8/8 全部满足 sign(dh/ds(d)) = sign(pitch)。
-        //
-        // 不变量：本换算同样只是对每个端点值乘 ±1，
-        //   - 0 仍是 0（末尾 + 0.0D 把 0 × -1 = -0.0 归一成 +0.0，默认姿态逐位等于 DEFAULT）；
-        //   - |pitch| 不变 → 内核 hermite 开关与剖面幅度不变；
+        // 不变量：
+        //   - pitch == 0 时 pitchFrameAngle 直接给 +0.0，末尾 + 0.0D 再把 -0.0 归一 → 默认姿态逐位等于 DEFAULT；
+        //   - |pitchFrameAngle| ≤ |pitch|，内核 Hermite 的开关（任一为非 0）与幅度不越界；
         //   - 不触碰翻滚，也不触碰半轨距判据。
-        final double pSign = pos1.compareTo(pos2) <= 0 ? 1.0D : -1.0D;
+        final double pSign = parameterSign(pos1, pos2);
         return new RailPoseExtra(
                 offset1[0], offset1[1], offset1[2],
                 offset2[0], offset2[1], offset2[2],
                 halfGauge,
-                // 俯仰：纵坡不受外轨超高开关影响；按上面的推导换算到内核参数系（非万向节点端点贡献 0）
-                node1 == null ? 0.0D : frameSign(frameDx, frameDz, node1) * node1.getPitchDegrees() * pSign + 0.0D,
-                node2 == null ? 0.0D : frameSign(frameDx, frameDz, node2) * node2.getPitchDegrees() * pSign + 0.0D,
+                // 俯仰：纵坡不受外轨超高开关影响；投影到内核参数系（非万向节点端点贡献 0）
+                node1 == null ? 0.0D : pitchFrameAngle(frameDx, frameDz, node1, pSign) + 0.0D,
+                node2 == null ? 0.0D : pitchFrameAngle(frameDx, frameDz, node2, pSign) + 0.0D,
                 // 翻滚：按各端点自己的外轨超高开关门控（关闭 → 0）
                 contribution1,
                 contribution2
