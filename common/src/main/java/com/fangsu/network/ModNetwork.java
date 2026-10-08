@@ -153,10 +153,13 @@ public class ModNetwork {
             // 先落姿态：必须在重建循环之前写入，后面 refreshNodeRail 才会按新偏移算几何
             // （setNodeOffset 内部已做 ±MAX_OFFSET 钳制，并 setChanged + 方块更新）
             node.setNodeOffset(offsetX, offsetY, offsetZ);
-            // P3：俯仰 / 翻滚同样先落盘（钳制 ±15° / ±20°）。P4a 起它们会经 readRailPose 进入轨道姿态，
+            // P3：俯仰 / 翻滚同样先落盘（按 BlockEntityMultiDirectionNode 的硬边界钳制，
+            // 即 MAX_PITCH_DEG / MAX_ROLL_DEG；服务端钳制只此一份，见该类的「硬边界」说明）。
+            // P4a 起它们会经 readRailPose 进入轨道姿态，
             // 所以必须在重建循环之前写入，重建才会按新纵坡 / 超高算几何。
             node.setNodeAngles(pitchDeg, rollDeg);
-            // P4a：外轨超高开关与半轨距（半轨距内部钳制 0.5~1.0、NaN/Inf → 默认）。
+            // P4a：外轨超高开关与半轨距（半轨距内部按 MIN_HALF_GAUGE / MAX_HALF_GAUGE 钳制、
+            // NaN/Inf → 默认）。
             // 开关为「关」时，随后 readRailPose 会把 roll 端点值写成 0，几何不再有中心线抬升。
             node.setSuperelevation(superelevation);
             node.setRollOffsetM(rollOffsetM);

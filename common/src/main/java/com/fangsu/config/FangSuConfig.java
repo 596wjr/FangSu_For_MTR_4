@@ -20,6 +20,11 @@ import java.util.Properties;
  *     方块朝向（90° 整数倍）无论开关都照常生效且不会细分。</li>
  *     <li>{@code shapeStep}：细分时的切分步长（默认 0.1，单位：方块）。
  *     步长越小碰撞箱越贴合模型，但子盒数量与计算量随之增大。</li>
+ *     <li>{@code cameraTiltEnabled}：乘车经过外轨超高（翻滚角）的曲线时，镜头/地平线是否随车体滚转
+ *     （默认 true）。关闭后本特性对相机完全无副作用（见 {@code GameRendererTiltMixin}）。</li>
+ *     <li>{@code cameraTiltStrength}：上述镜头滚转的强度倍率（默认 1.0，允许 0~2）。
+ *     1.0 = 完全抵消车体自身在画面上的倾斜（车内看起来水平、地平线看起来倾斜了车体那么多）；
+ *     0 = 关闭（与开关关闭等价），2 = 两倍。参考实现 MAGIC 的默认值与夹取范围一致。</li>
  * </ul>
  * 文件缺失或缺少键时会在 config 目录下自动补全。
  */
@@ -29,17 +34,27 @@ public final class FangSuConfig {
 
     public static final String KEY_HIGH_QUALITY_SHAPE = "highQualityShape";
     public static final String KEY_SHAPE_STEP = "shapeStep";
+    public static final String KEY_CAMERA_TILT_ENABLED = "cameraTiltEnabled";
+    public static final String KEY_CAMERA_TILT_STRENGTH = "cameraTiltStrength";
 
     public static final boolean DEFAULT_HIGH_QUALITY_SHAPE = true;
     public static final double DEFAULT_SHAPE_STEP = 0.1d;
+    public static final boolean DEFAULT_CAMERA_TILT_ENABLED = true;
+    public static final double DEFAULT_CAMERA_TILT_STRENGTH = 1.0d;
 
     /** 步长允许范围：过小会触发 RotatableShapeHelper 的子盒上限保护 */
     private static final double MIN_SHAPE_STEP = 0.01d;
     private static final double MAX_SHAPE_STEP = 1.0d;
 
+    /** 镜头滚转强度允许范围（与参考实现 MAGIC 的夹取范围一致） */
+    private static final double MIN_CAMERA_TILT_STRENGTH = 0.0d;
+    private static final double MAX_CAMERA_TILT_STRENGTH = 2.0d;
+
     private static volatile boolean initialized = false;
     private static volatile boolean highQualityShape = DEFAULT_HIGH_QUALITY_SHAPE;
     private static volatile double shapeStep = DEFAULT_SHAPE_STEP;
+    private static volatile boolean cameraTiltEnabled = DEFAULT_CAMERA_TILT_ENABLED;
+    private static volatile double cameraTiltStrength = DEFAULT_CAMERA_TILT_STRENGTH;
 
     private FangSuConfig() {
     }
@@ -89,9 +104,38 @@ public final class FangSuConfig {
             }
         }
 
+        String tiltEnabled = properties.getProperty(KEY_CAMERA_TILT_ENABLED);
+        if (tiltEnabled == null || tiltEnabled.trim().isEmpty()) {
+            needSave = true;
+        } else {
+            cameraTiltEnabled = Boolean.parseBoolean(tiltEnabled.trim());
+        }
+
+        String tiltStrength = properties.getProperty(KEY_CAMERA_TILT_STRENGTH);
+        if (tiltStrength == null || tiltStrength.trim().isEmpty()) {
+            needSave = true;
+        } else {
+            try {
+                double parsed = Double.parseDouble(tiltStrength.trim());
+                double clamped = clampCameraTiltStrength(parsed);
+                if (clamped != parsed) {
+                    Main.LOGGER.warn("{} out of range [{}~{}], using {}", KEY_CAMERA_TILT_STRENGTH,
+                            MIN_CAMERA_TILT_STRENGTH, MAX_CAMERA_TILT_STRENGTH, clamped);
+                    needSave = true;
+                }
+                cameraTiltStrength = clamped;
+            } catch (NumberFormatException e) {
+                Main.LOGGER.warn("Invalid {} value \"{}\", using {}", KEY_CAMERA_TILT_STRENGTH, tiltStrength,
+                        DEFAULT_CAMERA_TILT_STRENGTH);
+                needSave = true;
+            }
+        }
+
         if (needSave) save(properties);
 
-        Main.LOGGER.info("FangSu config: {}={}, {}={}", KEY_HIGH_QUALITY_SHAPE, highQualityShape, KEY_SHAPE_STEP, shapeStep);
+        Main.LOGGER.info("FangSu config: {}={}, {}={}, {}={}, {}={}",
+                KEY_HIGH_QUALITY_SHAPE, highQualityShape, KEY_SHAPE_STEP, shapeStep,
+                KEY_CAMERA_TILT_ENABLED, cameraTiltEnabled, KEY_CAMERA_TILT_STRENGTH, cameraTiltStrength);
     }
 
     /** 旋转碰撞箱是否细分；false 时整块旋转（朝向仍然生效，只是不做细分）。 */
@@ -104,6 +148,18 @@ public final class FangSuConfig {
     public static double shapeStep() {
         init();
         return shapeStep;
+    }
+
+    /** 乘车经过带外轨超高的曲线时，镜头/地平线是否随车体滚转。 */
+    public static boolean cameraTiltEnabled() {
+        init();
+        return cameraTiltEnabled;
+    }
+
+    /** 镜头滚转强度倍率（已保证落在 {@code [0, 2]}）。 */
+    public static double cameraTiltStrength() {
+        init();
+        return cameraTiltStrength;
     }
 
     private static Path configPath() {
@@ -123,13 +179,18 @@ public final class FangSuConfig {
 
         properties.setProperty(KEY_HIGH_QUALITY_SHAPE, Boolean.toString(highQualityShape));
         properties.setProperty(KEY_SHAPE_STEP, Double.toString(shapeStep));
+        properties.setProperty(KEY_CAMERA_TILT_ENABLED, Boolean.toString(cameraTiltEnabled));
+        properties.setProperty(KEY_CAMERA_TILT_STRENGTH, Double.toString(cameraTiltStrength));
 
         try {
             Path parent = path.getParent();
             if (parent != null) Files.createDirectories(parent);
             try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
                 properties.store(writer, "FangSu config. highQualityShape: rotate collision shapes (true/false); "
-                        + "shapeStep: sub-box step used when rotating (" + MIN_SHAPE_STEP + "~" + MAX_SHAPE_STEP + ")");
+                        + "shapeStep: sub-box step used when rotating (" + MIN_SHAPE_STEP + "~" + MAX_SHAPE_STEP + "); "
+                        + "cameraTiltEnabled: roll camera/horizon while riding a banked train (true/false); "
+                        + "cameraTiltStrength: camera roll multiplier ("
+                        + MIN_CAMERA_TILT_STRENGTH + "~" + MAX_CAMERA_TILT_STRENGTH + ")");
             }
         } catch (Exception e) {
             Main.LOGGER.warn("Failed to write config {}: {}", FILE_NAME, e.toString());
@@ -140,6 +201,13 @@ public final class FangSuConfig {
         if (Double.isNaN(value)) return DEFAULT_SHAPE_STEP;
         if (value < MIN_SHAPE_STEP) return MIN_SHAPE_STEP;
         if (value > MAX_SHAPE_STEP) return MAX_SHAPE_STEP;
+        return value;
+    }
+
+    private static double clampCameraTiltStrength(double value) {
+        if (Double.isNaN(value)) return DEFAULT_CAMERA_TILT_STRENGTH;
+        if (value < MIN_CAMERA_TILT_STRENGTH) return MIN_CAMERA_TILT_STRENGTH;
+        if (value > MAX_CAMERA_TILT_STRENGTH) return MAX_CAMERA_TILT_STRENGTH;
         return value;
     }
 }

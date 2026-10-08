@@ -59,6 +59,13 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
  *   <li>{@code lambda$render$12} 里的两个 {@code renderConnection} 调用用 {@code @ModifyArgs}
  *       把滚转角加到 {@code oscillationAmount} 上，风挡与挡板因此与车体同步倾斜。</li>
  * </ul>
+ * <p>
+ * <b>P6 镜头滚转</b>（{@code GameRendererTiltMixin}）<b>不在这里</b>，但它要用的「玩家所在车厢的
+ * 滚转角 + 世界纵轴」也由本类的 {@code @Redirect}（{@link #fangsu$captureCarFrame}）经
+ * {@link RailRollRenderHelper#beginCarFrame(PositionAndRotation, boolean)} 一并缓存，
+ * 因此镜头与车体按构造用的是同一节车、同一帧的姿态（镜头在 {@code renderLevel} 里读到的是上一帧快照，
+ * 见 {@link RailRollRenderHelper#ridingCarYawRadians} 的说明）；镜头只在计算成功后才会调用
+ * {@link RailRollRenderHelper#getCameraTiltAxis()}。
  */
 @Mixin(value = RenderVehicles.class, remap = false)
 public class RenderVehiclesMixin {
@@ -169,7 +176,13 @@ public class RenderVehiclesMixin {
             PositionAndRotation absoluteVehicleCarPositionAndRotation,
             Vector3d cameraShakeOffset
     ) {
-        RailRollRenderHelper.beginCarFrame(absoluteVehicleCarPositionAndRotation);
+        // 「第 3 个实参是不是本车厢自己」= 当前渲染的是否就是玩家乘坐的那一节车厢。
+        // MTR 用的是本帧新建的 PnR 实例（见 RailRollRenderHelper#ridingCarRollDegrees），
+        // 所以引用比较既精确又 O(1)；乘车时二者相同，未乘车 / 别的列车时前者是 null 或别的实例。
+        // 这个布尔量只供 P6 的镜头滚转挑选「玩家自己那节车」的滚转角用，不参与车体 / 风挡的取值。
+        final boolean isRidingCar = ridingCarPositionAndRotation != null
+                && ridingCarPositionAndRotation == absoluteVehicleCarPositionAndRotation;
+        RailRollRenderHelper.beginCarFrame(absoluteVehicleCarPositionAndRotation, isRidingCar);
         return RenderVehicles.getRenderPositionAndRotation(
                 offsetVector, offsetRotation, ridingCarPositionAndRotation,
                 absoluteVehicleCarPositionAndRotation, cameraShakeOffset

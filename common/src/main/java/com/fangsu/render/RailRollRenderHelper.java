@@ -1,6 +1,7 @@
 package com.fangsu.render;
 
 import com.fangsu.Main;
+import com.fangsu.config.FangSuConfig;
 import com.fangsu.mappings.rail.RailGeometryCore;
 import com.fangsu.mtr.rail.FangSuRailMath;
 import com.fangsu.mtr.rail.RailPoseExtraHolder;
@@ -13,6 +14,8 @@ import org.mtr.mapping.holder.Vector3d;
 import org.mtr.mapping.mapper.GraphicsHolder;
 import org.mtr.mod.client.IDrawing;
 import org.mtr.mod.client.MinecraftClientData;
+import org.mtr.mod.client.VehicleRidingMovement;
+import org.mtr.mod.data.VehicleExtension;
 import org.mtr.mod.render.PositionAndRotation;
 import org.mtr.mod.render.StoredMatrixTransformations;
 
@@ -428,6 +431,102 @@ public final class RailRollRenderHelper {
                     + "Lorg/mtr/mod/render/PositionAndRotation$Rotate;Lorg/mtr/mod/render/PositionAndRotation$Rotate;"
                     + "Lorg/mtr/mod/render/PositionAndRotation$Translate;)Ljava/lang/Object;";
 
+    // ==================== P6：乘车镜头滚转（地平线随车体横滚） ====================
+    //
+    // 问题：车体、轨面、风挡、玩家站位都已经随外轨超高（翻滚角）倾斜，但 **玩家的视线仍然水平**，
+    // 于是「明显倾斜的车厢里挂着一整条水平的地平线」—— 这是最后、也是最显眼的一处不协调。
+    // 参考实现 MAGIC（1.3.5，fabric 1.20.1，yarn 映射）用同一份「乘车车厢的滚转角」做了两件事：
+    //   1) 车体：graphicsHolder.rotateZDegrees(-D)（MAGIC 的 D 与它的车体符号同源）；
+    //   2) 相机：在 GameRenderer 的 renderWorld 里、WorldRenderer.setupFrustum 调用**之前**，
+    //      给世界 PoseStack 右乘 RotationAxis.POSITIVE_Z.rotationDegrees(-D)。
+    // 本工程当初照抄了「视图矩阵右乘一个旋转」，但**轴取错了**：绕视线轴滚转是 screen-space 滚转，
+    // 它让地平线的滚转与「玩家朝哪看」无关；而「乘客的脑袋随车体一起滚」要求世界绕
+    // **车厢自己的世界纵轴**逆向滚。两种模型的差别恰好就是用户报告的现象（见下）。
+    //
+    // <b>P6-AXIS 修复（本次）</b>：
+    //   旧形式：a = M⁻¹·ẑ_view = 相机后向，M·R_a(φ) —— 由恒等式
+    //           M·R_{M⁻¹ẑ}(φ) = R_ẑ(φ)·M，这就是「相机空间 Z 轴滚转」，轴随视线走。
+    //           ⇒ 车内横轴（车厢 +X）在屏幕上的角度 = **0（恒定）**、
+    //             地平线屏幕角 = **−φ（恒定）**，与 look 无关。
+    //   新形式：a = f = 车厢世界纵轴（含 pitch，见 getCameraTiltAxis），M·R_f(−φ)。
+    //           ⇒ 车内横轴 = 0（恒定，与 look 无关）—— 这就是用户要的「车内水平」；
+    //             地平线屏幕角 = −φ·cos(look)：
+    //             look = 0（朝车头）→ −φ。此刻相机后向 a_旧 = M 的第三行 = −f，而 R_{−f}(φ) = R_f(−φ)，
+    //             所以新形式与旧形式在朝车头时是<b>同一个旋转</b>（探头 worst |OLD − NEW| = 5.96e-08）；
+    //             look = 180（朝车尾）→ +φ（符号翻转，与旧形式的恒定 −φ 相反）；
+    //             look = ±90（正侧向）→ 0（效果退化为纯俯仰、屏幕滚转为零，旧形式仍给 −φ）。
+    //           数值证据（yaw ∈ {0,37,90,155,180,270} × look ∈ {0,±45,±90,135,180}）见
+    //           build/tmp/camroll2/CameraTiltAxisProbe 的 probe.log。
+    //   也就是说：朝车头看**没有任何变化**（用户已验收的画面保留），朝车尾/侧向看才是修好的部分。
+
+    /**
+     * 相机滚转注入点的目标方法选择器：MC 1.20.1（Mojang 官方映射 / Architectury 的
+     * {@code net.minecraft.*}）下 {@code GameRenderer} 渲染世界的入口是
+     * {@code public void renderLevel(float, long, com.mojang.blaze3d.vertex.PoseStack)}。
+     * <p>
+     * <b>与参考实现 MAGIC 的对应关系</b>：MAGIC 是 yarn 映射，写的是
+     * {@code GameRenderer.renderWorld(float tickDelta, long limitTime, MatrixStack matrices)}
+     * —— 同一方法（yarn {@code renderWorld} = mojmap {@code renderLevel}），形参表逐字对应
+     * （{@code float, long, MatrixStack}）。该重载在 1.20.1 只被 {@code GameRenderer.render(FLZ)}
+     * 用 {@code new PoseStack()}（字节码偏移 234）调用一次，因此这个 PoseStack 是
+     * <b>世界渲染专用</b>的干净栈：进入方法体时是单位矩阵，随后
+     * <ol>
+     *   <li>投影矩阵被乘进<b>另一个</b>局部 PoseStack（槽位 7，偏移 97–124），用来算 bob 与
+     *       {@code resetProjectionMatrix}，<b>不</b>进世界栈；</li>
+     *   <li>{@code Camera.setup(...)}（偏移 448）之后，在<b>形参槽位 4</b>（= 世界栈）上依次
+     *       {@code mulPose(Axis.XP.rotationDegrees(camera.getXRot()))}（偏移 452）与
+     *       {@code mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180))}（偏移 470），
+     *       世界栈因此等于「世界 → 视图」旋转 {@code R_cam = Rx(xRot) · Ry(yRot + 180)}；</li>
+     *   <li>紧接着调用 {@code LevelRenderer.prepareCullFrustum(matrices, cameraPos, projection)}
+     *       （偏移 517–560），再把它交给 {@code LevelRenderer.renderLevel(...)}（偏移 563 起）。</li>
+     * </ol>
+     * 所以「在 {@code prepareCullFrustum} 调用之前」就是「相机旋转已经就位、而任何世界几何还没被变换」
+     * 的那一点 —— 与参考实现选择的时机完全一致。
+     * <p>
+     * <b>为什么必须是这个（客户端）钩子</b>：MTR 的列车、轨道、站台全部由
+     * {@code MainRenderer}（= 一个 {@code EntityRenderer}）/<b>方块实体渲染</b> 在
+     * {@code LevelRenderer.renderLevel} 内部绘制，而它们使用的 {@code GraphicsHolder} 包的就是
+     * 这个世界 PoseStack。因此在这里动矩阵等于「整体旋转整个画面（含车厢内部与地平线）」，
+     * 而不是「只转地平线」。这正是把「水平地平线 + 倾斜车厢」变成「倾斜地平线 + 水平车厢」的关键
+     * （车厢内部自身已经因为车体滚转在屏幕上斜了 roll 度，再整体旋转 +roll 度正好抵消）。
+     */
+    public static final String GAME_RENDERER_RENDER_LEVEL_DESCRIPTOR =
+            "renderLevel(FLcom/mojang/blaze3d/vertex/PoseStack;)V";
+
+    /**
+     * 相机滚转 {@code @Inject} 实际使用的 {@code method} 选择器：{@link #GAME_RENDERER_RENDER_LEVEL_DESCRIPTOR}
+     * 的<b>方法名</b>（不带描述符）。
+     * <p>
+     * <b>为什么注解里用「只写方法名」而不是完整描述符</b>（已实测，与本工程
+     * {@code LevelRendererMixin} 对 {@code renderLevel} 的写法、以及参考实现 MAGIC 对
+     * {@code renderWorld} 的写法一致）：
+     * Mixin AP 0.8.5 在<b>没有</b>映射服务时无法把「名字 + 描述符」联合定位到 named 类路径上的方法，
+     * 会多报一条 {@code Cannot find target method "renderLevel(FLcom/…/PoseStack;)V"}
+     * （实测：加上 loom 的 {@code -AinMapFileNamedIntermediary=...mappings.tiny}
+     * 后完整描述符形式仍报这 1 条告警，而只写名字时为 0 告警；
+     * 两者的 refmap 产物都是
+     * {@code class_757;renderLevel(FLclass_4587;)V}，即映射结果完全相同）。
+     * {@code GameRenderer} 里 {@code renderLevel} <b>只有一个</b>重载（javap 已核实），
+     * 所以只写名字不存在歧义；调用点的精确性由 {@code @At} 的完整 {@code target} 保证。
+     * <p>
+     * 完整描述符仍然保留在 {@link #GAME_RENDERER_RENDER_LEVEL_DESCRIPTOR} 里，作为
+     * 「本钩子到底钉在哪个方法上」的书面证据（每次 MC/MTR 升级都应该用 javap 复核它）。
+     */
+    public static final String GAME_RENDERER_RENDER_LEVEL_TARGET = "renderLevel";
+
+    /**
+     * 相机滚转注入点的 {@code @At} 目标：
+     * {@code LevelRenderer.prepareCullFrustum(PoseStack, Vec3, Matrix4f)} —— 就是 yarn 里的
+     * {@code WorldRenderer.setupFrustum(MatrixStack, Vec3d, Matrix4f)}（参考实现用的那一个），
+     * 三个形参类型逐字对应。本工程用 {@code shift = At.Shift.BEFORE}。
+     */
+    public static final String PREPARE_CULL_FRUSTUM_TARGET =
+            "Lnet/minecraft/client/renderer/LevelRenderer;prepareCullFrustum(Lcom/mojang/blaze3d/vertex/PoseStack;"
+                    + "Lnet/minecraft/world/phys/Vec3;Lorg/joml/Matrix4f;)V";
+
+    /** 小于该角度（度）就完全不动矩阵（与参考实现的 {@code |θ| >= 0.001} 门限一致）。 */
+    public static final double CAMERA_TILT_EPSILON_DEGREES = 0.001D;
+
     /**
      * 采样 / 排队线程上下文：当前正在渲染截面的那条轨道的滚转快照，仅在
      * {@code RenderRails.renderRailStandard} 的同步窗口内有效。
@@ -474,6 +573,49 @@ public final class RailRollRenderHelper {
      * 那时序更晚，所以只能拆成两个方法；换成 HEAD 之后不再需要这个拆分。
      */
     private static volatile double carFrameRollDegrees = 0.0D;
+
+    /**
+     * <b>玩家自己乘坐的那一节车厢</b>的滚转角（度），以及它是否有效。
+     * <p>
+     * 与 {@link #carFrameRollDegrees} 的区别：后者是「本帧最后渲染的那一节车厢」，
+     * 而 {@code RenderVehicles.lambda$render$14} 对<b>每一节</b>车厢都会跑一次
+     * （{@code MinecraftClientData.vehicles} 里的每一列车、每一节车），所以它随时会被别的车覆盖。
+     * 镜头滚转必须用「玩家所在的那一节」，否则在超高坡道出入口会出现「自己的车还是平的、
+     * 镜头已经跟着别的车歪了」。
+     * <p>
+     * <b>数据来源</b>：同一 lambda 里那次 {@code getRenderPositionAndRotation} 调用的第 3 个实参
+     * {@code ridingCarPositionAndRotation} 就是「玩家所在车厢」的 PnR 实例
+     * （{@code RenderVehicles.render} 里 {@code vehiclePropertiesList.get(ridingCarNumber).right().right()}，
+     * 而 {@code vehiclePropertiesList} 的每一节车都是本帧新建的实例），
+     * 第 4 个实参是本车厢自己的 PnR。两者<b>实例相同</b>就说明当前正在渲染的就是玩家所在车厢 ——
+     * 于是 {@link #beginCarFrame(PositionAndRotation, boolean)} 只需要一次 O(1) 的引用比较，
+     * <b>不需要新增任何注入点</b>，也不需要再算第二个滚转角（本值就是 {@link #carFrameRollDegrees}）。
+     * <p>
+     * 只有「玩家正在乘坐 MTR 车辆」时它才会被写；{@link #beginVehicleFrame()} 每帧把它清掉，
+     * 所以它最多陈旧一帧（镜头钩子在 {@code RenderVehicles.render} 之前执行，天然读上一帧的值，
+     * 这是不可避免且无感知的：一帧内车体滚转角的变化远小于 0.01°）。
+     */
+    private static volatile double ridingCarRollDegrees = 0.0D;
+    /** {@link #ridingCarRollDegrees} 是否有效（本帧确实渲染过玩家所在车厢）。 */
+    private static volatile boolean ridingCarRollValid = false;
+    /**
+     * <b>玩家所在车厢的世界帧朝向</b>（MTR 的 {@code PositionAndRotation.yaw} / {@code .pitch}，弧度），
+     * 与 {@link #ridingCarRollDegrees} 在<b>同一个 {@code beginCarFrame} 调用</b>里写入、同一帧清空。
+     * <p>
+     * <b>为什么 P6 需要它</b>：镜头补偿的正确轴不是视线轴，而是<b>车厢自己的世界纵轴</b>
+     * {@code f = Ry(yaw)·Rx(pitch)·ẑ} —— 乘客的脑袋随车体一起滚，等价于整个世界绕这根轴反向滚
+     * （见 {@link #getCameraTiltAxis()}）。而 {@code f} 由车厢的 yaw / pitch 决定（roll 不参与，
+     * 因为 roll 就是绕 f 自己转）。
+     * <p>
+     * <b>为什么必须和 roll 同源同帧</b>：{@code getCameraRollDegrees()} 与 {@link #getCameraTiltAxis()}
+     * 由 {@code GameRendererTiltMixin} 在<b>同一次注入</b>里成对读取；两者都来自
+     * {@code GameRenderer.renderLevel}（本帧，早于 {@code RenderVehicles.render}）读到的
+     * <b>上一帧</b>快照，因此不可能出现「轴是这节车、角度是那节车」。任何一处失效都只让
+     * {@link #ridingCarRollValid} 为 false，镜头退回原生，绝不会拿别的车厢的朝向去转世界。
+     */
+    private static volatile double ridingCarYawRadians = 0.0D;
+    /** 见 {@link #ridingCarYawRadians}。 */
+    private static volatile double ridingCarPitchRadians = 0.0D;
 
     /**
      * {@link #captureBogieSource} 抓到的<b>本车厢转向架 PnR 列表</b>，以及它所属车厢的
@@ -582,6 +724,15 @@ public final class RailRollRenderHelper {
      */
     private static volatile boolean ridingPositionHookAlive = false;
     /**
+     * 「相机/地平线随车体滚转」钩子（P6，{@code GameRendererTiltMixin}）是否触发过。
+     * <p>
+     * 与 {@link #ridingPositionHookAlive} 同类：它是 {@link #ridingCarRollDegrees} 的下游消费者，
+     * 不产生滚转角，因此<b>不</b>参与 {@link #allRollHooksMissing()}，只用自己的一次性告警表达。
+     */
+    private static volatile boolean cameraTiltHookAlive = false;
+    /** {@link #getCameraRollDegrees()} 实际返回过非零角度的次数（仅诊断用）。 */
+    private static volatile int cameraTiltAppliedSamples = 0;
+    /**
      * {@link #applyTrainRoll} 走「乘车」分支（{@code useOffset == false}）的次数。
      * <p>
      * 这是 {@link #ridingPositionHookAlive} 诊断的<b>前置条件</b>：只有确实以乘车状态渲染过车体，
@@ -619,6 +770,7 @@ public final class RailRollRenderHelper {
     private static boolean warnedConnectionMissing = false;
     private static boolean warnedBogieFrameMissing = false;
     private static boolean warnedRidingPositionMissing = false;
+    private static boolean warnedCameraTiltMissing = false;
     private static boolean warnedAllHooksMissing = false;
 
     private RailRollRenderHelper() {
@@ -1115,6 +1267,13 @@ public final class RailRollRenderHelper {
         carFramePositionAndRotation = null;
         carFrameValid = false;
         carFrameRollDegrees = 0.0D;
+        // 镜头滚转用的「玩家所在车厢滚转角」每帧清空：本帧若没有再被写回（没在乘车 / 那节车没渲染），
+        // 镜头就退回原生，绝不会沿用上一帧的角度。镜头钩子在本方法之前执行，读到的是上一帧的值。
+        ridingCarRollDegrees = 0.0D;
+        ridingCarRollValid = false;
+        // 车厢世界朝向与滚转角同源同帧清空：轴与角必须来自同一节车、同一帧。
+        ridingCarYawRadians = 0.0D;
+        ridingCarPitchRadians = 0.0D;
         pendingBogiePositions = null;
         pendingBogieCarPositionAndRotation = null;
         final MinecraftClientData clientData = MinecraftClientData.getInstance();
@@ -1272,6 +1431,17 @@ public final class RailRollRenderHelper {
                     + "玩家在车厢内仍会站在水平的隐形地板上、不随车体倾斜（请用 javap 重新核对 "
                     + "RIDING_MOVE_TARGET 与 TRANSFORM_FORWARDS_DESCRIPTOR）");
         }
+        // 镜头滚转（P6）：GameRenderer.renderLevel 每帧都会被调用，所以「钩子从未触发」只可能是
+        // 注入没挂上（名字/描述符/版本差异）。它不产生滚转角，因此只用自己的告警，且不参与
+        // allRollHooksMissing()。判定放在本条函数的证据门控之后：只有客户端确实存在带滚转的轨道
+        // 时才有诊断价值（否则玩家可能根本没接触过这个特性）。
+        if (!cameraTiltHookAlive && !warnedCameraTiltMissing) {
+            warnedCameraTiltMissing = true;
+            Main.LOGGER.warn("[RailRoll] GameRenderer.renderLevel 的相机滚转钩子从未触发；"
+                    + "乘车经过外轨超高曲线时地平线不会随车体滚转（请用 javap 重新核对 "
+                    + "GAME_RENDERER_RENDER_LEVEL_DESCRIPTOR 与 PREPARE_CULL_FRUSTUM_TARGET，"
+                    + "并确认 GameRendererTiltMixin 仍在 fangsu.mixins.json 的 client 数组里）");
+        }
     }
 
     /**
@@ -1291,6 +1461,10 @@ public final class RailRollRenderHelper {
 
     /**
      * 记录「当前正在渲染的车厢」的世界 PnR，并据此算出本车应当施加的滚转角。
+     * <p>
+     * 本方法同时缓存<b>玩家所在车厢的世界朝向</b>
+     * （{@link #ridingCarYawRadians} / {@link #ridingCarPitchRadians}），供 P6 的镜头滚转求
+     * 「车厢世界纵轴」{@link #getCameraTiltAxis()}；两者的失效语义完全一致（同帧同源）。
      * <p>
      * 由 {@code RenderVehicles.lambda$render$14} 内 {@code getRenderPositionAndRotation} 调用的
      * {@code @Redirect} 在<b>该车自己的世界 PnR 被换算成相机相对量之前</b>调用，
@@ -1351,6 +1525,22 @@ public final class RailRollRenderHelper {
      * {@link #reportMissingHooks()} 会一次性告警。
      */
     public static void beginCarFrame(PositionAndRotation absoluteVehicleCarPositionAndRotation) {
+        beginCarFrame(absoluteVehicleCarPositionAndRotation, false);
+    }
+
+    /**
+     * 同 {@link #beginCarFrame(PositionAndRotation)}，另外说明「当前渲染的是不是玩家所在的这一节车厢」。
+     * <p>
+     * {@code isRidingCar} 由 {@code RenderVehiclesMixin#fangsu$captureCarFrame} 用一次引用比较得出：
+     * 那次 {@code getRenderPositionAndRotation} 调用的第 3 个实参（玩家所在车厢的 PnR）与第 4 个实参
+     * （本车厢的 PnR）是<b>同一个实例</b> ⟺ 本车厢就是玩家所在车厢。
+     * 为真时把本车厢的滚转角同时记进 {@link #ridingCarRollDegrees}，供 P6 的镜头滚转使用；
+     * 于是「镜头、车体、风挡、玩家站位」四者永远是同一个数（P4b 的硬性要求）。
+     *
+     * @param absoluteVehicleCarPositionAndRotation 当前正在渲染的车厢的世界 PnR
+     * @param isRidingCar                           当前渲染的车厢是否就是玩家乘坐的那一节
+     */
+    public static void beginCarFrame(PositionAndRotation absoluteVehicleCarPositionAndRotation, boolean isRidingCar) {
         carFrameHookAlive = true;
         carFrameSamples++;
         carFramePositionAndRotation = absoluteVehicleCarPositionAndRotation;
@@ -1377,6 +1567,11 @@ public final class RailRollRenderHelper {
                 if (Double.isFinite(averaged)) {
                     carFrameRollDegrees = averaged;
                     carFrameValid = true;
+                    if (isRidingCar) {
+                        ridingCarRollDegrees = averaged;
+                        ridingCarRollValid = true;
+                        fangsu$cacheRidingCarOrientation(absoluteVehicleCarPositionAndRotation);
+                    }
                     reportMissingHooks();
                     return;
                 }
@@ -1385,7 +1580,27 @@ public final class RailRollRenderHelper {
         // 拿不到本车厢的转向架（钩子未挂上 / 列表为空 / 元素类型变了）→ 修复前的「弦中点单点采样」
         carFrameRollDegrees = rollDegreesAtPoint(absoluteVehicleCarPositionAndRotation);
         carFrameValid = true;
+        if (isRidingCar) {
+            ridingCarRollDegrees = carFrameRollDegrees;
+            ridingCarRollValid = true;
+            fangsu$cacheRidingCarOrientation(absoluteVehicleCarPositionAndRotation);
+        }
         reportMissingHooks();
+    }
+
+    /**
+     * 把「玩家所在车厢」的世界朝向（yaw / pitch）缓存下来，供 P6 的镜头滚转求世界纵轴。
+     * <p>
+     * 与 {@link #ridingCarRollDegrees} <b>在同一个分支、同一次调用</b>里写入，因此「角度」与「轴」
+     * 永远属于同一节车厢、同一帧。非有限值一律写 0（下方轴计算会因此退化为世界 +Z，
+     * 但那是与 {@code ridingCarRollValid == false} 同样的失效语义 —— 实际上
+     * {@link #getCameraTiltAxis()} 在角度无效时不会被调用，而且这里的校验也保证不会写出 NaN）。
+     */
+    private static void fangsu$cacheRidingCarOrientation(PositionAndRotation positionAndRotation) {
+        final double yaw = positionAndRotation.yaw;
+        final double pitch = positionAndRotation.pitch;
+        ridingCarYawRadians = Double.isFinite(yaw) ? yaw : 0.0D;
+        ridingCarPitchRadians = Double.isFinite(pitch) ? pitch : 0.0D;
     }
 
     /**
@@ -1485,6 +1700,165 @@ public final class RailRollRenderHelper {
     public static double getCurrentCarRollDegrees() {
         ridingPositionHookAlive = true;
         return currentCarRollDegrees();
+    }
+
+    // ==================== P6：镜头滚转 ====================
+
+    /**
+     * 由 {@code GameRendererTiltMixin} 在 {@code GameRenderer.renderLevel} 的
+     * {@code prepareCullFrustum} 调用之前调用：标记钩子存活并推进诊断（与
+     * {@link #getCameraRollDegrees()} 分开，是为了让「钩子挂上了但这一次不需要滚转」也能算存活）。
+     */
+    public static void probeCameraTiltFrame() {
+        cameraTiltHookAlive = true;
+        reportMissingHooks();
+    }
+
+    /**
+     * 相机补偿的旋转角（度，右手/逆时针为正），配合 {@link #getCameraTiltAxis()} 使用。
+     * 返回 {@code 0.0} 表示调用方<b>必须一个矩阵乘法都不做</b>（与原生逐位一致）。
+     * <p>
+     * <b>取什么值</b>：就是玩家所在车厢的滚转角
+     * （{@link #ridingCarRollDegrees}，与车体 {@link #applyTrainRoll} 用的是同一个数，
+     * 见 {@link #beginCarFrame(PositionAndRotation, boolean)}），乘配置里的强度倍率
+     * （{@code FangSuConfig.cameraTiltStrength()}，默认 1.0，夹取 {@code [0, 2]}）。
+     * <b>绝不重新计算第二个滚转角</b>，所以镜头与车体按构造不可能不一致。
+     * <p>
+     * <b>什么时候返回 0</b>（四条前置条件，任一不满足都是严格 no-op）：
+     * <ol>
+     *   <li>配置开关 {@code cameraTiltEnabled} 关掉；</li>
+     *   <li>{@link #ridingCarRollValid} 为 {@code false}（本帧没有渲染过玩家所在的那节车厢
+     *       → 玩家没在乘车，或钩子失效）；</li>
+     *   <li>{@link #isPlayerRidingMtrVehicle()} 为 {@code false}
+     *       （与参考实现 MAGIC 的 {@code isPlayerRidingMtrVehicle()} 门控一致：
+     *       遍历 {@code MinecraftClientData.vehicles}，只要有一列的 id 满足
+     *       {@code VehicleRidingMovement.isRiding(id)} 就算在乘车。这是第 2 条的独立复核，
+     *       防止任何一处的「清空」钩子失效导致下车后镜头还歪着）；</li>
+     *   <li>角度非有限、为 0、或 {@code |角度| < }{@link #CAMERA_TILT_EPSILON_DEGREES}。</li>
+     * </ol>
+     * <p>
+     * <b>调用方怎么用它</b>：把「世界 PoseStack 右乘 绕 {@link #getCameraTiltAxis()} 旋转
+     * {@code −本返回值}」施加到世界栈上，即
+     * <pre>
+     * poseStack.mulPose(new Quaternionf().rotationAxis(
+     *         (float) Math.toRadians(-angleDegrees), axisX, axisY, axisZ));
+     * </pre>
+     * <b>为什么取负号</b>：本返回值 φ &gt; 0 是「车厢沿前进方向的右手侧抬升」。物理模型是
+     * 「画面内容随车厢一起转」，即<b>世界整体绕车厢纵轴反向滚 φ</b>，也就是 {@code M · R_f(−φ)}。
+     * 这个符号由三条独立证据钉住：
+     * <ol>
+     *   <li>朝车头看时相机后向 {@code a_旧 = M 的第三行 = −f}，而 {@code R_{−f}(φ) = R_f(−φ)}
+     *       （同一根轴、同一个角），所以新形式与用户已验收的旧画面<b>严格相同</b>
+     *       （probe 第 (1b) 节 worst |OLD − NEW| = 5.96e-08，仅浮点往返）；取正号会立刻差 2φ；</li>
+     *   <li>车内横轴屏幕角在全部 look 上都是 0.0000（probe 第 (3) 节）—— 车厢内部看起来水平；</li>
+     *   <li>地平线屏幕角 {@code = −φ·cos(look)}，朝车尾翻成 +φ（probe 第 (2)/(4) 节），
+     *       与用户「一侧正确、另一侧完全相反」的描述一致。</li>
+     * </ol>
+     * 取正号（{@code R_f(+φ)}）会让车内横轴变成 −2φ（越滚越歪），见 probe 第 (7) 节。
+     * <p>
+     * <b>为什么必须和 {@link #getCameraTiltAxis()} 成对读取</b>：两者在同一次注入里被读取，
+     * 且都来自同一帧、同一节车厢的缓存；分开读两次（例如在不同帧读轴与角）会得到不同车厢的朝向。
+     */
+    public static double getCameraRollDegrees() {
+        if (!FangSuConfig.cameraTiltEnabled()) {
+            return 0.0D;
+        }
+        if (!ridingCarRollValid) {
+            return 0.0D;
+        }
+        if (!isPlayerRidingMtrVehicle()) {
+            return 0.0D;
+        }
+        final double baseDegrees = ridingCarRollDegrees;
+        if (!Double.isFinite(baseDegrees) || baseDegrees == 0.0D) {
+            return 0.0D;
+        }
+        final double angleDegrees = baseDegrees * FangSuConfig.cameraTiltStrength();
+        if (!Double.isFinite(angleDegrees) || Math.abs(angleDegrees) < CAMERA_TILT_EPSILON_DEGREES) {
+            return 0.0D;
+        }
+        cameraTiltAppliedSamples++;
+        return angleDegrees;
+    }
+
+    /**
+     * 相机补偿的旋转轴：<b>玩家所在车厢的世界纵轴（前进方向）单位向量</b>，
+     * 返回 {@code {x, y, z}}；没有有效车厢时返回 {@code null}（调用方必须退回不旋转）。
+     * <p>
+     * <b>怎么来的（MTR 车体变换链的字节码/源码证据）</b>：
+     * {@code RenderVehicles.getStoredMatrixTransformations(boolean useOffset, PositionAndRotation,
+     * double oscillationAmount)} 在 4.0.5 里只做四件事（源码 RenderVehicles.java:401-418，
+     * 与 {@code javap -p -c} 的字节码一致）：
+     * <pre>
+     *   translate(pos)
+     *   rotateYRadians(yaw + PI)
+     *   rotateXRadians(pitch + PI)
+     *   rotateZDegrees(oscillationAmount)
+     * </pre>
+     * {@code GraphicsHolder.rotateYRadians/rotateXRadians/rotateZDegrees} 分别是
+     * {@code RotationAxis.POSITIVE_Y/POSITIVE_X/POSITIVE_Z.rotation/rotationDegrees} +
+     * {@code MatrixStack.multiply(...)}（Mappings-rewrite 1.20.1 的 GraphicsHolder.java:105-144），
+     * 也就是标准的右手旋转、右乘到栈上。FangSu 的车体滚转由 {@code RenderVehiclesMixin} 在同一对象的
+     * {@code @At("RETURN")} 追加 {@code rotateZDegrees(roll)}（见 {@link #applyTrainRoll}），
+     * 于是整条链是
+     * <pre>
+     *   B = Ry(yaw+π) · Rx(pitch+π) · Rz(roll)
+     * </pre>
+     * 模型局部 {@code +Z} 因此映射到世界的
+     * <pre>
+     *   f = B · ẑ = Ry(yaw+π) · Rx(pitch+π) · ẑ = Ry(yaw) · Rx(pitch) · ẑ
+     *     = (cos(pitch)·sin(yaw), sin(pitch), cos(pitch)·cos(yaw))
+     * </pre>
+     * 两个 π 因为 {@code Ry(π)·ẑ = -ẑ}、{@code Rx(π)·(-ẑ) = +ẑ} 而相消；而 roll 项
+     * {@code Rz(roll)} 不改变 {@code ẑ}，所以<b>车厢纵轴与 roll 无关</b>（roll 就是绕它自己转）——
+     * 这也是「轴只由 yaw/pitch 决定」的原因。注意最内层（最先施加于模型）的正是 {@code Rz(roll)}，
+     * 即车体滚转是<b>绕局部 +Z</b>（= f）施加的，所以相机要绕的就是这根世界像 f。
+     * <p>
+     * 数值：probe 的 {@code (6)} 节显示把 pitch 丢掉（{@code NEW_YAW_ONLY}）在 3° 坡道上
+     * 相对含 pitch 的轴有 0.017° 偏差（水平视线段），在正侧向则达到 1.5° —— 坡度越大越明显。
+     * <p>
+     * <b>严格 no-op</b>：{@link #ridingCarRollValid} 为 false 时返回 {@code null}，
+     * 但如果角度为 0 调用方本来就不会调用本方法（见 {@link #getCameraRollDegrees()} 的契约）。
+     */
+    public static double[] getCameraTiltAxis() {
+        if (!ridingCarRollValid) {
+            return null;
+        }
+        final double yaw = ridingCarYawRadians;
+        final double pitch = ridingCarPitchRadians;
+        if (!Double.isFinite(yaw) || !Double.isFinite(pitch)) {
+            return null;
+        }
+        final double cosPitch = Math.cos(pitch);
+        final double axisX = cosPitch * Math.sin(yaw);
+        final double axisY = Math.sin(pitch);
+        final double axisZ = cosPitch * Math.cos(yaw);
+        final double length = Math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
+        if (!(length > 1.0E-6D) || !Double.isFinite(length)) {
+            // 理论上不可能（上面的构造恒为单位向量）；真出现也绝不做除法、绝不旋转
+            return null;
+        }
+        return new double[]{axisX / length, axisY / length, axisZ / length};
+    }
+
+    /**
+     * 玩家是否正在乘坐 MTR 车辆（与参考实现 MAGIC 的 {@code isPlayerRidingMtrVehicle()} 完全同构）。
+     * <p>
+     * 只用 MTR 自己的公开 API：{@code MinecraftClientData.getInstance().vehicles} 里任意一列的 id
+     * 满足 {@code VehicleRidingMovement.isRiding(id)} 即成立。这里刻意<b>不</b>读
+     * {@code VehicleRidingMovement} 的任何私有字段（那需要用访问器，且在版本间不稳定）。
+     */
+    private static boolean isPlayerRidingMtrVehicle() {
+        final MinecraftClientData clientData = MinecraftClientData.getInstance();
+        if (clientData == null) {
+            return false;
+        }
+        for (final VehicleExtension vehicle : clientData.vehicles) {
+            if (vehicle != null && VehicleRidingMovement.isRiding(vehicle.getId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
