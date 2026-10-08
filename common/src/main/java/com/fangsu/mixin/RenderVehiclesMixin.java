@@ -3,6 +3,7 @@ package com.fangsu.mixin;
 import com.fangsu.Main;
 import com.fangsu.render.RailRollRenderHelper;
 import com.fangsu.train.VehicleLcdRenderer;
+import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
 import org.mtr.mapping.holder.Vector3d;
 import org.mtr.mod.client.MinecraftClientData;
 import org.mtr.mod.data.VehicleExtension;
@@ -13,6 +14,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -44,9 +46,13 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
  *   <li>帧头刷新「带滚转的轨道」缓存（{@link RailRollRenderHelper#beginVehicleFrame()}）；</li>
  *   <li>{@code getStoredMatrixTransformations} 的 {@code @At("RETURN")} 上追加绕车体前进轴的滚转。
  *       该方法同时被转向架、乘车玩家与电梯调用，因此车体滚转的定位使用
- *       「车体中心到带滚转轨道中心线的水平距离 &lt; 1.5 m（容纳紧曲线上的转向架弦中点矢高）、
- *       高差 &lt; 1.0 m、且车头与轨道切向 |cos| &ge; 0.9」的匹配，
+ *       「采样点到带滚转轨道中心线的水平距离 &lt; 1.5 m、高差 &lt; 1.0 m、
+ *       且采样点前进方向与轨道切向 |cos| &ge; 0.9」的匹配，
  *       匹配不到就不追加任何变换（普通轨道、横穿轨道、远处几何一律走原生路径）。
+ *       <b>车体的采样点不是一个而是两个</b>：本车厢两个转向架各采一次再取平均
+ *       （见 {@link #fangsu$captureBogieSource}），因为 MTR 给车体的 PnR 只是两转向架的
+ *       <b>弦中点</b>，单点采样会让车体晚半个转向架间距才倾斜、并在节点处留下折角；
+ *       转向架模型 / 乘车玩家 / 电梯仍按它们自己的单个采样点匹配，行为不变。
  *       该方法的第一个参数是 {@code useOffset}（= {@code offsetVector == null}），
  *       <b>乘车时传 {@code false} 且 {@code PositionAndRotation} 是相机相对量</b>，
  *       所以另有一个 {@code @Redirect} 在 {@code lambda$render$14} 里记下本车的世界 PnR；</li>
@@ -168,6 +174,73 @@ public class RenderVehiclesMixin {
                 offsetVector, offsetRotation, ridingCarPositionAndRotation,
                 absoluteVehicleCarPositionAndRotation, cameraShakeOffset
         );
+    }
+
+    /**
+     * 记录本车厢的<b>两个转向架 PnR</b>（车体滚转按它们平均，见
+     * {@link RailRollRenderHelper#captureBogieSource}）。
+     * <p>
+     * <b>数据来源</b>：{@code lambda$render$14} 的第 2 个形参 {@code vehicleCarDetails}
+     * （局部变量槽位 {@link RailRollRenderHelper#BOGIE_SOURCE_INDEX}）的类型是
+     * {@code ObjectObjectImmutablePair<VehicleCar, ObjectObjectImmutablePair<ObjectArrayList<PositionAndRotation>, PositionAndRotation>>}：
+     * 沿 {@code right()} 进内层后，{@code left()} 就是本车厢的<b>转向架 PnR 列表</b>
+     * （真实 4.0.5 字节码偏移 69–79 正是把它作为 {@code iterateWithIndex} 的第 0 个实参；
+     * 该表达式是内联的，<b>没有</b>自己的局部变量槽位），{@code right()} 是本车世界 PnR
+     * （= 两转向架弦中点，偏移 41–54 存进槽位 21，就是 {@link #fangsu$captureCarFrame} 拿到的那个实例）。
+     * 本处理器<b>只读</b>，把原值原样返回，一个实参都不改。
+     * <p>
+     * <b>为什么不再挂在 {@code iterateWithIndex} 的调用点上（原实现崩溃的根因，结论务必保留）</b>：
+     * 原实现用 {@code @ModifyArgs} 定位那次 {@code invokestatic}。{@code @ModifyArgs} 会在<b>运行时</b>
+     * 由 Mixin 的 {@code ArgsClassGenerator}（{@code javap -p -c} 可见其类名字面量为
+     * {@code "org.spongepowered.asm.synthetic.args.Args$"} + 序号，并写出 {@code .java} 源文件名）
+     * 生成一个 {@code org.spongepowered.asm.synthetic.args.Args$N} 类，该类<b>为每一个实参</b>生成一个
+     * 「返回类型 = 该实参的<b>声明类型</b>」的取值方法（{@code generateGetters}：方法名 {@code $0/$1/…}，
+     * 描述符由 {@code Type.getDescriptor()} 拼出，方法体是 {@code CHECKCAST <声明类型>}）。
+     * 那次调用的第 1 个形参类型 {@code RenderVehicles$IndexedConsumer} 是<b>包级私有</b>，
+     * 于是 {@code org.spongepowered.asm.synthetic.args.Args$1} 里的 {@code checkcast} 触发
+     * {@code java.lang.IllegalAccessError} —— 游戏一渲染列车就崩，线上堆栈正是
+     * {@code Args$1.$1(Args$1.java)} ← {@code RenderVehicles.lambda$render$14:118}。
+     * <p>
+     * <b>与「泛型」无关</b>：形参描述符里 {@code IndexedConsumer<T>} 本来就擦除成
+     * {@code Lorg/mtr/mod/render/RenderVehicles$IndexedConsumer;}，JVM 只看得到擦除后的类型，
+     * 真正触发访问检查的是「包级私有」。对照组就是同一文件里的 {@link #fangsu$rollConnection}：
+     * 它同样用 {@code @ModifyArgs}，但那次调用里唯一的嵌套类型形参
+     * {@code RenderVehicles$PreviousConnectionPositions} 经 {@code javap -p} 确认是
+     * <b>{@code public class}</b>（其余是 {@code Identifier} / {@code PositionAndRotation} 与基本类型），
+     * 生成的取值方法里的 {@code checkcast} 因此合法 —— 这就是「一个崩、一个不崩」的全部原因。
+     * 它与是否泛型、与目标方法 {@code private static} 都无关（原调用的 {@code invokestatic} 仍留在被注入
+     * 方法自己的字节码里，只有实参取值走生成类）。
+     * <p>
+     * <b>为什么 {@code @ModifyVariable} 不会踩同一个坑</b>：它不生成任何访问器类。Mixin 只在该注入点插入
+     * {@code xLOAD 槽位 → 调用处理器 → xSTORE 槽位}（{@code ModifyVariableInjector.inject} 的
+     * opcode 21 / 54），这里命名的 {@code ObjectObjectImmutablePair} 又是 <b>public</b> 类
+     * （{@code javap -p}：{@code public class …ObjectObjectImmutablePair<K, V> implements Pair<K, V>, Serializable}，
+     * {@code left()} / {@code right()} 也是 public），处理器签名里再没有任何包级私有类型。
+     * <p>
+     * {@code method} 必须显式写出（Mixin 0.8.7 对缺 {@code method}/{@code target} 的注入注解直接抛
+     * {@code InvalidInjectionException}）；synthetic lambda 只能写方法名
+     * （见 {@link RailRollRenderHelper#BOGIE_FRAME_TARGET}）。
+     * {@code at = @At("HEAD") + argsOnly = true + index = 1} 的组合与同工程里已在游戏内验证可用的
+     * 截面捕获钩子（{@code RenderRailsMixin} 的 {@code fangsu$captureSectionRail}）完全一致；
+     * {@code at = @At("HEAD")} 保证本钩子在字节码偏移 0 触发，早于偏移 64 的
+     * {@link #fangsu$captureCarFrame}，所以 {@link RailRollRenderHelper#beginCarFrame(PositionAndRotation)}
+     * 里能直接消费这份数据。
+     * {@code require = 0} 让未来 MTR 改编号时退化为「车体滚转退回弦中点单点采样」
+     * （= 修复前的滞后与折角形态）而不是崩游戏，并由 {@link RailRollRenderHelper} 的一次性告警暴露。
+     */
+    @ModifyVariable(
+            method = RailRollRenderHelper.BOGIE_FRAME_TARGET,
+            at = @At("HEAD"),
+            argsOnly = true,
+            index = RailRollRenderHelper.BOGIE_SOURCE_INDEX,
+            require = 0,
+            remap = false
+    )
+    private static ObjectObjectImmutablePair<?, ?> fangsu$captureBogieSource(
+            ObjectObjectImmutablePair<?, ?> vehicleCarDetails
+    ) {
+        RailRollRenderHelper.captureBogieSource(vehicleCarDetails);
+        return vehicleCarDetails;
     }
 
     /**

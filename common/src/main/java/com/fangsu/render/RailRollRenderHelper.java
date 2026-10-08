@@ -7,6 +7,7 @@ import com.fangsu.mtr.rail.RailPoseExtraHolder;
 import org.mtr.core.data.Rail;
 import org.mtr.core.data.RailMath;
 import org.mtr.core.tool.Vector;
+import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
 import org.mtr.mapping.holder.Direction;
 import org.mtr.mapping.holder.Vector3d;
 import org.mtr.mapping.mapper.GraphicsHolder;
@@ -281,6 +282,60 @@ public final class RailRollRenderHelper {
                     + "Lorg/mtr/mapping/holder/Vector3d;)Lorg/mtr/mod/render/PositionAndRotation;";
 
     /**
+     * 「本车厢的两个转向架 PnR」的捕获点：{@link #CAR_FRAME_TARGET} 的<b>方法名</b>
+     * （不带描述符，理由同 {@link #RAIL_QUAD_SCHEDULE_TARGET}）。
+     * <p>
+     * <b>为什么需要它（转向架平均的数据源）</b>：MTR 给车体算出的
+     * {@code PositionAndRotation.position} 是「两转向架弦的中点」
+     * （{@code PositionAndRotation(ObjectArrayList, VehicleCar, boolean)} 对两转向架位置取
+     * {@code Vector.getAverage}，已用 {@code javap -c} 在偏移 108–115 逐字核实），
+     * 所以只用这一个点算滚转，车体就只能等到<b>弦中点</b>进入超高段才开始倾斜 ——
+     * 比前转向架晚「半个转向架间距」，这就是「要等两个转向架都进去才倾」的来源。
+     * 在同一个 lambda 的头部抓到它的第 2 个形参 {@code vehicleCarDetails}
+     * （槽位 {@link #BOGIE_SOURCE_INDEX}），沿 {@code right()} → {@code left()} 就能拿到那两个
+     * 转向架 PnR（它们就是弦的两个端点），于是车体滚转可以按「两个转向架各自处轨道滚转的平均」
+     * 来算：前转向架一进超高段就开始变化。
+     * <p>
+     * <b>为什么抓形参而不是 {@code iterateWithIndex} 的实参 0</b>：真实 4.0.5 字节码里
+     * {@code iterateWithIndex(vehicleCarDetails.right().left(), …)} 的第 0 个实参是<b>内联表达式</b>
+     * （偏移 69–79：{@code aload_1; right(); left(); checkcast}），<b>没有对应的局部变量槽位</b>，
+     * {@code @ModifyVariable} 抓不到它；而槽位 10 / 11 在 {@code LocalVariableTable} 里的名字是
+     * {@code previousGangwayPositionsList} / {@code previousBarrierPositionsList}（风挡 / 挡板连接点），
+     * <b>不是</b>转向架列表。
+     * <p>
+     * <b>为什么不再用 {@code @ModifyArgs}（崩溃根因，结论务必保留）</b>：{@code @ModifyArgs} 会在运行时
+     * 生成 {@code org.spongepowered.asm.synthetic.args.Args$N}，为每个实参生成「返回类型 = 该实参声明类型」
+     * 的取值方法（方法体是 {@code CHECKCAST <声明类型>}）。{@code iterateWithIndex} 的第 1 个形参
+     * {@code RenderVehicles$IndexedConsumer} 是<b>包级私有</b>，生成类在别的包里做 {@code checkcast}
+     * 就会抛 {@code IllegalAccessError}。详见
+     * {@code com.fangsu.mixin.RenderVehiclesMixin#fangsu$captureBogieSource} 的 javadoc。
+     */
+    public static final String BOGIE_FRAME_TARGET = "lambda$render$14";
+
+    /**
+     * {@link #BOGIE_FRAME_TARGET} 里那个 {@code @ModifyVariable} 的形参槽位：
+     * {@code vehicleCarDetails}（{@code ObjectObjectImmutablePair}）。
+     * <p>
+     * 该 lambda 是 {@code private static}（synthetic），因此<b>形参序号 == 局部变量槽位</b>。
+     * 真实 4.0.5 的 {@code LocalVariableTable}（{@code javap -p -c -l}）为：
+     * <pre>
+     *   0 vehicle(VehicleExtension)   1 vehicleCarDetails(ObjectObjectImmutablePair)
+     *   2 offsetVector   3 offsetRotation   4 ridingCarPositionAndRotation   5 cameraShakeOffset
+     *   6 carNumber   7 clientPlayerEntity   8 ridingCarNumber   9 canRide
+     *  10 previousGangwayPositionsList   11 previousBarrierPositionsList
+     *  12 minecraftClient   13 clientWorld   14 millisElapsed(J)   16 previousGangwayMovementPositions
+     *  17 vehicleResourceDetails
+     * </pre>
+     * <b>类型可见性（本修复的关键，必须只命名 public 类型）</b>：
+     * {@code org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair} 是
+     * <b>public</b> 类（{@code javap -p}：{@code public class …ObjectObjectImmutablePair<K, V> implements
+     * Pair<K, V>, Serializable}），{@code left()} / {@code right()} 也是 public 方法。
+     * {@code @ModifyVariable} 不会像 {@code @ModifyArgs} 那样生成访问器类，因此这里没有
+     * {@code RenderVehicles$IndexedConsumer} 那一类「包级私有类型被别的包命名」的失败面。
+     */
+    public static final int BOGIE_SOURCE_INDEX = 1;
+
+    /**
      * 风挡 / 挡板滚转的 {@code @ModifyArgs} 目标方法选择器：4.0.5 里创建两个
      * {@code renderConnection} 调用的那条 lambda（{@code VehicleResource.iterateModels} 的回调，
      * {@code lambda$render$12}）的<b>方法名</b>。
@@ -333,6 +388,47 @@ public final class RailRollRenderHelper {
     public static final int CONNECTION_OSCILLATION_ARG = 17;
 
     /**
+     * 「乘车玩家站进车厢内部」那条方法的完整选择器：{@code VehicleRidingMovement.movePlayer}
+     * 的 8 参重载。
+     * <p>
+     * <b>为什么是它</b>：4.0.5 里玩家在车厢内的世界位置完全由这个方法算出来 ——
+     * {@code javap -p -c} 显示它的流程是
+     * (1) 用 {@code transformBackwards} 把玩家的输入速度换算到车厢局部系；
+     * (2) 用 {@code clampPosition} × 4（玩家碰撞盒的四个角）在
+     *     {@code VehicleResourceCache.floors} / {@code doorways} 给出的
+     *     <b>轴对齐 AABB</b>（{@code org.mtr.mapping.holder.Box}）里求出局部偏移
+     *     {@code (ridingVehicleX, Y, Z)}，其中 {@code ridingVehicleY = max(box.maxY)}，
+     *     即"脚下那块 AABB 的顶面"；
+     * (3) 把该局部偏移经 {@code carPnR.transformForwards} 换算成世界坐标后
+     *     {@code player.updatePosition(...)}。
+     * <p>
+     * 描述符已用 {@code javap -p} 对真实 4.0.5 jar 逐字核实。同名的
+     * {@code movePlayer(DDD)} 是私有的「真正落地」重载，本选择器不会命中它
+     * （描述符不同）。
+     */
+    public static final String RIDING_MOVE_TARGET =
+            "movePlayer(JJILorg/mtr/libraries/it/unimi/dsi/fastutil/objects/ObjectArrayList;"
+                    + "Lorg/mtr/mod/client/GangwayMovementPositions;Lorg/mtr/mod/client/GangwayMovementPositions;"
+                    + "Lorg/mtr/mod/client/GangwayMovementPositions;Lorg/mtr/mod/render/PositionAndRotation;)V";
+
+    /**
+     * {@link #RIDING_MOVE_TARGET} 里那一次「车厢局部 → 世界」变换的调用点选择器：
+     * {@code PositionAndRotation.transformForwards(Object, Rotate, Rotate, Translate)}。
+     * <p>
+     * 该调用在 {@code movePlayer} 里<b>只出现一次</b>（偏移 1025；另外两处是偏移 165 / 561 的
+     * {@code transformBackwards}，描述符不同名也不会命中）。它的实参来源已用
+     * {@code javap -v} 的 {@code BootstrapMethods} 核实：
+     * {@code Rotate} 两个依次是 {@code Vector3d.xRot}（pitch）与 {@code Vector3d.yRot}（yaw），
+     * {@code Translate} 是 {@code Vector3d.add}；而 {@code transformForwards} 的字节码是
+     * {@code t(r2(r1(v, pitch), yaw), pos)}，即
+     * {@code W(v) = pos + Ry(yaw) * Rx(-pitch) * v}（注意 MC 的 {@code Vec3d.xRot(t) = Rx(-t)}）。
+     */
+    public static final String TRANSFORM_FORWARDS_DESCRIPTOR =
+            "Lorg/mtr/mod/render/PositionAndRotation;transformForwards(Ljava/lang/Object;"
+                    + "Lorg/mtr/mod/render/PositionAndRotation$Rotate;Lorg/mtr/mod/render/PositionAndRotation$Rotate;"
+                    + "Lorg/mtr/mod/render/PositionAndRotation$Translate;)Ljava/lang/Object;";
+
+    /**
      * 采样 / 排队线程上下文：当前正在渲染截面的那条轨道的滚转快照，仅在
      * {@code RenderRails.renderRailStandard} 的同步窗口内有效。
      * <p>
@@ -365,10 +461,34 @@ public final class RailRollRenderHelper {
     /**
      * 本车应当施加的滚转角（度），与车体 {@link #applyTrainRoll} 用的是同一个值。
      * <p>
-     * 在 {@link #beginCarFrame(PositionAndRotation)} 里算一次并缓存，车体与风挡都读它，
-     * 从而「车体与风挡永不给出不同滚转角」（BUG 2 的硬性要求）。
+     * 在 {@link #beginCarFrame(PositionAndRotation)} 里算一次并缓存
+     * （= 两个转向架处各自匹配出的<b>世界帧</b>滚转角的平均，数据来自
+     * {@link #captureBogieSource}），车体、风挡
+     * （{@link #getConnectionRollDegrees}）与乘车玩家（{@link #getCurrentCarRollDegrees()}）
+     * 都读它，从而「车体 / 风挡 / 玩家永不给出不同滚转角」（BUG 2 的硬性要求）。
+     * <p>
+     * <b>为什么可以在 {@code beginCarFrame} 里算</b>：转向架来源由 {@code @ModifyVariable} 在
+     * {@code lambda$render$14} 的 <b>HEAD（偏移 0）</b>抓取，早于该 lambda 在偏移 64 调用的
+     * {@code getRenderPositionAndRotation}（= 车体 PnR 捕获点），因此轮到
+     * {@code beginCarFrame} 时转向架数据已在手。旧实现用的是「偏移 104 的 {@code @ModifyArgs}」，
+     * 那时序更晚，所以只能拆成两个方法；换成 HEAD 之后不再需要这个拆分。
      */
     private static volatile double carFrameRollDegrees = 0.0D;
+
+    /**
+     * {@link #captureBogieSource} 抓到的<b>本车厢转向架 PnR 列表</b>，以及它所属车厢的
+     * 世界 PnR（= 弦中点 PnR，用于<b>实例同一性</b>校验）。
+     * <p>
+     * 两者每次都整组覆盖，因此不存在「半个旧值」的中间态。{@link #beginCarFrame(PositionAndRotation)}
+     * 只在 {@code pendingBogieCarPositionAndRotation == } 本次车体 PnR 时才用这份数据，否则退回
+     * 「弦中点单点采样」—— 于是即使钩子时序在未来 MTR 版本里发生变化，也只会退化为修复前的行为，
+     * 绝不会把别的车厢 / 上一帧的转向架角度加到本车上。
+     * <p>
+     * 每帧在 {@link #beginVehicleFrame()} 里清空，与 {@link #carFramePositionAndRotation} 同一套失效语义。
+     */
+    private static volatile List<?> pendingBogiePositions = null;
+    /** {@link #pendingBogiePositions} 所属车厢的世界 PnR（实例同一性校验用，见上）。 */
+    private static volatile PositionAndRotation pendingBogieCarPositionAndRotation = null;
 
     /**
      * 车体中心允许偏离轨道水平中心线的最大距离（米）。
@@ -389,9 +509,21 @@ public final class RailRollRenderHelper {
      * 残留边界：若邻线是<b>带滚转</b>的轨道、间距只有 2 格、且本车恰好位于自身曲线的弦上
      * （矢高朝邻线一侧），本车到邻线中心线的距离理论上可能小于 1.5 m 而被误判。这种几何下
      * 双线车辆本身已经互相侵入，属于可接受的理论边界。
+     * <p>
+     * <b>本次修复后</b>：车体滚转改为在<b>两个转向架处</b>各匹配一次（见
+     * {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)}）。转向架就在轨道中心线上（矢高 ≈ 0），所以 1.5 m 这道门
+     * 对转向架采样几乎不会触发；它保留下来是为了（a）退化几何与亚格偏移的容差、
+     * （b）{@link #rollDegreesAtPoint(PositionAndRotation)} 仍被转向架模型 / 玩家 / 电梯使用，
+     * （c）拿不到转向架列表时的回退路径仍按修复前的弦中点采样。门控数值本身<b>刻意不变</b>，
+     * 以免改变既有的「急弯中段不变平」（验收项 6.7）与「平行邻线不误伤」（6.8）行为。
      */
     private static final double VEHICLE_MATCH_HORIZONTAL = 1.5D;
-    /** 车体中心与轨道中心线的最大高度差（米）。用于排除恰好从轨道上方/下方经过的几何。 */
+    /**
+     * 采样点与轨道中心线的最大高度差（米）。用于排除恰好从轨道上方/下方经过的几何。
+     * <p>
+     * 采到转向架时该值就是转向架中心与轨道中心线的高度差（≈ 0，只剩滚转抬升
+     * {@code 半轨距·|sin roll|} 的十几厘米）；作为回退路径的弦中点采样时同样是十几厘米量级。
+     */
     private static final double VEHICLE_MATCH_VERTICAL = 1.0D;
     /**
      * 车头方向与轨道切向的最小平行度 {@code |cos|}。0.9 ≈ 25.8°。
@@ -433,6 +565,29 @@ public final class RailRollRenderHelper {
     private static volatile boolean frameHookAlive = false;
     private static volatile boolean carFrameHookAlive = false;
     private static volatile boolean connectionHookAlive = false;
+    /**
+     * 「本车厢两个转向架 PnR 来源」钩子（{@code @ModifyVariable}，目标 {@link #BOGIE_FRAME_TARGET}）是否触发过。
+     * <p>
+     * 它失效<b>不会</b>让滚转消失，只会让车体退回「弦中点单点采样」（即修复前的滞后 / 跳变形态），
+     * 所以它<b>不</b>参与 {@link #allRollHooksMissing()} 的判定（那条告警描述的是「滚转全灭」），
+     * 而是像 {@link #connectionHookAlive} 一样用「前置条件 + 自己的告警」表达。
+     */
+    private static volatile boolean bogieFrameHookAlive = false;
+    /**
+     * 「乘车玩家位置随车体滚转」钩子（{@code VehicleRidingMovementMixin}）是否触发过。
+     * <p>
+     * 它<b>不</b>参与 {@link #allRollHooksMissing()}：它不产生滚转角，只是
+     * {@link #currentCarRollDegrees()} 的下游消费者，因此它失效不能作为「滚转数据源全灭」的证据。
+     * 判定用它自己的前置条件（{@link #ridingBodyRollSamples} &gt; 0，即乘车分支确实走过）。
+     */
+    private static volatile boolean ridingPositionHookAlive = false;
+    /**
+     * {@link #applyTrainRoll} 走「乘车」分支（{@code useOffset == false}）的次数。
+     * <p>
+     * 这是 {@link #ridingPositionHookAlive} 诊断的<b>前置条件</b>：只有确实以乘车状态渲染过车体，
+     * 「乘车玩家位置钩子没触发」才是异常；否则（玩家从不乘车）会误报。
+     */
+    private static volatile int ridingBodyRollSamples = 0;
     private static volatile int railSectionSamples = 0;
     private static volatile int rolledSectionSamples = 0;
     private static volatile int rollFrameCount = 0;
@@ -441,6 +596,8 @@ public final class RailRollRenderHelper {
     private static volatile int frameSamples = 0;
     private static volatile int carFrameSamples = 0;
     private static volatile int connectionSamples = 0;
+    /** {@link #captureBogieSource} 的触发次数（= 抓到转向架来源的车厢数）。 */
+    private static volatile int bogieFrameSamples = 0;
     /** 看门狗帧计数（{@link #probeRenderFrame()}）—— 唯一不依赖任何 require = 0 钩子的时钟。 */
     private static volatile int renderFrameSamples = 0;
     /**
@@ -460,6 +617,8 @@ public final class RailRollRenderHelper {
     private static boolean warnedFrameMissing = false;
     private static boolean warnedCarFrameMissing = false;
     private static boolean warnedConnectionMissing = false;
+    private static boolean warnedBogieFrameMissing = false;
+    private static boolean warnedRidingPositionMissing = false;
     private static boolean warnedAllHooksMissing = false;
 
     private RailRollRenderHelper() {
@@ -956,6 +1115,8 @@ public final class RailRollRenderHelper {
         carFramePositionAndRotation = null;
         carFrameValid = false;
         carFrameRollDegrees = 0.0D;
+        pendingBogiePositions = null;
+        pendingBogieCarPositionAndRotation = null;
         final MinecraftClientData clientData = MinecraftClientData.getInstance();
         final List<RolledRail> collected = new ArrayList<>();
         if (clientData != null) {
@@ -1092,6 +1253,25 @@ public final class RailRollRenderHelper {
                     + "@ModifyArgs 从未触发；风挡 / 挡板不会随车体倾斜（请用 javap 重新核对 "
                     + "CONNECTION_CALLER_TARGET、RENDER_CONNECTION_DESCRIPTOR 与 CONNECTION_OSCILLATION_ARG）");
         }
+        // 转向架来源 @ModifyVariable：车体 PnR 钩子已经在跑（说明每节车厢都会走到这里）却一次都没抓到
+        // vehicleCarDetails，说明 lambda$render$14 的编号或形参槽位对不上。它失效不会让滚转消失，
+        // 只会让车体退回「弦中点单点采样」= 修复前的滞后与折角形态，所以单独报一条。
+        if (carFrameHookAlive && bogieFrameSamples == 0 && !warnedBogieFrameMissing) {
+            warnedBogieFrameMissing = true;
+            Main.LOGGER.warn("[RailRoll] 车体渲染钩子已触发 " + carFrameSamples + " 次，但转向架来源的 "
+                    + "@ModifyVariable 从未触发；车体滚转退回「弦中点单点采样」，"
+                    + "会晚半个转向架间距才倾斜、并在节点处出现折角（请用 javap 重新核对 "
+                    + "BOGIE_FRAME_TARGET 与 BOGIE_SOURCE_INDEX）");
+        }
+        // 乘车玩家位置（P4c）：只有「确实以乘车状态渲染过车体」（ridingBodyRollSamples > 0）时，
+        // 「玩家位置随车体滚转」的钩子没触发才算异常 —— 否则玩家从不乘车会误报。
+        if (ridingBodyRollSamples > 0 && !ridingPositionHookAlive && !warnedRidingPositionMissing) {
+            warnedRidingPositionMissing = true;
+            Main.LOGGER.warn("[RailRoll] 已以乘车状态渲染车体 " + ridingBodyRollSamples + " 次，但 "
+                    + "VehicleRidingMovement.movePlayer 里的 transformForwards 重定向从未触发；"
+                    + "玩家在车厢内仍会站在水平的隐形地板上、不随车体倾斜（请用 javap 重新核对 "
+                    + "RIDING_MOVE_TARGET 与 TRANSFORM_FORWARDS_DESCRIPTOR）");
+        }
     }
 
     /**
@@ -1110,32 +1290,137 @@ public final class RailRollRenderHelper {
     }
 
     /**
-     * 记录「当前正在渲染的车厢」的世界 PnR 并预计算它的滚转角（BUG 1 的乘车分支 + BUG 2 的共同数据源）。
+     * 记录「当前正在渲染的车厢」的世界 PnR，并据此算出本车应当施加的滚转角。
      * <p>
      * 由 {@code RenderVehicles.lambda$render$14} 内 {@code getRenderPositionAndRotation} 调用的
      * {@code @Redirect} 在<b>该车自己的世界 PnR 被换算成相机相对量之前</b>调用，
      * 因此这里拿到的就是与「未乘车」分支完全同类的 {@link PositionAndRotation}：
-     * 位置 = 两转向架弦中点、偏航 = 车体世界偏航。于是几何匹配代码路径完全复用
-     * （{@link #getTrainRollDegrees}），不引入任何反射或近似。
+     * 位置 = 两转向架弦中点、偏航 = 车体世界偏航。
      * <p>
-     * 滚转角在这里算一次并缓存（{@link #carFrameRollDegrees}），车体
-     * （{@link #applyTrainRoll}）与风挡（{@link #getConnectionRollDegrees}）都读同一份缓存，
-     * 二者按构造一致。
+     * <b>为什么现在能在本方法里一次算完</b>：本车厢的两个转向架 PnR 由
+     * {@link #captureBogieSource} 在同一个 lambda 的 <b>HEAD（字节码偏移 0）</b>抓取，
+     * 而本方法在偏移 64 才被调用 —— 数据已经就绪。旧实现用的是偏移 104 的 {@code @ModifyArgs}，
+     * 时序更晚，只能把计算拆到 {@code beginCarFrame} 里；换成 HEAD 的 {@code @ModifyVariable}
+     * 之后这个拆分不再需要（同时也去掉了那个会崩游戏的钩子，见
+     * {@link #BOGIE_FRAME_TARGET} 与该钩子的说明）。
      * <p>
-     * 失败模式：若该重定向没挂上，{@code carFrameValid} 恒为 false → 乘车时车体与风挡都退化为
-     * 「滚转角 0」（即现状），绝不会把上一帧 / 上一节车厢的滚转角误用；{@link #reportMissingHooks()}
-     * 会一次性告警。
+     * <b>为什么按转向架采两次</b>：MTR 给车体的 {@code PositionAndRotation} 是
+     * 「两转向架弦的中点」（{@code PositionAndRotation(ObjectArrayList, VehicleCar, boolean)}
+     * 对两转向架位置取 {@code Vector.getAverage}），而车体是<b>刚体</b>、只能有一个姿态。
+     * 只取弦中点处一个剖面值，会有两个可测量的毛病（数值见 {@code build/tmp/rollvec/}）：
+     * <ol>
+     *   <li><b>滞后半个转向架间距</b>：车体只在弦中点进入超高段后才开始倾斜。前转向架比它早
+     *       {@code 半转向架间距} 进入、后转向架比它晚同样距离进入，于是「前半个车身已经骑在倾斜的
+     *       轨道上、车体还是平的」，反过来出超高段时车体也晚半个间距回平。这正是用户说的
+     *       「要等两个转向架都进去才倾」；</li>
+     *   <li><b>折角原样搬到车体上</b>：单点采样时车体的滚转变化率就是该轨道剖面的斜率
+     *       （{@code 滚转角 / 该轨道长度}）。坡道越短越像「突然一歪」，剖面在节点处的折角更是
+     *       原封不动地出现在车体上。</li>
+     * </ol>
+     * 本方法改为：对两个转向架 PnR 各跑一次与修复前<b>逐字相同</b>的单点匹配
+     * （{@link #rollDegreesAtPoint(PositionAndRotation)}，匹配门控、最近者、符号换算全部不变），
+     * 再把两个<b>世界帧</b>角度取平均。刚体车在轨道上的标准姿态正是「两转向架处滚转的平均」，
+     * 于是：
+     * <ul>
+     *   <li>前转向架一进入超高段，车体就开始变化（不再滞后半个间距）；</li>
+     *   <li>节点处的折角被摊到「两转向架间距」这一段长度上，变成一个真正的缓坡；</li>
+     *   <li>剖面上<b>线性</b>的部分（除节点邻域外的全部位置）两个采样平均后<b>逐位等于</b>中点值，
+     *       所以轨道网格 / 3D 钢轨模型与车体在这些位置仍然完全一致；只有节点
+     *       {@code ±半个转向架间距} 内两者才有差别，而那里的平均正是刚体车能达到的最好姿态 ——
+     *       两个转向架各自站在自己那段轨道的滚转上（修复前的单点采样同样在节点附近与网格不一致，
+     *       却额外在线性坡道上整体滞后半个间距）。</li>
+     * </ul>
+     * <b>只对「本车厢」生效</b>：转向架模型（{@code lambda$render$5}）、乘车玩家实体
+     * （{@code renderPlayer}）与电梯（{@code RenderLifts}）传给
+     * {@link #applyTrainRoll} 的都是它们自己的 PnR 实例，不是本车厢的弦中点 PnR，
+     * 因此仍走原来的单点匹配（与修复前逐位一致）。判定用<b>实例同一性</b>：
+     * 未乘车时 {@code getRenderPositionAndRotation} 直接把第 4 个实参原样返回
+     * （真实 4.0.5 字节码偏移 0–9：{@code offsetVector == null} → {@code aload_3; areturn}），
+     * 所以车体与风挡拿到的就是这里存下的同一个实例。
+     * <p>
+     * <b>为什么用「实例同一性」而不是「位置比较」</b>：同一帧里不同车厢的 PnR 是不同实例，
+     * 位置可能极其接近（编组内相邻车厢），比较位置会有歧义；实例比较是精确且 O(1) 的。
+     * 若不匹配（转向架 / 玩家 / 电梯 / 未来 MTR 改动），自动退回单点匹配，不改变任何既有行为。
+     * <p>
+     * <b>失败模式</b>：{@link #captureBogieSource} 没抓到本车厢的转向架
+     * （钩子未挂上 / 列表为空 / 元素类型变了）时，本方法退回<b>修复前的「弦中点单点采样」</b>
+     * （{@link #rollDegreesAtPoint(PositionAndRotation)}）；若连本方法的重定向都没挂上，
+     * {@code carFramePositionAndRotation} 恒为 null → {@code carFrameValid} 恒为 false →
+     * 乘车时车体、风挡与玩家都退化为「滚转角 0」（即现状）。
+     * 两种失败都只会少倾斜，绝不会把上一帧 / 上一节车厢的滚转角误加到本车上；
+     * {@link #reportMissingHooks()} 会一次性告警。
      */
     public static void beginCarFrame(PositionAndRotation absoluteVehicleCarPositionAndRotation) {
         carFrameHookAlive = true;
         carFrameSamples++;
         carFramePositionAndRotation = absoluteVehicleCarPositionAndRotation;
+        carFrameValid = false;
+        carFrameRollDegrees = 0.0D;
         if (absoluteVehicleCarPositionAndRotation == null) {
-            carFrameValid = false;
-            carFrameRollDegrees = 0.0D;
-        } else {
-            carFrameValid = true;
-            carFrameRollDegrees = getTrainRollDegrees(absoluteVehicleCarPositionAndRotation);
+            reportMissingHooks();
+            return;
+        }
+        if (pendingBogieCarPositionAndRotation == absoluteVehicleCarPositionAndRotation) {
+            final List<?> bogiePositions = pendingBogiePositions;
+            double sum = 0.0D;
+            int count = 0;
+            if (bogiePositions != null) {
+                for (final Object element : bogiePositions) {
+                    if (element instanceof PositionAndRotation) {
+                        sum += rollDegreesAtPoint((PositionAndRotation) element);
+                        count++;
+                    }
+                }
+            }
+            if (count > 0) {
+                final double averaged = sum / count;
+                if (Double.isFinite(averaged)) {
+                    carFrameRollDegrees = averaged;
+                    carFrameValid = true;
+                    reportMissingHooks();
+                    return;
+                }
+            }
+        }
+        // 拿不到本车厢的转向架（钩子未挂上 / 列表为空 / 元素类型变了）→ 修复前的「弦中点单点采样」
+        carFrameRollDegrees = rollDegreesAtPoint(absoluteVehicleCarPositionAndRotation);
+        carFrameValid = true;
+        reportMissingHooks();
+    }
+
+    /**
+     * 记录本车厢的<b>两个转向架 PnR 来源</b>（= 车体滚转按转向架平均的数据源）。
+     * <p>
+     * 由 {@code RenderVehiclesMixin#fangsu$captureBogieSource} 在
+     * {@code RenderVehicles.lambda$render$14} 的 <b>HEAD</b> 用
+     * {@code @ModifyVariable(argsOnly = true, index = }{@link #BOGIE_SOURCE_INDEX}{@code )}
+     * 抓到该 lambda 的第 2 个形参 {@code vehicleCarDetails} 后转交进来。沿 MTR 自己的
+     * {@code right()} → {@code left()} / {@code right()} 取出：
+     * <ul>
+     *   <li>{@code left()}：本车厢的转向架 {@code PositionAndRotation} 列表
+     *       （真实 4.0.5 字节码偏移 69–79 就是把它作为 {@code iterateWithIndex} 的第 0 个实参）；</li>
+     *   <li>{@code right()}：本车世界 PnR（弦中点），用于实例同一性校验。</li>
+     * </ul>
+     * 两者<b>整组覆盖</b>，所以不存在「列表是新车、PnR 是旧车」的中间态。真正的滚转角计算在
+     * {@link #beginCarFrame(PositionAndRotation)}（偏移 64）里做，那时序晚于本钩子（偏移 0）。
+     * <p>
+     * 只读、不改任何实参；{@code vehicleCarDetails} 为 {@code null} 或结构不符时把两个字段清空，
+     * 于是 {@code beginCarFrame} 会走「弦中点单点采样」，不会让滚转消失。
+     */
+    public static void captureBogieSource(ObjectObjectImmutablePair<?, ?> vehicleCarDetails) {
+        bogieFrameHookAlive = true;
+        bogieFrameSamples++;
+        pendingBogiePositions = null;
+        pendingBogieCarPositionAndRotation = null;
+        if (vehicleCarDetails != null && vehicleCarDetails.right() instanceof ObjectObjectImmutablePair) {
+            final ObjectObjectImmutablePair<?, ?> carDetails =
+                    (ObjectObjectImmutablePair<?, ?>) vehicleCarDetails.right();
+            if (carDetails.left() instanceof List) {
+                pendingBogiePositions = (List<?>) carDetails.left();
+            }
+            if (carDetails.right() instanceof PositionAndRotation) {
+                pendingBogieCarPositionAndRotation = (PositionAndRotation) carDetails.right();
+            }
         }
         reportMissingHooks();
     }
@@ -1158,8 +1443,9 @@ public final class RailRollRenderHelper {
      * 车体与风挡顶点完全重合（误差 0.000e+00），{@code osc − roll} 时差 0.635 m（5°）/ 0.762 m（6°）。
      * <p>
      * 未乘车（{@code useOffset == true}）时 {@code renderConnection} 拿到的 {@code positionAndRotation}
-     * 就是该车的世界 PnR，直接用它做匹配；乘车时它是相机相对量，改用
-     * {@link #beginCarFrame(PositionAndRotation)} 记下的本车世界 PnR，从而与车体读到完全相同的值。
+     * 就是该车的世界 PnR（与车体用的<b>同一个实例</b>），因此直接走与车体相同的取值路径
+     * （本车厢 → 两转向架平均，见 {@link #carBodyRollDegrees}）；
+     * 乘车时它是相机相对量，改用 {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)} 算出的同一个值。
      *
      * @param connectionPositionAndRotation {@code renderConnection} 的第 11 个实参（形参序号 10）
      * @param useOffset                     {@code renderConnection} 的第 12 个实参（形参序号 11）
@@ -1169,16 +1455,36 @@ public final class RailRollRenderHelper {
         connectionHookAlive = true;
         connectionSamples++;
         if (useOffset) {
-            // 未乘车：renderConnection 收到的是该车的世界 PnR，与车体走同一条匹配路径
-            return getTrainRollDegrees(connectionPositionAndRotation);
+            // 未乘车：renderConnection 收到的就是车体用的那个世界 PnR（同一实例），
+            // 因此走与车体完全相同的取值路径（本车厢 → 两转向架平均，否则单点匹配）
+            return carBodyRollDegrees(connectionPositionAndRotation);
         }
         // 乘车：renderConnection 收到的是相机相对 PnR，改用本车世界 PnR 预计算出的同一个值
         return currentCarRollDegrees();
     }
 
-    /** 当前车厢的滚转角（度）；捕获钩子未生效时为 {@code 0}（见 {@link #beginCarFrame}）。 */
+    /** 当前车厢的滚转角（度）；捕获钩子未生效时为 {@code 0}（见 {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)}）。 */
     private static double currentCarRollDegrees() {
         return carFrameValid ? carFrameRollDegrees : 0.0D;
+    }
+
+    /**
+     * 「乘车玩家站在车厢内时的世界位置」应当施加的滚转角（度）。
+     * <p>
+     * <b>与 {@link #applyTrainRoll} 用的是同一份缓存</b>（{@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)} 里算出的
+     * {@code carFrameRollDegrees}），因此车体、风挡与玩家三者按构造不可能给出不同的滚转角。
+     * 本方法只读取，不推进任何诊断计数、不修改任何状态。
+     * <p>
+     * 由 {@code com.fangsu.mixin.VehicleRidingMovementMixin} 在
+     * {@code VehicleRidingMovement.movePlayer} 的「车厢局部坐标 → 世界坐标」那一步读取；
+     * 该 hook 记录存活状态（{@link #ridingPositionHookAlive}）供一次性诊断使用。
+     * <p>
+     * 捕获钩子失效（{@code carFrameValid == false}）时返回 {@code 0}，调用方退化为
+     * MTR 原生行为（玩家不随车体倾斜），不会误用上一帧 / 上一节车厢的角度。
+     */
+    public static double getCurrentCarRollDegrees() {
+        ridingPositionHookAlive = true;
+        return currentCarRollDegrees();
     }
 
     /**
@@ -1217,19 +1523,63 @@ public final class RailRollRenderHelper {
         if (storedMatrixTransformations == null) {
             return;
         }
-        final double rollDegrees = useOffset
-                ? getTrainRollDegrees(positionAndRotation)
-                : currentCarRollDegrees();
+        final double rollDegrees;
+        if (useOffset) {
+            // 未乘车：只有「本车厢的弦中点 PnR」（同一实例）走「两转向架平均」；
+            // 转向架模型 / 乘车玩家实体 / 电梯传进来的是它们自己的 PnR → 单点匹配（与修复前逐位一致）
+            rollDegrees = carBodyRollDegrees(positionAndRotation);
+        } else {
+            // 乘车分支：记录次数，作为「乘车玩家位置随车体滚转」钩子（VehicleRidingMovementMixin）
+            // 一次性诊断的前置条件 —— 只有确实以乘车状态渲染过车体，它没触发才算异常。
+            ridingBodyRollSamples++;
+            rollDegrees = currentCarRollDegrees();
+        }
         if (!Double.isFinite(rollDegrees) || rollDegrees == 0.0D) {
-            // 非有限值（理论上已被 getTrainRollDegrees / currentCarRollDegrees 挡掉）绝不能进旋转，
+            // 非有限值（理论上已被 rollDegreesAtPoint / currentCarRollDegrees 挡掉）绝不能进旋转，
             // 否则整个车体矩阵变成 NaN（D-B 的同类漏洞）。
             return;
         }
         storedMatrixTransformations.add(graphicsHolder -> graphicsHolder.rotateZDegrees((float) rollDegrees));
     }
 
-    /** 车体应当施加的滚转角（度）。正值 = 沿车头前进方向的右手侧抬升。 */
-    private static double getTrainRollDegrees(PositionAndRotation positionAndRotation) {
+    /**
+     * 这次调用应当施加的车体滚转角（度）：<b>只有「本车厢的弦中点 PnR」才用两转向架平均</b>。
+     * <p>
+     * 判定用实例同一性（见 {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)} 的说明）：
+     * <ul>
+     *   <li>{@code positionAndRotation} 就是本车 PnR（未乘车时 {@code getRenderPositionAndRotation}
+     *       原样返回的那一个实例）→ 用 {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)} 算好的
+     *       {@link #carFrameRollDegrees}（= 两个转向架处滚转的平均），车体与风挡都用它；</li>
+     *   <li>其它任何 PnR（转向架模型、乘车玩家实体、电梯、以及未来 MTR 的其它调用点）→ 走
+     *       {@link #rollDegreesAtPoint(PositionAndRotation)} 单点匹配，行为与本次修复前<b>逐位一致</b>。</li>
+     * </ul>
+     * 因此本方法不会改变「转向架模型贴着自己脚下的轨道滚转」这一既有行为，
+     * 也不会让车体与它自己的两个转向架模型出现不同的滚转。
+     */
+    private static double carBodyRollDegrees(PositionAndRotation positionAndRotation) {
+        if (positionAndRotation != null
+                && carFrameValid
+                && positionAndRotation == carFramePositionAndRotation) {
+            return carFrameRollDegrees;
+        }
+        return rollDegreesAtPoint(positionAndRotation);
+    }
+
+    /**
+     * 某个世界点处「最近的带滚转轨道」应当施加的滚转角（度）；匹配不到返回 {@code 0}。
+     * 正值 = 沿该点前进方向的右手侧抬升。
+     * <p>
+     * 本方法就是<b>修复前</b>的整套匹配逻辑，逐字未改：以 {@code positionAndRotation.position}
+     * （世界水平点）反解每条候选带滚转轨道的参数（{@code parameterAt} 会夹到 {@code [0, length]}），
+     * 依次过「高差 &lt; {@link #VEHICLE_MATCH_VERTICAL}」「水平距离 &lt;
+     * {@link #VEHICLE_MATCH_HORIZONTAL}」「前进方向与轨道切向 |cos| ≥
+     * {@link #VEHICLE_MATCH_PARALLEL}」三道门，取水平最近者，再读它的
+     * {@code getRollRadians} 并换算到世界帧。
+     * <p>
+     * 它现在被两种调用方使用：车体（对两个转向架各调一次再平均，见
+     * {@link #beginCarFrame(org.mtr.mod.render.PositionAndRotation)}）与其它一切（转向架模型 / 玩家 / 电梯，各自单点调用）。
+     */
+    private static double rollDegreesAtPoint(PositionAndRotation positionAndRotation) {
         final List<RolledRail> candidates = frameRolledRails;
         if (candidates.isEmpty() || positionAndRotation == null) {
             return 0.0D;
