@@ -100,6 +100,7 @@ jobs:
 
             DEPENDENCIES='[
               {"project_id":"XKPAmI6u", "dependency_type":"required"},
+              {"project_id":"lQqKCDhg", "dependency_type":"required"},
               {"project_id":"lhGA9TYQ", "dependency_type":"required"}
             ]'
 
