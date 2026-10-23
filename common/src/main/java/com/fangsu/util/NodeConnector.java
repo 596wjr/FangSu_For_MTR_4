@@ -189,6 +189,68 @@ public final class NodeConnector {
         return new double[]{0.0D, 0.0D, 0.0D};
     }
 
+    // ==================== 直线连接模式的自动纵坡 ====================
+
+    /**
+     * 直线连接模式（两端方向均未绑定）下，让整条轨道成为<b>恒定坡率的直线坡</b>所需的节点俯仰角（度）。
+     * <p>
+     * <b>为什么需要它</b>：MTR 4.0.5 在 {@code verticalRadius == 0} 时用的竖向剖面与 MTR3 同形
+     * （{@code SHAPE_QUADRATIC}）：两端平、中间陡，即肉眼可见的「S 形坡」。几何内核
+     * {@code RailGeometryCore} 只有当任一俯仰角非零时才改用三次 Hermite，而「两端切线都等于弦向
+     * 坡率」的 Hermite 恰好退化为一条直线：{@code y(t) = yStart + (yEnd - yStart)·t}。
+     * 因此把两端俯仰角都设成这条弦的坡角，竖向剖面就从 S 形变成直线坡。
+     * 两端等高时坡角为 0，姿态保持默认，原版几何逐位不变。
+     * <p>
+     * <b>水平距离为什么用锚点</b>：MTR4 的几何由 {@code FangSuRailMath} 用
+     * 「方块坐标 + 节点平移」的锚点重算（{@code offsetX/Y/Z} 全部进入内核），
+     * 直线模式的绑定方向也是按锚点算的（{@link #straightAngle(BlockPos, double[], BlockPos, double[])}），
+     * 所以这里用同一组锚点算高差与水平距离，坡角与内核长度严格一致。
+     *
+     * @param level    世界（客户端 / 服务端都可，仅读方块实体）
+     * @param posStart 起点（{@code Rail.position1}）
+     * @param posEnd   终点（{@code Rail.position2}）
+     * @return 节点帧俯仰角（度），已按 {@link BlockEntityMultiDirectionNode#clampPitch(double)} 钳制；
+     *         水平退化 / 非法数值返回 {@code 0}
+     */
+    public static double straightPitchDegrees(Level level, BlockPos posStart, BlockPos posEnd) {
+        if (level == null || posStart == null || posEnd == null) {
+            return 0.0D;
+        }
+        final double[] startOffset = readNodeOffset(level, posStart);
+        final double[] endOffset = readNodeOffset(level, posEnd);
+        final double dx = (posEnd.getX() + endOffset[0]) - (posStart.getX() + startOffset[0]);
+        final double dz = (posEnd.getZ() + endOffset[2]) - (posStart.getZ() + startOffset[2]);
+        final double dy = (posEnd.getY() + endOffset[1]) - (posStart.getY() + startOffset[1]);
+        final double horizontal = Math.hypot(dx, dz);
+        if (!(horizontal > 1.0E-9D) || !Double.isFinite(dy) || !Double.isFinite(horizontal)) {
+            // 水平退化（两个锚点在同一垂直线上）没有可承载的纵坡；NaN / Inf 同理
+            return 0.0D;
+        }
+        return BlockEntityMultiDirectionNode.clampPitch(Math.toDegrees(Math.atan2(dy, horizontal)));
+    }
+
+    /**
+     * 读取节点的俯仰角（度）；非万向节点（普通 MTR 节点 / 空位置）返回 0。
+     * 供直线连接模式做建轨失败回滚用。
+     */
+    public static double getNodePitchDegrees(Level level, BlockPos pos) {
+        final BlockEntityMultiDirectionNode node = multiDirectionNodeAt(level, pos);
+        return node == null ? 0.0D : node.getPitchDegrees();
+    }
+
+    /**
+     * 写入节点的俯仰角（度，自动钳制），<b>保留翻滚角</b>；非万向节点忽略。
+     * <p>
+     * 只改数据并同步方块实体，<b>不发</b>轨道重建包：连接器建轨时会重新读取姿态，
+     * 因此本方法必须在 {@code createAndSendRail} 之前调用（见 {@code ItemNodeModifierBaseMixin}）。
+     */
+    public static void setNodePitchDegrees(Level level, BlockPos pos, double pitchDegrees) {
+        final BlockEntityMultiDirectionNode node = multiDirectionNodeAt(level, pos);
+        if (node != null) {
+            node.setNodeAngles(pitchDegrees, node.getRollDegrees());
+        }
+    }
+
     /**
      * 读取某方块位置处的万向节点方块实体；非万向节点（普通 MTR 节点或别的方块）返回 {@code null}。
      * <p>

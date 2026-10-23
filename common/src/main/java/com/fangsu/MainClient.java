@@ -58,6 +58,8 @@ public class MainClient {
         ScriptManager.getInstance().init();
         com.fangsu.network.HybridCreatorClient.init();
         com.fangsu.network.HiddenRoutesPackets.registerClient();
+        com.fangsu.train.DoorOpenCacheClient.initClient();
+        com.fangsu.train.DoorSideObserverMtr4.init();
 
         // 世界切换检测：进入新世界时全量拉取隐藏线路（方速 PIDS/RIS/MtrUtil 查询用），离开时清空缓存
         ClientTickEvent.CLIENT_POST.register(client -> {

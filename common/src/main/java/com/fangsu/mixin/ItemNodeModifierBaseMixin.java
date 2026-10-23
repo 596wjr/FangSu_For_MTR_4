@@ -134,6 +134,10 @@ public abstract class ItemNodeModifierBaseMixin {
      * 都视为"固定"；未绑定的万向节点端按最大半径圆弧切向自适应。固定角度组合在 RailMath
      * 几何不成立（退化）时，按优先级降级：普通节点端 → 最大半径圆弧切向 → 直线，
      * 保证绝大多数场景能建出轨道而不是静默失败。
+     * <p>
+     * <b>直线连接模式</b>（两端方向均未绑定）还附带自动纵坡：把两端俯仰角写成
+     * {@code atan(高差 / 水平距离)}，使几何内核的竖向剖面从 MTR 原生的 S 形二次曲线
+     * 变成恒定坡率的直线坡（两端切线都等于弦向坡率时三次 Hermite 退化为直线）。
      */
     private void handleRailConnect(Level level, org.mtr.mapping.holder.ServerWorld serverWorld, BlockPos posStart, BlockPos endPos, net.minecraft.world.item.Item item, ServerPlayer serverPlayer) {
         final boolean startIsNode = isMultiDirectionNode(level, posStart);
@@ -180,7 +184,27 @@ public abstract class ItemNodeModifierBaseMixin {
                 candidates.add(new double[]{straight, straight});
             }
         }
-        com.fangsu.Main.LOGGER.info("[NodeConnector] final angles start={} end={}", candidates.get(0)[0], candidates.get(0)[1]);
+        // 直线连接模式 = 两端方向均未绑定（两端都必须是万向节点：普通节点的 isBonded 恒为 true）。
+        // 该模式下的竖向剖面由两端俯仰角决定：MTR 原生是 S 形二次曲线，
+        // 把两端俯仰角设成同一条弦的坡角后，几何内核的三次 Hermite 退化为直线坡。
+        final boolean straightMode = !startFixed && !endFixed;
+        final double straightPitch = straightMode
+                ? NodeConnector.straightPitchDegrees(level, posStart, endPos)
+                : 0.0D;
+        com.fangsu.Main.LOGGER.info("[NodeConnector] final angles start={} end={} straightPitch={}", candidates.get(0)[0], candidates.get(0)[1], straightPitch);
+
+        // 直线模式必须在建轨<b>之前</b>把方向与俯仰落库：createAndSendRail 读节点里的方向
+        // 做俯仰投影、读俯仰写进姿态；晚一步写入，新轨道拿到的仍是旧方向 / 旧俯仰，
+        // 纵坡就不是直线坡，要等下一次节点重建才纠正。
+        // 建轨失败时按下面的快照回滚，保持「失败不改变节点绑定状态」的既有不变式。
+        final double startPitchBefore = straightMode ? NodeConnector.getNodePitchDegrees(level, posStart) : 0.0D;
+        final double endPitchBefore = straightMode ? NodeConnector.getNodePitchDegrees(level, endPos) : 0.0D;
+        if (straightMode) {
+            bindNode(level, posStart, straight);
+            bindNode(level, endPos, straight);
+            NodeConnector.setNodePitchDegrees(level, posStart, straightPitch);
+            NodeConnector.setNodePitchDegrees(level, endPos, straightPitch);
+        }
 
         final ItemRailModifierAccessorMixin accessor = (ItemRailModifierAccessorMixin) item;
         final RailType railType = accessor.getRailType();
@@ -188,13 +212,23 @@ public abstract class ItemNodeModifierBaseMixin {
 
         for (final double[] cand : candidates) {
             if (NodeConnector.createAndSendRail(serverWorld, posStart, cand[0], endPos, cand[1], railType, isOneWay, serverPlayer.getUUID())) {
-                // 建轨成功后才把未绑定万向节点绑定为实际使用的角度（失败不改变绑定状态）
-                if (startIsNode && !startBonded) bindNode(level, posStart, cand[0]);
-                if (endIsNode && !endBonded) bindNode(level, endPos, cand[1]);
+                // 非直线模式仍是「建轨成功后才绑定」；直线模式已在建轨前绑定（见上）
+                if (!straightMode) {
+                    if (startIsNode && !startBonded) bindNode(level, posStart, cand[0]);
+                    if (endIsNode && !endBonded) bindNode(level, endPos, cand[1]);
+                }
                 markConnected(level, posStart);
                 markConnected(level, endPos);
                 return;
             }
+        }
+
+        // 全部候选角度都建不出轨道：回滚直线模式在建轨前写入的方向 / 俯仰
+        if (straightMode) {
+            NodeConnector.setNodePitchDegrees(level, posStart, startPitchBefore);
+            NodeConnector.setNodePitchDegrees(level, endPos, endPitchBefore);
+            unbindNode(level, posStart, startAngle);
+            unbindNode(level, endPos, endAngle);
         }
 
         // 全部角度组合均不成立（如两端万向节点绑定方向与连线冲突）：与原版一致提示"无效方向"
@@ -290,6 +324,18 @@ public abstract class ItemNodeModifierBaseMixin {
         final BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof BlockEntityMultiDirectionNode node) {
             node.setDirectionBonded(angle);
+        }
+    }
+
+    /**
+     * 把万向节点还原成「未绑定方向」状态（直线模式建轨失败时的回滚）：
+     * 保留原有方向值、只把绑定标志清回 false。
+     */
+    private static void unbindNode(Level level, BlockPos pos, double direction) {
+        final BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof BlockEntityMultiDirectionNode node) {
+            node.setDirectionUnbound(direction);
+            node.setRotationBonded(false);
         }
     }
 

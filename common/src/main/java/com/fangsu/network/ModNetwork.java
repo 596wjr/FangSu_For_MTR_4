@@ -71,6 +71,7 @@ public class ModNetwork {
         HybridCreatorPackets.registerServer();
         DisplacementToolPackets.registerServer();
         HiddenRoutesPackets.registerServer();
+        com.fangsu.train.DoorOpenCacheNet.registerServer();
     }
 
     /**
