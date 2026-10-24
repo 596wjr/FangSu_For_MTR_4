@@ -1,0 +1,47 @@
+{
+    "main_tp1": {
+        "name": "[轨道] 标准轨道§l (类型1)",
+        "model": "mtrsteamloco:fsrail/main_tp1.obj"
+    }
+    ,
+    "main_tp2": {
+        "name": "[轨道] 标准轨道§l (类型2)",
+        "model": "mtrsteamloco:fsrail/main_tp2.obj"
+    },
+    "main_tp3": {
+        "name": "[轨道] 标准轨道§l (类型3)",
+        "model": "mtrsteamloco:fsrail/main_tp3.obj"
+    },
+    "ex_dsg": {
+        "name": "[附属] 第三轨",
+        "model": "mtrsteamloco:fsrail/ex_dsg.obj"
+    },
+    "ex_dsg_mr": {
+        "name": "[附属] 第三轨§l (镜像)",
+        "model": "mtrsteamloco:fsrail/ex_dsg_mr.obj"
+    },
+    "ex_bredge": {
+        "name": "[附属] 桥梁§l (边缘)",
+        "model": "mtrsteamloco:fsrail/ex_bredge.obj"
+    },
+    "ex_bredge_mr": {
+        "name": "[附属] 桥梁§l (边缘, 镜像)",
+        "model": "mtrsteamloco:fsrail/ex_bredge_mr.obj"
+    },
+    "ex_brmiddle": {
+        "name": "[附属] 桥梁§l (中间)",
+        "model": "mtrsteamloco:fsrail/ex_brmiddle.obj"
+    },
+    "ex_brmiddle_mr": {
+        "name": "[附属] 桥梁§l (中间, 镜像)",
+        "model": "mtrsteamloco:fsrail/ex_brmiddle_mr.obj"
+    },
+    "ex_brbar": {
+        "name": "[附属] 桥梁§l (地铁护栏)",
+        "model": "mtrsteamloco:fsrail/ex_brbar.obj"
+    },
+    "ex_brbar_mr": {
+        "name": "[附属] 桥梁§l (地铁护栏, 镜像)",
+        "model": "mtrsteamloco:fsrail/ex_brbar_mr.obj"
+    }
+}

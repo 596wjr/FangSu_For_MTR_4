@@ -16,6 +16,10 @@ public class ModBlockClient {
                 ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
         );
         BlockEntityRendererRegistry.register(
+                ModBlocks.BLOCK_ENTITY_LEVEL_CROSSING.get(),
+                ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
+        );
+        BlockEntityRendererRegistry.register(
                 ModBlocks.BLOCK_ENTITY_TICKET_BARRIER.get(),
                 ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
         );

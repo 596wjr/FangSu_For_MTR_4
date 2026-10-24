@@ -15,21 +15,15 @@ import com.fangsu.drawing.diaoban.DiaobanDrawManager;
 import com.fangsu.drawing.pids.PidsDrawManager;
 import com.fangsu.drawing.ris.RisDrawManager;
 import com.fangsu.drawing.sis.SisDrawManager;
-import com.fangsu.mtr.CustomTrainRegister;
-import com.fangsu.mtr.LcdVehicleRegistry;
-import com.fangsu.train.LcdDrawManager;
 import com.fangsu.train.LcdManager;
 import com.fangsu.train.lcds.MtrLcd;
-import com.fangsu.network.HiddenRoutesClient;
 import com.fangsu.ui.ModMenus;
 import com.fangsu.userScripts.ScriptManager;
 import com.fangsu.utils.ResourceUtil;
 import com.google.gson.JsonObject;
-import dev.architectury.event.events.client.ClientTickEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.resources.ResourceManager;
 
 import java.util.ArrayList;
@@ -47,32 +41,16 @@ public class MainClient {
 
     public static List<Runnable> resourceInitRunnables = new ArrayList<>();
 
-    /** 上次检测的客户端世界引用（世界切换触发点） */
-    private static ClientLevel lastClientLevel = null;
-
     public static void initClient() {
-        CustomTrainRegister.initTickHook();
         ModBlocks.initClient();
         ModMenus.initClient();
         ShadersModHandler.init();
         ScriptManager.getInstance().init();
         com.fangsu.network.HybridCreatorClient.init();
-        com.fangsu.network.HiddenRoutesPackets.registerClient();
         com.fangsu.train.DoorOpenCacheClient.initClient();
+        // 平交路口的网格构建队列（客户端 tick 驱动，与渲染回调解耦）
+        com.fangsu.blockEntities.BlockEntityLevelCrossing.initBuildQueue();
         com.fangsu.train.DoorSideObserverMtr4.init();
-
-        // 世界切换检测：进入新世界时全量拉取隐藏线路（方速 PIDS/RIS/MtrUtil 查询用），离开时清空缓存
-        ClientTickEvent.CLIENT_POST.register(client -> {
-            final ClientLevel level = client.level;
-            if (level != lastClientLevel) {
-                lastClientLevel = level;
-                if (level == null) {
-                    HiddenRoutesClient.clear();
-                } else {
-                    HiddenRoutesClient.onWorldJoin();
-                }
-            }
-        });
 
         try {
             Class.forName("cn.zbx1425.mtrsteamloco.MainClient", false, MainClient.class.getClassLoader());
@@ -91,6 +69,7 @@ public class MainClient {
         }
 
         if (is_nte_loaded) Main.LOGGER.info("[FangSu] running with NTE, using compatible rendering");
+
     }
 
     public static void initResources(ResourceManager resourceManager) {
@@ -148,30 +127,31 @@ public class MainClient {
             }
 
             try {
+                CustomMtrLifts customMtrLifts = CustomMtrLifts.getInstance();
+                com.fangsu.render.lift.CustomLiftModel.clearCache();
+                customMtrLifts.load();
+                {
+                    JsonObject defaultLift = new JsonObject();
+                    defaultLift.addProperty("id", "default");
+                    defaultLift.addProperty("texture", "mtr:textures/entity/lift_1.png");
+                    defaultLift.addProperty("name", ComponentHelper.translatable("mtr.fangsu.lift.vanilla").getString());
+                    defaultLift.addProperty("description", ComponentHelper.translatable("mtr.fangsu.lift.vanilla.description").getString());
+                    JsonObject nonTransparent = new JsonObject();
+                    nonTransparent.addProperty("id", "non_transparent");
+                    nonTransparent.addProperty("texture", "fangsu:textures/entity/non_transparent.png");
+                    nonTransparent.addProperty("name", ComponentHelper.translatable("fangsu:textures/entity/non_transparent.png").getString());
+                    nonTransparent.addProperty("description", ComponentHelper.translatable("mtr.fangsu.lift.non_transparent.description").getString());
+                    customMtrLifts.injectBuiltInTexturedLifts(defaultLift);
+                    customMtrLifts.injectBuiltInTexturedLifts(nonTransparent);
+                }
+            } catch (Exception e) {
+                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
+            }
+            try {
                 LcdManager.getInstance().injectLcd("mtr", MtrLcd::new);
             } catch (Exception e) {
                 Main.LOGGER.error("[FangSu] LcdManager init failed", e);
             }
-
-//            try {
-//                com.fangsu.render.lift.CustomLiftModel.clearCache();
-//                CustomMtrLifts.getInstance().load();
-//            } catch (Exception e) {
-//                Main.LOGGER.error("[FangSu] CustomMtrLifts init failed", e);
-//            }
-
-            try {
-                LcdVehicleRegistry.load();
-            } catch (Exception e) {
-                Main.LOGGER.error("[FangSu] LcdVehicleRegistry init failed", e);
-            }
-
-            // 方速 custom_trains 车辆注册进 MTR 可选车型。
-            // 实测 MTR 的 CustomResourceLoader.reload() 在本 listener 之后才执行，
-            // reload() 开头会清空 VEHICLES，直接注册会被清掉；且 Minecraft.execute 在渲染线程
-            // 是同步立即执行，同样来不及。故只置标志，由 CustomTrainRegister 的 tick 轮询在
-            // MTR reload 完成后再注册（每次资源重载自动重新排队，注册后验证生效才结束）
-            CustomTrainRegister.markNeedsRegister();
 
             for (Runnable runnable : resourceInitRunnables) {
                 try {
@@ -184,9 +164,8 @@ public class MainClient {
             try {
                 SignItemFactory.loadMtrItems();
             } catch (Exception e) {
-                Main.LOGGER.error("[FangSu] SignItemFactory.loadMtrItems failed", e);
+                Main.LOGGER.error("failed to load mtr sign items", e);
             }
-            Main.LOGGER.info("[FangSu] SignItemFactory.loadMtrItems completed");
 
             Main.LOGGER.info("[FangSu] initResources completed successfully");
         } catch (Exception e) {

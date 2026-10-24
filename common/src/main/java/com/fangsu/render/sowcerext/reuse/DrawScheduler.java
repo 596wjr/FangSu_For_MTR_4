@@ -1,5 +1,6 @@
 package com.fangsu.render.sowcerext.reuse;
 
+import com.fangsu.Main;
 import com.fangsu.MainClient;
 import com.fangsu.render.sowcer.batch.BatchManager;
 import com.fangsu.render.sowcer.math.Matrix4f;
@@ -24,9 +25,6 @@ public class DrawScheduler {
 
     private final List<ClusterDrawCall> drawCalls = new LinkedList<>();
 
-    // 调试字段（LCD 搁置中，见 deliverables/mtr4-vehicle-lcd-notes.md）
-    // private static boolean diagPrinted = false;
-
     public void reloadShaders(ResourceManager resourceManager) throws IOException {
         shaderManager.reloadShaders(resourceManager);
     }
@@ -37,13 +35,6 @@ public class DrawScheduler {
     }
 
     public void commit(BufferSourceProxy vertexConsumers, DrawContext drawContext) {
-        // 调试日志（LCD 搁置中，见 deliverables/mtr4-vehicle-lcd-notes.md）：
-        // 一次性确认 LCD 等自定义 drawCall 是否到达 commit（本帧 flush 的绘制请求数）
-        // if (!diagPrinted) {
-        //     diagPrinted = true;
-        //     com.fangsu.Main.LOGGER.info("[FangSu] DrawScheduler.commit: drawCalls={}, batches={}, drawWithBlaze={}, nte={}",
-        //             drawCalls.size(), batchManager.batches.size(), drawContext.drawWithBlaze, MainClient.is_nte_loaded);
-        // }
         // ===== 兼容模式：使用私有 Immediate BufferSource =====
         if (MainClient.is_nte_loaded) {
             // 1. 创建私有的 Immediate BufferSource
@@ -109,11 +100,36 @@ public class DrawScheduler {
             }
         }
         if (!drawContext.drawWithBlaze) {
-            GlStateTracker.capture();
-            commitRaw(drawContext);
-            GlStateTracker.restore();
+            // <b>热修（2026-07，第二处状态泄漏）</b>：旧写法是「capture → commitRaw → restore」直线式，
+            // commitRaw 每条排队绘制都会跑（每帧、每方块），任何一次抛异常都会跳过 restore()，
+            // 让 GlStateTracker.isStateProtected 永久为真 → 之后所有走这条渲染栈的方速方块集体不渲染。
+            // 这里：① restore 无条件在 finally 执行；② 异常吞掉并记录（一个坏模型不该让整帧全不画）；
+            // ③ 每帧路径的日志去重，同一类异常只打一次并累计次数。
+            boolean needProtection = !GlStateTracker.isStateProtected;
+            if (needProtection) GlStateTracker.capture();
+            try {
+                commitRaw(drawContext);
+            } catch (Throwable t) {
+                warnCommitFailed(t);
+            } finally {
+                if (needProtection) GlStateTracker.restore();
+            }
         }
         drawCalls.clear();
+    }
+
+    /** 同一类提交异常只打一次（每帧路径，不能刷屏），并累计失败次数。 */
+    private static final java.util.Set<String> COMMIT_FAILED_KEYS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static int commitFailedCount;
+
+    private static void warnCommitFailed(Throwable t) {
+        commitFailedCount++;
+        String msg = t.getMessage();
+        String head = msg == null ? "" : (msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg);
+        String key = t.getClass().getSimpleName() + ": " + head;
+        if (COMMIT_FAILED_KEYS.add(key)) {
+            Main.LOGGER.warn("[fangsu] commitRaw failed (累计 {} 次；同类异常只打一次) {}", commitFailedCount, key, t);
+        }
     }
 
     public void commitRaw(DrawContext drawContext) {
