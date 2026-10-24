@@ -33,7 +33,8 @@ public class ModCreativeTabs {
             ModBlocks.ITEM_COLLISION_COMPENSATOR,
             ModBlocks.ITEM_MULTI_DIRECTION_NODE,
             ModBlocks.ITEM_TRAFFIC_LIGHT,
-            ModBlocks.ITEM_LEVEL_CROSSING
+            ModBlocks.ITEM_LEVEL_CROSSING,
+            ModBlocks.ITEM_ROTATING_RAIL
     );
     //#elseif MC_VERSION >= 11903
     //$$ public static final CreativeModeTab FANGSU_MAIN = RegisterUtil.addCreativeTab(
