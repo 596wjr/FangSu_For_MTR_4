@@ -258,6 +258,12 @@ public final class RailSampleSourceMtr4 implements RailSampleSource {
             }
             return 0.0D;
         }
+
+        @Override public double tiltDegrees(double distance) {
+            // 使用与普通轨道渲染相同的逐位置剖面，包含端点顺序和中间超高控制点。
+            if(rail.railMath instanceof FangSuRailMath math)return Math.toDegrees(math.getGeometryCore().getRollRadians(distance));
+            return tiltDegrees();
+        }
     }
 
     /** 锁外使用的浅快照：一条轨道 + 它的两个端点方块坐标。 */

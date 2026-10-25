@@ -34,7 +34,11 @@ public class ModCreativeTabs {
             ModBlocks.ITEM_MULTI_DIRECTION_NODE,
             ModBlocks.ITEM_TRAFFIC_LIGHT,
             ModBlocks.ITEM_LEVEL_CROSSING,
-            ModBlocks.ITEM_ROTATING_RAIL
+            ModBlocks.ITEM_ROTATING_RAIL,
+            ModItems.ITEM_NODE_MARKER_RED,
+            ModItems.ITEM_NODE_MARKER_BLUE,
+            ModItems.ITEM_MARKER_CLEARER,
+            ModBlocks.ITEM_TURNOUT
     );
     //#elseif MC_VERSION >= 11903
     //$$ public static final CreativeModeTab FANGSU_MAIN = RegisterUtil.addCreativeTab(
@@ -60,7 +64,11 @@ public class ModCreativeTabs {
     //$$         ModBlocks.ITEM_SCREENDOOR_CENTRAL_CONTROL,
     //$$         ModBlocks.ITEM_COLLISION_COMPENSATOR,
     //$$         ModBlocks.ITEM_MULTI_DIRECTION_NODE,
-    //$$         ModBlocks.ITEM_LEVEL_CROSSING
+    //$$         ModBlocks.ITEM_LEVEL_CROSSING,
+    //$$         ModItems.ITEM_NODE_MARKER_RED,
+    //$$         ModItems.ITEM_NODE_MARKER_BLUE,
+    //$$         ModItems.ITEM_MARKER_CLEARER,
+    //$$         ModBlocks.ITEM_TURNOUT
     //$$ );
     //#else
     //$$public static final CreativeModeTab FANGSU_MAIN = dev.architectury.registry.CreativeTabRegistry.create(
