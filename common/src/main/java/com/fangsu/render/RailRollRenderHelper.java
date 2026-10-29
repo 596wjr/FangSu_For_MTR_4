@@ -339,7 +339,7 @@ public final class RailRollRenderHelper {
     public static final int BOGIE_SOURCE_INDEX = 1;
 
     /**
-     * 风挡 / 挡板滚转的 {@code @ModifyArgs} 目标方法选择器：4.0.5 里创建两个
+     * 风挡 / 挡板滚转的 {@code @WrapOperation} 目标方法选择器：4.0.5 里创建两个
      * {@code renderConnection} 调用的那条 lambda（{@code VehicleResource.iterateModels} 的回调，
      * {@code lambda$render$12}）的<b>方法名</b>。
      * <p>
@@ -360,35 +360,19 @@ public final class RailRollRenderHelper {
      * Identifier innerSide/innerTop/innerBottom/outerSide/outerTop/outerBottom,
      * PositionAndRotation positionAndRotation, boolean useOffset, double vehicleLength, double width,
      * double height, double yOffset, double zOffset, double oscillationAmount, boolean isOnRoute)}）
-     * 的参数顺序完全一致。
+     * 的参数顺序完全一致。形参序号（0 基）：(0..2) 三个 boolean，(3) previousConnectionPositions，
+     * (4..9) 六个纹理，(10) positionAndRotation，(11) useOffset，(12..16) vehicleLength/width/height/yOffset/zOffset，
+     * (17) oscillationAmount（必须加上本车滚转角的那个），(18) isOnRoute。
+     * <p>
+     * {@code @WrapOperation} 的处理器按这个顺序逐个接收形参，<b>不再有 Args 索引常量</b>
+     * （旧实现的 {@code @ModifyArgs} 用序号取值，已因合成类 {@code Args$N} 加载失败而废弃，
+     * 见 {@code com.fangsu.mixin.RenderVehiclesMixin#fangsu$rollConnection}）。
      */
     public static final String RENDER_CONNECTION_DESCRIPTOR =
             "Lorg/mtr/mod/render/RenderVehicles;renderConnection(ZZZLorg/mtr/mod/render/RenderVehicles$PreviousConnectionPositions;"
                     + "Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;"
                     + "Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;Lorg/mtr/mapping/holder/Identifier;"
                     + "Lorg/mtr/mod/render/PositionAndRotation;ZDDDDDDZ)V";
-
-    /** {@code renderConnection} 形参序号（0 基）：车厢的 PnR。 */
-    public static final int CONNECTION_POSITION_AND_ROTATION_ARG = 10;
-    /**
-     * {@code renderConnection} 形参序号（0 基）：{@code useOffset}（= {@code offsetVector == null}，
-     * 为 {@code true} 表示未乘车、{@code positionAndRotation} 是世界 PnR）。
-     */
-    public static final int CONNECTION_USE_OFFSET_ARG = 11;
-    /**
-     * {@code renderConnection} 形参序号（0 基）：<b>摆动量（度）</b>，也就是必须加上本车滚转角的那个实参。
-     * <p>
-     * 计数依据（真实 4.0.5 字节码，且与源码形参表一致）：
-     * {@code (0) shouldRender1, (1) shouldRender2, (2) canHaveLight, (3) previousConnectionPositions,
-     * (4..9) innerSide/innerTop/innerBottom/outerSide/outerTop/outerBottom 六个纹理,
-     * (10) positionAndRotation, (11) useOffset, (12) vehicleLength, (13) width, (14) height,
-     * (15) yOffset, (16) zOffset, (17) oscillationAmount, (18) isOnRoute}。
-     * {@code renderConnection} 自己的 {@code LocalVariableTable} 里槽位 22 的名字就是 {@code oscillationAmount}
-     * （第 18 个形参，前面的 double 各占两个槽位：10→槽位 10，11→槽位 11，12→槽位 12-13 …… 17→槽位 22-23）。
-     * <p>
-     * {@code @ModifyArgs} 的 {@code Args} 索引用的是<b>形参序号</b>而不是槽位，所以这里是 17。
-     */
-    public static final int CONNECTION_OSCILLATION_ARG = 17;
 
     /**
      * 「乘车玩家站进车厢内部」那条方法的完整选择器：{@code VehicleRidingMovement.movePlayer}
@@ -1404,13 +1388,13 @@ public final class RailRollRenderHelper {
                     + "乘车时的车体滚转与风挡滚转都不会生效（请用 javap 重新核对 CAR_FRAME_TARGET 与 "
                     + "GET_RENDER_POSITION_AND_ROTATION_TARGET）");
         }
-        // 风挡 / 挡板 @ModifyArgs：车体钩子已经在跑（说明本车世界 PnR 拿得到）却一次都没进过 renderConnection，
+        // 风挡 / 挡板 @WrapOperation：车体钩子已经在跑（说明本车世界 PnR 拿得到）却一次都没进过 renderConnection，
         // 多半是 lambda$render$12 的编号变了或调用点选择器对不上。
         if (carFrameHookAlive && connectionSamples == 0 && !warnedConnectionMissing) {
             warnedConnectionMissing = true;
             Main.LOGGER.warn("[RailRoll] 车体渲染钩子已触发 " + carFrameSamples + " 次，但 renderConnection 的 "
-                    + "@ModifyArgs 从未触发；风挡 / 挡板不会随车体倾斜（请用 javap 重新核对 "
-                    + "CONNECTION_CALLER_TARGET、RENDER_CONNECTION_DESCRIPTOR 与 CONNECTION_OSCILLATION_ARG）");
+                    + "@WrapOperation 从未触发；风挡 / 挡板不会随车体倾斜（请用 javap 重新核对 "
+                    + "CONNECTION_CALLER_TARGET 与 RENDER_CONNECTION_DESCRIPTOR，以及 renderConnection 的形参顺序）");
         }
         // 转向架来源 @ModifyVariable：车体 PnR 钩子已经在跑（说明每节车厢都会走到这里）却一次都没抓到
         // vehicleCarDetails，说明 lambda$render$14 的编号或形参槽位对不上。它失效不会让滚转消失，

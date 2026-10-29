@@ -3,7 +3,10 @@ package com.fangsu.mixin;
 import com.fangsu.Main;
 import com.fangsu.render.RailRollRenderHelper;
 import com.fangsu.train.VehicleLcdRenderer;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
+import org.mtr.mapping.holder.Identifier;
 import org.mtr.mapping.holder.Vector3d;
 import org.mtr.mod.client.MinecraftClientData;
 import org.mtr.mod.data.VehicleExtension;
@@ -13,12 +16,10 @@ import org.mtr.mod.render.StoredMatrixTransformations;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 /**
  * 车载 LCD 的<b>备用</b>渲染注入点（不依赖任何局部变量捕获）。
@@ -56,8 +57,10 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
  *       该方法的第一个参数是 {@code useOffset}（= {@code offsetVector == null}），
  *       <b>乘车时传 {@code false} 且 {@code PositionAndRotation} 是相机相对量</b>，
  *       所以另有一个 {@code @Redirect} 在 {@code lambda$render$14} 里记下本车的世界 PnR；</li>
- *   <li>{@code lambda$render$12} 里的两个 {@code renderConnection} 调用用 {@code @ModifyArgs}
- *       把滚转角加到 {@code oscillationAmount} 上，风挡与挡板因此与车体同步倾斜。</li>
+ *   <li>{@code lambda$render$12} 里的两个 {@code renderConnection} 调用用 MixinExtras 的
+ *       {@code @WrapOperation} 把滚转角加到 {@code oscillationAmount} 上，风挡与挡板因此与车体同步倾斜
+ *       （不用 {@code @ModifyArgs}：它生成的合成类 {@code Args$N} 在 ModLauncher 模块化环境里会加载失败，
+ *       见 {@link #fangsu$rollConnection}）。</li>
  * </ul>
  * <p>
  * <b>P6 镜头滚转</b>（{@code GameRendererTiltMixin}）<b>不在这里</b>，但它要用的「玩家所在车厢的
@@ -216,13 +219,16 @@ public class RenderVehiclesMixin {
      * <p>
      * <b>与「泛型」无关</b>：形参描述符里 {@code IndexedConsumer<T>} 本来就擦除成
      * {@code Lorg/mtr/mod/render/RenderVehicles$IndexedConsumer;}，JVM 只看得到擦除后的类型，
-     * 真正触发访问检查的是「包级私有」。对照组就是同一文件里的 {@link #fangsu$rollConnection}：
-     * 它同样用 {@code @ModifyArgs}，但那次调用里唯一的嵌套类型形参
-     * {@code RenderVehicles$PreviousConnectionPositions} 经 {@code javap -p} 确认是
-     * <b>{@code public class}</b>（其余是 {@code Identifier} / {@code PositionAndRotation} 与基本类型），
-     * 生成的取值方法里的 {@code checkcast} 因此合法 —— 这就是「一个崩、一个不崩」的全部原因。
-     * 它与是否泛型、与目标方法 {@code private static} 都无关（原调用的 {@code invokestatic} 仍留在被注入
-     * 方法自己的字节码里，只有实参取值走生成类）。
+     * 真正触发访问检查的是「包级私有」。
+     * <p>
+     * <b>补充（2026-10 线上崩溃，结论务必保留）</b>：同一文件里的 {@link #fangsu$rollConnection} 原先仍在用
+     * {@code @ModifyArgs}，它那次调用的嵌套类型形参 {@code RenderVehicles$PreviousConnectionPositions}
+     * 经 {@code javap -p} 确认是 {@code public class}，因此不会踩上面的 {@code IllegalAccessError} ——
+     * 但它踩了更致命的一层：合成类 {@code org.spongepowered.asm.synthetic.args.Args$N} 本身
+     * <b>加载不到</b>（{@code NoClassDefFoundError}）。详见 {@link #fangsu$rollConnection} 的 javadoc。
+     * 所以本文件的 {@code @ModifyArgs} 已<b>全部移除</b>，统一改用 MixinExtras（不生成合成类）。
+     * 原实现崩与是否泛型、与目标方法 {@code private static} 都无关（原调用的 {@code invokestatic}
+     * 仍留在被注入方法自己的字节码里，只有实参取值走生成类）。
      * <p>
      * <b>为什么 {@code @ModifyVariable} 不会踩同一个坑</b>：它不生成任何访问器类。Mixin 只在该注入点插入
      * {@code xLOAD 槽位 → 调用处理器 → xSTORE 槽位}（{@code ModifyVariableInjector.inject} 的
@@ -276,19 +282,34 @@ public class RenderVehiclesMixin {
      * <p>
      * <b>作用面</b>：全 jar 只有两个 {@code renderConnection} 调用点，都在 {@code lambda$render$12}
      * （偏移 200 风挡 / 偏移 333 挡板，已用 javap 与 ASM 全 jar 扫描双向核实），
-     * 它们就是本 {@code @ModifyArgs} 唯一会改的两处；其它方法、其它类一概不受影响。
+     * 它们就是本钩子唯一会改的两处；其它方法、其它类一概不受影响。
      * {@code method} 显式写出、{@code require = 0}，理由同上。
      * <p>
-     * <b>为什么用 {@code @ModifyArgs} 而不是 {@code @Redirect}</b>：{@code renderConnection} 是
-     * {@code private static}，{@code @Redirect} 的处理器必须自己完成等价调用，而本包无法访问该私有方法
-     * （只能反射，或把整段实现抄一遍 —— 两者都会引入新的、更脆的失败点）。{@code @ModifyArgs}
-     * 保留原调用、只改一个实参，是最窄且不改语义的做法。它不使用 {@code ordinal}，
-     * 定位完全靠 {@code method = lambda$render$12} + 精确的 {@code INVOKE} 描述符；
+     * <b>为什么不再用 {@code @ModifyArgs}（2026-10 线上崩溃的根因，结论务必保留）</b>：
+     * {@code @ModifyArgs} 由 Mixin 的 {@code ArgsClassGenerator} 在运行时现场生成
+     * {@code org.spongepowered.asm.synthetic.args.Args$N}（类名字面量就是
+     * {@code "org.spongepowered.asm.synthetic.args.Args$"} + 序号），并把对它的引用<b>写进目标类</b>
+     * （{@code RenderVehicles}）的字节码 —— 生成代码要把该实例按更宽的形参类型
+     * {@code org.spongepowered.asm.mixin.injection.invoke.arg.Args} 传给处理器，于是校验
+     * {@code RenderVehicles} 时必须先加载这个合成类。一旦它加载不到，JVM 抛的是
+     * {@code NoClassDefFoundError: …synthetic/args/Args$N}，且报在<b>触发链接的那条指令所在的帧</b>上，
+     * 目标类一帧都没有：线上堆栈就是 {@code MainRenderer.render:112}
+     * （= {@code invokestatic RenderVehicles.render(J,Vector3d)}）+ {@code Caused by: ClassNotFoundException}，
+     * 看着像 MTR 崩，实际是 {@code RenderVehicles} 链接失败。这与实参类型是否 public 无关
+     * （对照组 {@code PreviousConnectionPositions} 是 public 也照样中招），是 Mixin 合成类在
+     * ModLauncher 模块类加载器里的注册问题 —— {@code @ModifyArgs} 在模块化环境里天生不可靠。
+     * <p>
+     * <b>因此改用 MixinExtras 的 {@code @WrapOperation}</b>：它不生成任何合成类，处理器就是
+     * 「目标调用的同签名形参 + 末尾一个 {@code Operation}」，自己只把要改的那一个实参换掉、
+     * 其余原样委托。{@code renderConnection} 仍是 {@code private static}，本包依旧无法直接调用它，
+     * 但 {@code Operation.call} 由 MixinExtras 在字节码层完成原 {@code invokestatic} ——
+     * 不需要反射、不需要暴露访问器、也不需要复刻整段实现。
+     * 定位依旧不用 {@code ordinal}，完全靠 {@code method = lambda$render$12} + 精确的 {@code INVOKE} 描述符；
      * 万一未来 MTR 在该 lambda 里再加一个同签名的 {@code renderConnection} 调用，
      * 唯一后果是那一处也会被加上同一个本车滚转角（语义上仍正确），而不会改到别的类；
      * 若 MTR 改名或改签名，则钩子静默失效并由 {@link RailRollRenderHelper} 的一次性告警暴露。
      */
-    @ModifyArgs(
+    @WrapOperation(
             method = RailRollRenderHelper.CONNECTION_CALLER_TARGET,
             at = @At(
                     value = "INVOKE",
@@ -297,25 +318,24 @@ public class RenderVehiclesMixin {
             require = 0,
             remap = false
     )
-    private static void fangsu$rollConnection(Args args) {
-        final Object connectionPositionAndRotation = args.get(RailRollRenderHelper.CONNECTION_POSITION_AND_ROTATION_ARG);
-        final Object useOffset = args.get(RailRollRenderHelper.CONNECTION_USE_OFFSET_ARG);
-        final double rollDegrees = RailRollRenderHelper.getConnectionRollDegrees(
-                connectionPositionAndRotation instanceof PositionAndRotation
-                        ? (PositionAndRotation) connectionPositionAndRotation
-                        : null,
-                Boolean.TRUE.equals(useOffset)
+    private static void fangsu$rollConnection(
+            boolean shouldRender1, boolean shouldRender2, boolean canHaveLight,
+            RenderVehicles.PreviousConnectionPositions previousConnectionPositions,
+            Identifier innerSide, Identifier innerTop, Identifier innerBottom,
+            Identifier outerSide, Identifier outerTop, Identifier outerBottom,
+            PositionAndRotation positionAndRotation, boolean useOffset,
+            double vehicleLength, double width, double height,
+            double yOffset, double zOffset, double oscillationAmount, boolean isOnRoute,
+            Operation<Void> original
+    ) {
+        final double rollDegrees = RailRollRenderHelper.getConnectionRollDegrees(positionAndRotation, useOffset);
+        // 无滚转 → 原样委托；加 0.0 会把 -0.0 变成 +0.0，所以显式短路，保持与 MTR 原生逐位一致
+        final double newOscillationAmount = rollDegrees == 0.0D ? oscillationAmount : oscillationAmount + rollDegrees;
+        original.call(
+                shouldRender1, shouldRender2, canHaveLight, previousConnectionPositions,
+                innerSide, innerTop, innerBottom, outerSide, outerTop, outerBottom,
+                positionAndRotation, useOffset,
+                vehicleLength, width, height, yOffset, zOffset, newOscillationAmount, isOnRoute
         );
-        if (rollDegrees == 0.0D) {
-            // 无滚转 → 一个实参都不动，调用与 MTR 原生逐位一致
-            return;
-        }
-        final Object oscillationAmount = args.get(RailRollRenderHelper.CONNECTION_OSCILLATION_ARG);
-        if (oscillationAmount instanceof Double) {
-            args.set(
-                    RailRollRenderHelper.CONNECTION_OSCILLATION_ARG,
-                    (Double) oscillationAmount + rollDegrees
-            );
-        }
     }
 }
