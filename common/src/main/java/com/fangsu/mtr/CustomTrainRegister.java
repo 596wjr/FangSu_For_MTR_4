@@ -45,8 +45,8 @@ public final class CustomTrainRegister {
 
     /** 探测 id：MTR 内置基础车型变体，可见即代表 MTR CustomResourceLoader.reload() 已完成 */
     private static final String MTR_BASE_PROBE_ID = "r_train_cab_1";
-    /** 探测 id：方速注册车型的首个变体，用于判断注册是否已生效 */
-    private static final String OUR_PROBE_ID = "mtr_custom_train_r_train_fangsu_lcd_cab_1";
+    /** 本轮实际注册的首个车型，不依赖某一个内置示例必须存在。 */
+    private static String registeredProbeId;
 
     /** 资源重载后置位，tick 轮询注册完成并验证后复位 */
     private static volatile boolean needsRegister = false;
@@ -65,27 +65,17 @@ public final class CustomTrainRegister {
     }
 
     private static void tick() {
-        // 车载 LCD：JCM 的脚本重载可能早于方速 initResources，那时还读不到
-        // mtr_custom_resources.json / custom_trains.json；这里在资源就绪后再补扫一次（幂等）。
-        if (!com.fangsu.train.JcmLcdScriptBridge.hasAny()) {
-            try {
-                com.fangsu.train.JcmLcdScriptBridge.retryInject();
-            } catch (Throwable ignored) {
-            }
+        if (!needsRegister) {
+            // MTR 的 listener 可能晚于方速完成；它清空车辆表后，下一 tick 自动补注册。
+            if (registeredProbeId == null || isVehicleRegistered(registeredProbeId)) return;
+            needsRegister = true;
         }
-
-        if (!needsRegister) return;
         try {
             // MTR reload 未完成则等下一 tick（getVehicleById 同步查 VEHICLES_CACHE，未注册时回调不触发）
             if (!isVehicleRegistered(MTR_BASE_PROBE_ID)) return;
-            // 已在（前一轮注册成功或其他途径已注册）→ 完成
-            if (isVehicleRegistered(OUR_PROBE_ID)) {
-                needsRegister = false;
-                return;
-            }
             final int registered = register();
             // 注册后验证：注册数 0（如全部为暂缓注册的 LCD 车型）或探测命中 → 完成
-            if (registered == 0 || isVehicleRegistered(OUR_PROBE_ID)) {
+            if (registered == 0 || (registeredProbeId != null && isVehicleRegistered(registeredProbeId))) {
                 needsRegister = false;
                 if (registered > 0) {
                     Main.LOGGER.info("[FangSu] Custom train vehicles confirmed in MTR registry");
@@ -140,6 +130,7 @@ public final class CustomTrainRegister {
             };
 
             int registered = 0;
+            registeredProbeId = null;
             for (Map.Entry<String, JsonElement> entry : customTrains.entrySet()) {
                 final String trainKey = entry.getKey();
                 final JsonObject train = entry.getValue().getAsJsonObject();
@@ -177,6 +168,7 @@ public final class CustomTrainRegister {
                     final org.mtr.libraries.com.google.gson.JsonElement mtrEl =
                             org.mtr.libraries.com.google.gson.JsonParser.parseString(copy.toString());
                     CustomResourceLoader.registerVehicle(new VehicleResource(new JsonReader(mtrEl), provider));
+                    if (registeredProbeId == null) registeredProbeId = copy.get("id").getAsString();
                     registered++;
                 }
             }

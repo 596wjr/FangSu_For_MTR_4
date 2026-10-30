@@ -42,7 +42,7 @@ side = "BOTH"
 ordering = "AFTER"
 
 # JCM（Joban Client Mod，modId = jsblock / mtrscripting）：
-# 车载 LCD 走 JCM 的车辆脚本渲染链（com.fangsu.train.lcd.*），故为必装依赖。
+# 车载 LCD 的站序/车辆状态适配仍使用 JCM API；绘制链路由方速独立管理。
 [[dependencies.fangsu]]
 modId = "jsblock"
 mandatory = true

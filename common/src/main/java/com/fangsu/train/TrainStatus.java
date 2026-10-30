@@ -7,6 +7,7 @@ import com.fangsu.render.sowcer.math.Matrix4f;
 import com.fangsu.render.sowcer.math.Vector3f;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.NTETrainWrapper;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.VehicleWrapper;
+import com.lx862.mtrscripting.mod.impl.mtr.vehicle.VehicleDataCache;
 import org.mtr.core.data.*;
 
 import java.util.ArrayList;
@@ -30,15 +31,15 @@ public class TrainStatus {
      * 长度 = 车厢数；从未观测到 / 车型无车门数据时整组为 {@code UNKNOWN}。
      * 由 {@link DoorSideObserverMtr4#lastSides(long)} 刷新（见 {@link #updateRoute()}）。
      */
-    public DoorOpenRecord.DoorOpenSide[] doorOpenSides;
+    public volatile DoorOpenRecord.DoorOpenSide[] doorOpenSides;
 
     /**
-     * 逐车节的开门方向（预测值）：按「本车配置」从站台缓存查出的规范帧，
-     * 已按本车当前反向状态由调用方/查询层给出的原值，<b>不含</b>实时观测。
+     * 逐车节的开门方向（预测值）：按「本车配置」从实际记录或本地停车模拟查出的规范帧，
+     * 不含实时观测；原始字段仍是规范帧，通过 getDoorOpenSide(car) 取得换算后的方向。
      * <p>
-     * 长度 = 车厢数；该站台没有记录时整组为 {@code UNKNOWN}。
+     * 长度 = 车厢数；没有记录且停车姿态/目标区块未就绪时整组为 {@code UNKNOWN}。
      */
-    public DoorOpenRecord.DoorOpenSide[] predictedDoorOpenSides;
+    public volatile DoorOpenRecord.DoorOpenSide[] predictedDoorOpenSides;
 
     /** 上次预测查询所用的站台 id（0 = 尚未查询）；只有站台变化时才重新查缓存 */
     private long predictedForPlatformId;
@@ -123,14 +124,14 @@ public class TrainStatus {
         }
     }
 
-    /**
-     * MTR4 无逐车厢门侧数据，用车辆级 doorValue 近似填充两侧（0~1，>0.01 视为开）。
-     * 如需精确逐侧状态，可后续从 immutablePath + 站台方位推导。
-     */
+    /** 用本站的真实门侧展开逐车厢状态；门开着不代表左右两侧同时打开。 */
     public void updateDoorState(double doorValue) {
-        final boolean open = doorValue > 0.01;
-        java.util.Arrays.fill(doorLeftOpen, open);
-        java.util.Arrays.fill(doorRightOpen, open);
+        for (int car = 0; car < doorLeftOpen.length; car++) {
+            final DoorOpenRecord.DoorOpenSide side = car < doorOpenSides.length
+                    ? doorOpenSides[car] : DoorOpenRecord.DoorOpenSide.UNKNOWN;
+            doorLeftOpen[car] = doorValue > 0.01 && (side == DoorOpenRecord.DoorOpenSide.LEFT || side == DoorOpenRecord.DoorOpenSide.BOTH);
+            doorRightOpen[car] = doorValue > 0.01 && (side == DoorOpenRecord.DoorOpenSide.RIGHT || side == DoorOpenRecord.DoorOpenSide.BOTH);
+        }
     }
 
     @SuppressWarnings("unused")
@@ -143,7 +144,7 @@ public class TrainStatus {
         if (train == null) return;
         final VehicleExtraData extra = train.getMtrVehicle().vehicleExtraData;
         final List<VehicleWrapper.Stop> allPlatforms = train.getStops();
-        final int nextIndex = train.getNextStopIndex(allPlatforms, 0.0);
+        final int nextIndex = findNextStopIndex(allPlatforms);
 
         // 「下一站」的站台 id（0 = 未知）。停站时它指向正在停靠的那一站，
         // 出站后才指向下一站——即「下一站索引」始终指向屏幕上该高亮的那一站，
@@ -169,11 +170,9 @@ public class TrainStatus {
         //    表现为「过终点站后 index 不归零」。
         LocalRoute route = nextStopRoute;
         if (route == null) {
-            long routeId = extra.getNextRouteId();
-            if (routeId == 0) routeId = extra.getThisRouteId();
-            if (routeId != 0) {
-                // MtrUtil 查询链：完整 Route 优先，miss 时回退 SimplifiedRoute（含隐藏线路缓存）
-                route = MtrUtil.getRouteById(routeId);
+            for (long routeId : new long[]{extra.getNextRouteId(), extra.getThisRouteId()}) {
+                route = resolveRoute(routeId);
+                if (route != null) break;
             }
         }
         // ③ 兜底校验：下一站的站台必须能在该线路自己的站序里找到，否则说明线路选错了
@@ -188,30 +187,32 @@ public class TrainStatus {
         // ===== 逐车节开门方向（LCD 可直接读，见 DESIGN 第 8 节）=====
         // 实时值：观测端保存的原始帧（未按反向规范化），长度与当前编组一致才采用
         final int carCount = getCarCount();
-        final DoorOpenRecord.DoorOpenSide[] live = DoorSideObserverMtr4.lastSides(id());
-        if (live != null && live.length == carCount) {
-            this.doorOpenSides = live.clone();
-        }
+        final boolean doorsOpen = train.getDoorValue() > 0.01;
+        final long plannedPlatformId = DoorSideObserverMtr4.nextPlatformId(train.getMtrVehicle());
+        final long doorPlatformId = doorsOpen
+                ? DoorSideObserverMtr4.currentPlatformId(train.getMtrVehicle())
+                : plannedPlatformId != 0 ? plannedPlatformId : nextPlatformId;
+        final DoorOpenRecord.DoorOpenSide[] live = DoorSideObserverMtr4.lastSides(id(), doorPlatformId,
+                train.getMtrVehicle().getReversed());
+        this.doorOpenSides = doorsOpen && live != null && live.length == carCount ? live : unknownSides(carCount);
         // 预测值：站台变化、或缓存被写入（含本站刚观测到的记录）时重查一次，避免每帧重建数组；
         // 配置键用 车型 + 编组 + 总长（与观测上报的口径完全一致，匹配才准）
         final long cacheGeneration = DoorOpenCacheClient.generation();
-        if (nextPlatformId != 0
-                && (nextPlatformId != predictedForPlatformId || cacheGeneration != predictedGeneration)) {
-            predictedForPlatformId = nextPlatformId;
+        if (doorPlatformId != 0
+                && (doorPlatformId != predictedForPlatformId || cacheGeneration != predictedGeneration)) {
+            predictedForPlatformId = doorPlatformId;
             predictedGeneration = cacheGeneration;
             final int lengthMeters = (int) Math.round(extra.getTotalVehicleLength());
             final DoorOpenRecord.DoorOpenSide[] predicted = DoorOpenCacheClient.query(
-                    nextPlatformId, trainTypeId(), carCount, lengthMeters);
+                    doorPlatformId, trainTypeId(), carCount, lengthMeters);
             this.predictedDoorOpenSides = predicted != null && predicted.length == carCount
                     ? predicted
                     : unknownSides(carCount);
-        } else if (nextPlatformId == 0) {
+        } else if (doorPlatformId == 0) {
             // 站台未知：清掉标记，等下一次拿到站台 id 时重新查
             predictedForPlatformId = 0;
             predictedGeneration = -1L;
-            if (predictedDoorOpenSides.length != carCount) {
-                predictedDoorOpenSides = unknownSides(carCount);
-            }
+            predictedDoorOpenSides = unknownSides(carCount);
         }
 
         if (currentRoute != null) {
@@ -223,6 +224,12 @@ public class TrainStatus {
         this.isOnRoute = train.getMtrVehicle().getIsOnRoute();
         this.isReverse = train.getMtrVehicle().getReversed();
         this.trainStatus = calcTrainStatus();
+        updateDoorState(train.getDoorValue());
+    }
+
+    /** 当前车厢可用的开门方向（实时优先，预测按 isReverse 换算；未知保持 UNKNOWN）。 */
+    public DoorOpenRecord.DoorOpenSide getDoorOpenSide(int carIndex) {
+        return DoorSideResolver.resolve(doorOpenSides, predictedDoorOpenSides, carIndex, isReverse, train != null && doorValue() > 0.01);
     }
 
     public void update(int carIndex, boolean doorLeftOpen, boolean doorRightOpen, Matrix4f carPose) {
@@ -303,7 +310,7 @@ public class TrainStatus {
         final long[] candidateIds = {extra.getNextRouteId(), extra.getThisRouteId()};
         for (long routeId : candidateIds) {
             if (routeId == 0 || (fallback != null && routeId == fallback.id)) continue;
-            final LocalRoute candidate = MtrUtil.getRouteById(routeId);
+            final LocalRoute candidate = resolveRoute(routeId);
             if (candidate != null && routePlatformIndex(candidate, platformId) >= 0) {
                 return candidate;
             }
@@ -417,8 +424,16 @@ public class TrainStatus {
      */
     private LocalRoute stopToLocalRoute(VehicleWrapper.Stop stop) {
         if (stop.route == null) return null;
-        // MtrUtil 查询链：主通道 miss（隐藏线路）时回退 SimplifiedRoute
-        return MtrUtil.getRouteById(stop.route.getId());
+        // 站序响应中的普通线路也可能只存在于 JCM 的独立数据集，不能回查本地表后丢掉它。
+        return new LocalRoute(stop.route);
+    }
+
+    private static LocalRoute resolveRoute(long routeId) {
+        if (routeId == 0) return null;
+        final LocalRoute local = MtrUtil.getRouteById(routeId);
+        if (local != null) return local;
+        final SimplifiedRoute fetched = VehicleDataCache.mtrData.routeIdMap.get(routeId);
+        return fetched == null ? null : new LocalRoute(fetched);
     }
 
     // ========== 向后兼容的便捷方法 ==========

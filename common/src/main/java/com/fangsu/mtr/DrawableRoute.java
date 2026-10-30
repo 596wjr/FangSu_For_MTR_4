@@ -202,7 +202,8 @@ public class DrawableRoute {
         }
 
         DrawableRoute result = getDrawableRoute(longestRoute.asRouteDetail(), isReversed, beginIdx, endIdx);
-        cacheRequestLongestRoute.put(route.id, result);
+        // 数据尚未同步时不缓存空图，否则后续站序到达也无法恢复。
+        if (!result.stations.isEmpty()) cacheRequestLongestRoute.put(route.id, result);
         return result;
     }
 

@@ -98,6 +98,10 @@ public abstract class TrainMixin {
                     final BlockState blockState = clientWorld.getBlockState(checkPos);
                     final Block block = blockState.getBlock();
                     final Object blockData = block.data;
+                    final BlockEntity checkedEntity = clientWorld.getBlockEntity(checkPos);
+                    if (checkedEntity != null && checkedEntity.data instanceof IPlatformDoor door && door.isLocked()) {
+                        continue;
+                    }
 
                     // ----- 原版 MTR 逻辑：检测 PlatformHelper 和 PSD/APG 门 -----
                     if (blockData instanceof PlatformHelper) {

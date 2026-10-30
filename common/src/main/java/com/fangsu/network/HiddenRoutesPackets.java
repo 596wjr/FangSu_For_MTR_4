@@ -15,17 +15,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 隐藏线路 SimplifiedRoute 专用通道（仅 MTR4 版）。
- * <p>
- * 原版 TSC 服务端 {@code SimplifiedRoute.addToList} 无条件过滤隐藏线路，导致 JCM 脚本中
- * {@code stop.route} 在「全部线路隐藏」的世界里恒为 null。本通道由 JCM 侧的 mixin
- * （{@code com.fangsu.mixin.jcm.StopsDataS2CPacketMixin}）在 JCM 自己的数据请求旁触发，
- * 服务端只回传「被请求且隐藏」的线路，客户端经 JCM 的公开静态入口
- * {@code VehicleDataCache.putMTRDataCache} 合并进 JCM 脚本数据，不触碰 MTR 主通道。
+ * MTR4 补充线路详情通道，保留 hidden_routes_* 历史包名。
+ * 明确指定 ID 时可补取普通线路和隐藏线路；空请求仍只返回全部隐藏线路。
+ * 客户端同时写入方速补充缓存与 JCM 的公开数据缓存，不参与 JCM 绘制链路。
  */
 public class HiddenRoutesPackets {
 
-	/** C2S：客户端按 routeId 请求隐藏线路的 SimplifiedRoute */
+	private static boolean clientRegistered;
+
+	/** C2S：客户端按 routeId 请求线路的 SimplifiedRoute（包名沿用旧版） */
 	public static final ResourceLocation HIDDEN_ROUTES_REQUEST = new ResourceLocation("fangsu", "hidden_routes_request");
 	/** S2C：服务端回传 SimplifiedRoute 形状的 JSON（{"routes":[...]}） */
 	public static final ResourceLocation HIDDEN_ROUTES_RESPONSE = new ResourceLocation("fangsu", "hidden_routes_response");
@@ -37,8 +35,11 @@ public class HiddenRoutesPackets {
 
 	/** 客户端：S2C 接收器注册 + mtrscripting（JCM）探测（由 {@link com.fangsu.MainClient#initClient} 调用） */
 	public static void registerClient() {
+		if (clientRegistered) return;
+		clientRegistered = true;
 		NetworkManager.registerReceiver(NetworkManager.Side.S2C, HIDDEN_ROUTES_RESPONSE, HiddenRoutesPackets::handleHiddenRoutesResponse);
 		HiddenRoutesClient.detect();
+		HiddenRoutesClient.initLifecycle();
 	}
 
 	private static void handleHiddenRoutesRequest(FriendlyByteBuf buf, NetworkManager.PacketContext ctx) {
@@ -63,7 +64,7 @@ public class HiddenRoutesPackets {
 				if (simulator.dimension.equals(dimensionId)) {
 					// simulator.run 在模拟器线程内安全读取数据；回包经主线程 submit，与 JCM 自身流程一致
 					simulator.run(() -> {
-						// 空请求 = 全量隐藏线路（世界进入时方速侧拉取），否则按 id 过滤（JCM 站序触发）
+						// 空请求仍只取隐藏线路；明确指定 ID 时返回对应线路，不再过滤普通线路。
 						final org.mtr.libraries.com.google.gson.JsonArray routesArray = routeIds.isEmpty()
 								? HiddenRouteData.buildAllHiddenRoutesJson(simulator)
 								: HiddenRouteData.buildRoutesJson(simulator, routeIds);
@@ -86,7 +87,7 @@ public class HiddenRoutesPackets {
 		ctx.queue(() -> HiddenRoutesClient.mergeHiddenRoutes(json));
 	}
 
-	/** JCM mixin 调用：向服务端请求指定 routeId 的隐藏线路数据 */
+	/** JCM 站序适配和 LCD 共用：请求指定 routeId 的线路详情 */
 	public static void sendHiddenRoutesRequestC2S(List<Long> routeIds) {
 		if (routeIds == null || routeIds.isEmpty()) return;
 		final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());

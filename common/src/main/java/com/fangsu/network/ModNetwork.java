@@ -98,6 +98,7 @@ public class ModNetwork {
      */
     public static void initClient() {
         TurnoutBindingPayload.registerClient();
+        HiddenRoutesPackets.registerClient();
     }
 
     /**

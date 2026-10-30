@@ -13,8 +13,9 @@ public record LcdInfo(String id, JsonObject slotsInfo, JsonObject extra) {
      * 仅在渲染阶段调用，避免资源加载时与MTR冲突。
      */
     public static LcdInfo fromJson(JsonObject json) throws Exception {
-        if (!json.has("id") || !json.has("slots")) throw new IllegalArgumentException();
-        String id = json.get("id").getAsString();
+        final LcdInfo lazy = lazyFromJson(json);
+        if (lazy == null) throw new IllegalArgumentException("lcd 缺少 id/script 或 slots");
+        String id = lazy.id();
         String slots = json.get("slots").getAsString();
         Identifier slotsIdentifier = new Identifier(slots);
         String slotsJsonStr = ResourceManagerHelper.readResource(slotsIdentifier);
@@ -30,8 +31,11 @@ public record LcdInfo(String id, JsonObject slotsInfo, JsonObject extra) {
      * 后续调用resolveSlots()完成解析。
      */
     public static LcdInfo lazyFromJson(JsonObject json) {
-        if (!json.has("id") || !json.has("slots")) return null;
-        String id = json.get("id").getAsString();
+        if (!json.has("slots")) return null;
+        final boolean scripted = json.has("script") && !json.get("script").getAsString().isBlank();
+        if (!json.has("id") && !scripted) return null;
+        // 保留文档中的脚本调用方式：仅填 script 时无需注册 Java LCD id。
+        String id = json.has("id") ? json.get("id").getAsString() : "mtr";
         return new LcdInfo(id, null, json);
     }
 

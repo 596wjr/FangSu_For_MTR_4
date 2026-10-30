@@ -13,7 +13,7 @@ import org.mtr.libraries.com.google.gson.JsonObject;
 import java.util.List;
 
 /**
- * 隐藏线路的 SimplifiedRoute 投影（仅服务端使用）。
+ * 补充线路的 SimplifiedRoute 投影（仅服务端使用）。
  * <p>
  * SimplifiedRoute 的构造器是 private（final 类），服务端无法直接 new；
  * 故按 simplifiedRoute schema（id/name/color/circularState/platforms）手工组装 JSON，
@@ -22,20 +22,20 @@ import java.util.List;
  * 与 TSC 客户端反序列化（SimplifiedRoute(ReaderBase)）严格对位。
  * circularState 的 wire 格式为枚举名（codegen 读侧经 EnumHelper.valueOf 按 name() 解析）。
  * <p>
- * 只回传「被请求且隐藏」的线路：请求列表由 JCM 侧站序数据驱动（车辆实际运行的线路 id），
- * 隐藏线路只进入 JCM 脚本数据面，MTR 主通道（MinecraftClientData）不受影响。
+ * 明确请求 ID 时回传对应线路，不受 hidden 字段过滤；全量请求仍只投影隐藏线路。
+ * 响应进入方速补充缓存与 JCM 数据集，MTR 主通道（MinecraftClientData）不受影响。
  */
 public final class HiddenRouteData {
 
 	private HiddenRouteData() {
 	}
 
-	/** 把请求列表里「存在且隐藏」的线路投影为 JSON 数组 */
+	/** 按明确请求的 ID 投影线路，普通线路和隐藏线路均可补取。 */
 	public static JsonArray buildRoutesJson(Simulator simulator, List<Long> routeIds) {
 		final JsonArray routes = new JsonArray();
 		for (long id : routeIds) {
 			final Route route = simulator.routeIdMap.get(id);
-			if (route != null && route.getHidden()) {
+			if (route != null) {
 				routes.add(toRouteJson(route));
 			}
 		}

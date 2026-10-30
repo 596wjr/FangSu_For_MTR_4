@@ -1,75 +1,70 @@
 package com.fangsu.mtr;
 
 import com.fangsu.Main;
-import com.fangsu.train.JcmLcdScriptBridge;
+import com.fangsu.train.LcdConfigSource;
+import com.google.gson.JsonElement;
 import com.fangsu.train.LcdInfo;
 import com.google.gson.JsonObject;
 
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 「车辆 ID → LCD 配置」的运行期注册表。
- * <p>
- * 数据源是 {@link JcmLcdScriptBridge}：它已经从
- * {@code mtr:mtr_custom_resources.json} 的 {@code vehicles[]} / {@code custom_trains}
- * 以及 {@code fangsu:custom_trains.json} 里扫出所有带 {@code lcd} 的车型。
- * 本类只把扫描结果包成 {@link LcdInfo}，供渲染时按车辆 ID 取配置。
- */
+/** 方速自己的车型 LCD 注册表；不读取或改写 JCM 的车辆脚本映射。 */
 public class LcdVehicleRegistry {
+    private static volatile Map<String, LcdVehicleEntry> entries = Map.of();
 
-    private static final Map<String, LcdVehicleEntry> VEHICLE_LCD_MAP = new HashMap<>();
-
-    /** 上次打印过的数量，用于抑制「每帧刷同一条」日志 */
-    private static volatile int lastLoggedSize = -1;
-
-    /**
-     * 重建注册表（幂等）。由 JCM 资源重载触发
-     * （{@code MTRContentResourceManagerMixin} → {@link JcmLcdScriptBridge#onJcmReload}）。
-     */
+    /** 资源就绪后发布完整快照，渲染期间只查表，不重读 JSON。 */
     public static void load() {
-        VEHICLE_LCD_MAP.clear();
-        try {
-            for (String vehicleId : JcmLcdScriptBridge.configuredVehicleIds()) {
-                final JsonObject lcd = JcmLcdScriptBridge.rawLcdFor(vehicleId);
-                if (lcd == null || !lcd.has("id")) continue;
+        final Map<String, LcdVehicleEntry> loaded = new HashMap<>();
+        collect(LcdConfigSource.readRoot(LcdConfigSource.MTR_RESOURCES), loaded);
+        collect(LcdConfigSource.readRoot(LcdConfigSource.FANGSU_TRAINS), loaded);
+        entries = Map.copyOf(loaded);
+        Main.LOGGER.info("[FangSu LCD] 已加载 {} 个 LCD 车型（独立渲染）", entries.size());
+    }
 
-                final JsonObject extra = new JsonObject();
-                extra.addProperty("id", lcd.get("id").getAsString());
-                if (lcd.has("slots")) extra.addProperty("slots", lcd.get("slots").getAsString());
-                if (lcd.has("script")) extra.addProperty("script", lcd.get("script").getAsString());
-                if (lcd.has("extraConfig")) extra.add("extraConfig", lcd.get("extraConfig"));
-
-                final LcdInfo lcdInfo = LcdInfo.lazyFromJson(extra);
-                if (lcdInfo == null) continue;
-                VEHICLE_LCD_MAP.put(vehicleId, new LcdVehicleEntry(vehicleId, lcdInfo, lcd));
-            }
-        } catch (Exception e) {
-            Main.LOGGER.error("[FangSu LCD] 载入 LCD 车型注册表失败", e);
+    private static void collect(JsonObject root, Map<String, LcdVehicleEntry> loaded) {
+        if (root == null) return;
+        if (root.has("custom_trains") && root.get("custom_trains").isJsonObject()) {
+            root.getAsJsonObject("custom_trains").entrySet().forEach(entry -> {
+                for (String suffix : new String[]{"_cab_1", "_cab_2", "_cab_3", "_trailer"}) {
+                    put("mtr_custom_train_" + entry.getKey() + suffix, entry.getValue(), loaded);
+                }
+            });
         }
+        if (root.has("vehicles") && root.get("vehicles").isJsonArray()) {
+            for (JsonElement value : root.getAsJsonArray("vehicles")) {
+                if (!value.isJsonObject()) continue;
+                final JsonObject vehicle = value.getAsJsonObject();
+                try {
+                    if (vehicle.has("id")) put(vehicle.get("id").getAsString(), vehicle, loaded);
+                } catch (Exception e) {
+                    Main.LOGGER.error("[FangSu LCD] 无法读取车型 ID", e);
+                }
+            }
+        }
+    }
 
-        final int total = VEHICLE_LCD_MAP.size();
-        if (total != lastLoggedSize) {
-            lastLoggedSize = total;
-            Main.LOGGER.info("[FangSu LCD] Vehicle LCD registry has {} entries total", total);
+    private static void put(String id, JsonElement value, Map<String, LcdVehicleEntry> loaded) {
+        if (!value.isJsonObject()) return;
+        final JsonObject vehicle = value.getAsJsonObject();
+        loaded.remove(id);
+        if (!vehicle.has("lcd") || !vehicle.get("lcd").isJsonObject()) return;
+        try {
+            final JsonObject lcd = vehicle.getAsJsonObject("lcd").deepCopy();
+            final LcdInfo info = LcdInfo.lazyFromJson(lcd);
+            if (info == null) throw new IllegalArgumentException("lcd 缺少 id 或 slots");
+            loaded.put(id, new LcdVehicleEntry(id, info, lcd));
+        } catch (Exception e) {
+            Main.LOGGER.error("[FangSu LCD] 车型 {} 的 LCD 配置无效，已跳过", id, e);
         }
     }
 
     public static boolean hasAny() {
-        return !VEHICLE_LCD_MAP.isEmpty();
+        return !entries.isEmpty();
     }
 
-    /** 匹配车辆 ID 是否对应 LCD 车型 */
     public static LcdVehicleEntry match(String vehicleId) {
-        if (vehicleId == null) return null;
-        LcdVehicleEntry entry = VEHICLE_LCD_MAP.get(vehicleId);
-        if (entry != null) return entry;
-        // 扫描结果已经有了但注册表还没重建（或反之）时兜底一次
-        if (VEHICLE_LCD_MAP.isEmpty() && JcmLcdScriptBridge.hasAny()) {
-            load();
-            entry = VEHICLE_LCD_MAP.get(vehicleId);
-        }
-        return entry;
+        return vehicleId == null ? null : entries.get(vehicleId);
     }
 
     public static boolean hasLcd(String vehicleId) {
@@ -100,10 +95,10 @@ public class LcdVehicleRegistry {
     }
 
     public static void printRegistered() {
-        if (VEHICLE_LCD_MAP.isEmpty()) {
+        if (entries.isEmpty()) {
             Main.LOGGER.info("[FangSu LCD Debug]   (empty - no LCD vehicles registered)");
         } else {
-            VEHICLE_LCD_MAP.keySet().forEach(id -> Main.LOGGER.info("[FangSu LCD Debug]   - {}", id));
+            entries.keySet().forEach(id -> Main.LOGGER.info("[FangSu LCD Debug]   - {}", id));
         }
     }
 }

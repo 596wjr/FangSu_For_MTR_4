@@ -98,7 +98,13 @@ public record LcdPanelConfig(String id,
             }
         }
 
-        return new LcdPanelConfig(id, texWidth, texHeight, layouts, panels);
+        for (Layout layout : layouts) {
+            if (layout.x() < 0 || layout.y() < 0 || layout.w() <= 0 || layout.h() <= 0
+                    || (long) layout.x() + layout.w() > texWidth || (long) layout.y() + layout.h() > texHeight) {
+                throw new IllegalArgumentException("LCD slot " + layout.name() + " 的 texArea 超出纹理范围");
+            }
+        }
+        return new LcdPanelConfig(id, texWidth, texHeight, List.copyOf(layouts), List.copyOf(panels));
     }
 
     public static LcdPanelConfig fromSlots(String id, JsonObject slotsInfo) {

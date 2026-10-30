@@ -24,6 +24,7 @@ public class LocalRoute {
     public long id;
 
     private LocalRouteDetail cachedRouteDetail;
+    private SimplifiedRoute sourceSimplifiedRoute;
 
     public LocalRoute(Route route) {
         this.routeType = RouteType.valueOf(route.getRouteType().name());
@@ -45,6 +46,7 @@ public class LocalRoute {
      * 从 {@link SimplifiedRoute} 构造（客户端远程路线无完整 Route 数据时的回退）。
      */
     public LocalRoute(SimplifiedRoute route) {
+        this.sourceSimplifiedRoute = route;
         this.routeType = RouteType.NORMAL;
         this.isLightRailRoute = false;
         this.isHidden = false;
@@ -122,7 +124,9 @@ public class LocalRoute {
         final List<LocalRouteDetail.StationDetails> stations = new ArrayList<>();
 
         // 优先使用 SimplifiedRoute（客户端数据始终完整）
-        final SimplifiedRoute sr = MtrUtil.getSimplifiedRouteById(this.id);
+        final SimplifiedRoute synced = MtrUtil.getSimplifiedRouteById(this.id);
+        // 保留构造时的站序响应，不要求远端普通线路同时存在于 MTR 的附近数据表。
+        final SimplifiedRoute sr = synced != null && !synced.getPlatforms().isEmpty() ? synced : sourceSimplifiedRoute;
         if (sr != null && !sr.getPlatforms().isEmpty()) {
             for (final SimplifiedRoutePlatform sp : sr.getPlatforms()) {
                 final String stationName = sp.getStationName();
@@ -194,7 +198,7 @@ public class LocalRoute {
         }
 
         final LocalRouteDetail result = new LocalRouteDetail(name, color, circularState, 0, stations);
-        cachedRouteDetail = result;
+        if (!stations.isEmpty()) cachedRouteDetail = result;
         return result;
     }
 }

@@ -62,7 +62,7 @@ def processAccessWidener(inputFile, outputFile) {
             : "12001") as int
 
     // 自定义条件
-    boolean withJs = rootProject.hasProperty("no_js") && rootProject.property("no_js") == "false"
+    boolean withJs = !(rootProject.hasProperty("no_js") && rootProject.property("no_js") == "false")
     def conditionVars = [
             "WITH_JS": withJs,
             "NO_JS"  : !withJs

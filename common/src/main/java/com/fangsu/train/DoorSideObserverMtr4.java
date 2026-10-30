@@ -6,6 +6,7 @@ import net.fabricmc.api.Environment;
 import org.mtr.core.data.TransportMode;
 import org.mtr.core.data.VehicleCar;
 import org.mtr.core.data.VehicleExtraData;
+import org.mtr.core.data.Vehicle;
 import org.mtr.core.tool.Vector;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
@@ -25,9 +26,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * MTR4（4.0.x）到站开门方向观测端。
+ * MTR4（4.0.x）进站预测与到站开门方向观测端。
  * <p>
- * 职责：每 tick 扫一遍客户端车辆，在「门正在开」的那一小段时间里，
+ * 职责：前方停站方向 UNKNOWN 时先只读模拟停车姿态；在「门正在开」时，
  * 用 MTR 自己的渲染数据（{@code getVehicleCarsAndPositions()} + {@code PositionAndRotation}）
  * 和车门判定（{@link RenderVehicleHelper#canOpenDoors}）算出<b>逐车节</b>的开门方向，
  * 规范化后先本地乐观写入（{@link DoorOpenCacheClient#applyUpdate}），
@@ -49,8 +50,8 @@ public final class DoorSideObserverMtr4 {
 
     /** 门开度 ≤ 该值视为「已关门」，复位本回合状态 */
     private static final double DOOR_CLOSED_THRESHOLD = 0.05;
-    /** 门开度 &gt; 该值才判定（门开到一半以上，门口几何已稳定） */
-    private static final double DOOR_OPEN_THRESHOLD = 0.5;
+    /** 门开始打开后就用当前位置校正，不再等门开到一半。 */
+    private static final double DOOR_OPEN_THRESHOLD = 0.05;
     /** 资源未就绪时的最大重试次数（tick），约 2 秒 */
     private static final int MAX_RETRIES = 40;
     /** 传给 {@code canOpenDoors} 的门开度：给足 2.0，让 PSD 完全打开（与渲染一致） */
@@ -60,15 +61,20 @@ public final class DoorSideObserverMtr4 {
     private static final class Episode {
         /** 上一次看到的门开度（仅用于状态对照与调试） */
         double lastDoorValue;
+        long platformId;
+        boolean reversed;
         /** 本回合是否已判定/上报（避免同一回合反复计算） */
         boolean reported;
         /** 资源未就绪的重试次数 */
         int retries;
+        int noneSamples;
     }
 
     private static final Map<Long, Episode> EPISODES = new HashMap<>();
+    private static final Map<Long, Integer> NEXT_PREDICTION_TICK = new HashMap<>();
+    private static int tickCounter;
     /** vehicleId → 最近一次实际观测（原始帧，未规范化） */
-    private static final Map<Long, DoorOpenRecord.DoorOpenSide[]> LAST_SIDES = new HashMap<>();
+    private static final Map<Long, DoorSideObservation> LAST_SIDES = new HashMap<>();
 
     /** 是否已把 tick / 配置源注入 {@link DoorOpenCacheClient}（避免重复注册） */
     private static boolean installed;
@@ -76,6 +82,8 @@ public final class DoorSideObserverMtr4 {
     private static boolean installFailed;
     /** 观测异常只完整记录一次，避免每 tick 刷屏 */
     private static boolean errorLogged;
+    private static Object lastWorld;
+    private static long resourceVersion = -1;
 
     private DoorSideObserverMtr4() {
     }
@@ -105,12 +113,29 @@ public final class DoorSideObserverMtr4 {
      */
     public static void tick() {
         ensureInstalled();
+        tickCounter++;
+        final Object world = net.minecraft.client.Minecraft.getInstance().level;
+        final long version = com.fangsu.utils.ResourceUtil.getReloadVersion();
+        if (world != lastWorld || version != resourceVersion) {
+            EPISODES.clear();
+            LAST_SIDES.clear();
+            NEXT_PREDICTION_TICK.clear();
+            DoorOpenCacheClient.clearPredictions();
+            lastWorld = world;
+            resourceVersion = version;
+        }
+        if (world == null) return;
         try {
             final MinecraftClientData data = MinecraftClientData.getInstance();
             if (data == null || data.vehicles == null) return;
 
             purgeRemovedVehicles(data.vehicles);
             for (final VehicleExtension vehicle : data.vehicles) {
+                // 站台/资源未加载时每 10 tick 重试；已知方向不会重复扫描世界。
+                if (tickCounter >= NEXT_PREDICTION_TICK.getOrDefault(vehicle.getId(), 0)) {
+                    NEXT_PREDICTION_TICK.put(vehicle.getId(), tickCounter + 10);
+                    DoorSidePredictorMtr4.predict(vehicle);
+                }
                 observeVehicle(vehicle);
             }
         } catch (Throwable t) {
@@ -130,8 +155,24 @@ public final class DoorSideObserverMtr4 {
      */
     public static DoorOpenRecord.DoorOpenSide[] lastSides(long vehicleId) {
         ensureInstalled();
-        final DoorOpenRecord.DoorOpenSide[] sides = LAST_SIDES.get(vehicleId);
-        return sides == null ? null : sides.clone();
+        final DoorSideObservation observed = LAST_SIDES.get(vehicleId);
+        return observed == null ? null : observed.sides();
+    }
+
+    /** 只读本站、当前反向状态下的实时观测。 */
+    public static DoorOpenRecord.DoorOpenSide[] lastSides(long vehicleId, long platformId, boolean reversed) {
+        final DoorSideObservation observed = LAST_SIDES.get(vehicleId);
+        return observed == null ? null : observed.forStop(platformId, reversed);
+    }
+
+    public static long currentPlatformId(VehicleExtension vehicle) {
+        return resolvePlatformId(vehicle);
+    }
+
+    /** 几何预测与 LCD 使用同一个前方停站点，不依赖线路详情是否已同步。 */
+    public static long nextPlatformId(VehicleExtension vehicle) {
+        final var stop = DoorSidePredictorMtr4.nextStop(vehicle);
+        return stop == null ? 0 : stop.getSavedRailBaseId();
     }
 
     // ---------------------------------------------------------------- 单辆车
@@ -141,11 +182,23 @@ public final class DoorSideObserverMtr4 {
         final Episode episode = EPISODES.computeIfAbsent(vehicleId, key -> new Episode());
         final double doorValue = vehicle.persistentVehicleData.getDoorValue();
         episode.lastDoorValue = doorValue;
+        final long platform = resolvePlatformId(vehicle);
+        final boolean reverse = vehicle.getReversed();
+        if (episode.platformId != platform || episode.reversed != reverse) {
+            episode.platformId = platform;
+            episode.reversed = reverse;
+            episode.reported = false;
+            episode.retries = 0;
+            episode.noneSamples = 0;
+            LAST_SIDES.remove(vehicleId);
+        }
 
         // 关门（含正在关）：复位本回合，等下一次开门
         if (doorValue <= DOOR_CLOSED_THRESHOLD) {
             episode.reported = false;
             episode.retries = 0;
+            episode.noneSamples = 0;
+            LAST_SIDES.remove(vehicleId);
             return;
         }
         // 门只开了一点、或者本回合已经判定过：不重复计算
@@ -160,7 +213,7 @@ public final class DoorSideObserverMtr4 {
             return;
         }
 
-        final DoorOpenRecord.DoorOpenSide[] observed = observeDoorSides(vehicle);
+        final DoorOpenRecord.DoorOpenSide[] observed = observeDoorSides(vehicle, false);
         if (observed == null) {
             // 车辆资源还没加载好：本 tick 视为失败，最多重试 MAX_RETRIES 次
             episode.retries++;
@@ -172,10 +225,9 @@ public final class DoorSideObserverMtr4 {
             return;
         }
 
-        // 全车节 NONE 说明门口没有站台，没有缓存价值
-        if (allNone(observed)) {
-            episode.reported = true;
-            Main.debug("[FangSu 开门缓存] 车 {} 停靠站台 {} 但观测到全 NONE，跳过上报", vehicleId, platformId);
+        // NONE 也实时可见；连续四次一致后允许同步 NONE，纠正停车预测而不是保留旧方向。
+        LAST_SIDES.put(vehicleId, new DoorSideObservation(platformId, vehicle.getReversed(), observed));
+        if (allNone(observed) && ++episode.noneSamples < 4) {
             return;
         }
 
@@ -195,7 +247,7 @@ public final class DoorSideObserverMtr4 {
         DoorOpenCacheNet.sendObserveC2S(platformId, record);
 
         // LAST_SIDES 存原始帧（不翻转），LCD 的实时值直接用它
-        LAST_SIDES.put(vehicleId, observed.clone());
+        LAST_SIDES.put(vehicleId, new DoorSideObservation(platformId, reversed, observed));
         episode.reported = true;
         episode.retries = 0;
         Main.debug("[FangSu 开门缓存] 车 {} 站台 {} 观测到 {}（reversed={}）",
@@ -207,7 +259,7 @@ public final class DoorSideObserverMtr4 {
      *
      * @return 长度 = 车节数；任一车节的车辆资源未就绪时返回 {@code null}（本次失败，交上层重试）
      */
-    private static DoorOpenRecord.DoorOpenSide[] observeDoorSides(VehicleExtension vehicle) {
+    static DoorOpenRecord.DoorOpenSide[] observeDoorSides(Vehicle vehicle, boolean prediction) {
         // 注意：必须用 getVehicleCarsAndPositions()，不能用 getSmoothedVehicleCarsAndPositions
         // （后者会改写 persistentVehicleData 的平滑进度，污染 MTR 自己的渲染状态）。
         // 返回结构（MTR 4.0.5 实际签名，javap 核实）：每节车 → 每转向架 → (Vector, Vector) 两个接触点。
@@ -253,7 +305,11 @@ public final class DoorSideObserverMtr4 {
             boolean left = false;
             boolean right = false;
             for (final Box doorway : carResourceCaches.get(carIndex).doorways) {
-                if (!RenderVehicleHelper.canOpenDoors(doorway, carPositionAndRotations.get(carIndex), DOOR_CHECK_VALUE)) {
+                final Boolean canOpen = prediction
+                        ? DoorSidePredictorMtr4.canOpenDoors(doorway, carPositionAndRotations.get(carIndex))
+                        : Boolean.valueOf(RenderVehicleHelper.canOpenDoors(doorway, carPositionAndRotations.get(carIndex), DOOR_CHECK_VALUE));
+                if (canOpen == null) return null;
+                if (!canOpen) {
                     continue;
                 }
                 if (doorway.getMaxXMapped() <= 0) {
@@ -275,6 +331,9 @@ public final class DoorSideObserverMtr4 {
 
     /** 站点 id：优先「当前停靠站台」，退「下一站台」；取不到或等于车辆段 id 时返回 0 */
     private static long resolvePlatformId(VehicleExtension vehicle) {
+        final var stop = DoorSidePredictorMtr4.nextStop(vehicle);
+        final double progress = ((com.fangsu.mixin.VehicleDoorPredictionAccessor) vehicle).fangsu$getRailProgress();
+        if (stop != null && Math.abs(stop.getEndDistance() - progress) < 3) return stop.getSavedRailBaseId();
         final VehicleExtraData extra = vehicle.vehicleExtraData;
         long platformId = extra.getThisPlatformId();
         if (platformId == 0) {
@@ -286,13 +345,14 @@ public final class DoorSideObserverMtr4 {
 
     /** 清掉已经不存在的车辆对应的 episode / lastSides，避免长期累积 */
     private static void purgeRemovedVehicles(Set<VehicleExtension> vehicles) {
-        if (EPISODES.isEmpty() && LAST_SIDES.isEmpty()) return;
+        if (EPISODES.isEmpty() && LAST_SIDES.isEmpty() && NEXT_PREDICTION_TICK.isEmpty()) return;
         final Set<Long> alive = new HashSet<>();
         for (final VehicleExtension vehicle : vehicles) {
             alive.add(vehicle.getId());
         }
         EPISODES.keySet().removeIf(id -> !alive.contains(id));
         LAST_SIDES.keySet().removeIf(id -> !alive.contains(id));
+        NEXT_PREDICTION_TICK.keySet().removeIf(id -> !alive.contains(id));
     }
 
     private static boolean allNone(DoorOpenRecord.DoorOpenSide[] sides) {

@@ -1,6 +1,5 @@
 package com.fangsu.mixin;
 
-import com.fangsu.Main;
 import com.fangsu.render.RailRollRenderHelper;
 import com.fangsu.train.VehicleLcdRenderer;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -8,8 +7,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
 import org.mtr.mapping.holder.Identifier;
 import org.mtr.mapping.holder.Vector3d;
-import org.mtr.mod.client.MinecraftClientData;
-import org.mtr.mod.data.VehicleExtension;
 import org.mtr.mod.render.PositionAndRotation;
 import org.mtr.mod.render.RenderVehicles;
 import org.mtr.mod.render.StoredMatrixTransformations;
@@ -22,25 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * 车载 LCD 的<b>备用</b>渲染注入点（不依赖任何局部变量捕获）。
- * <p>
- * 主路径是 JCM 的车辆脚本链路（见 {@code JcmLcdScriptBridge}）——车型一旦被接入脚本，
- * 由 JCM 的 {@code RenderVehiclesMixin} 驱动 create / render / dispose，
- * 本注入点会因为 {@code VehicleLcdRenderer.renderCar} 内部的
- * {@code isScripted} 判断而跳过，不会重复渲染。
- * <p>
- * 注入位置与旧实现一致：{@code RenderVehicles.render} 里
- * {@code vehicles.forEach(...)} 之前。此处没有任何可用的车厢局部变量，
- * 所以自己去把每节车厢的变换算出来：
- * <ul>
- *   <li>车辆列表来自 {@code MinecraftClientData.getInstance().vehicles}；</li>
- *   <li>车厢位置/朝向来自 JCM 的 {@code NTETrainWrapper}（内部就是
- *       {@code vehicleExtension.getSmoothedVehicleCarsAndPositions(0)}）；</li>
- *   <li>矩阵直接调 MTR 自己的
- *       {@link RenderVehicles#getStoredMatrixTransformations(boolean, org.mtr.mod.render.PositionAndRotation, double)}。</li>
- * </ul>
- * 刻意<b>不</b>用 {@code LocalCapture}：之前那版对 {@code lambda$render$5}
- * 做局部变量捕获，Mixin 报 {@code Scanned 0 target(s)} 直接崩溃。
+ * 车体滚转与 LCD 帧生命周期。LCD 在 VehicleResource.queue 提交处复用车体矩阵。
  * <p>
  * <b>P4b-2 车体滚转</b>的注入点也在这里：
  * <ul>
@@ -73,24 +52,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = RenderVehicles.class, remap = false)
 public class RenderVehiclesMixin {
 
-    @Inject(
-            method = "render(JLorg/mtr/mapping/holder/Vector3d;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lorg/mtr/libraries/it/unimi/dsi/fastutil/objects/ObjectArraySet;forEach(Ljava/util/function/Consumer;)V"
-            ),
-            remap = false
-    )
-    private static void fangsu$renderVehicleLcd(long millisElapsed,
-                                                org.mtr.mapping.holder.Vector3d cameraShakeOffset,
-                                                CallbackInfo ci) {
-        try {
-            for (VehicleExtension vehicle : MinecraftClientData.getInstance().vehicles) {
-                VehicleLcdRenderer.renderVehicle(vehicle);
-            }
-        } catch (Throwable t) {
-            Main.LOGGER.error("[FangSu LCD] 备用渲染路径失败", t);
-        }
+    /** LCD 帧入口独立于可选的滚转钩子，避免可选注入失效后状态停在首帧。 */
+    @Inject(method = "render(JLorg/mtr/mapping/holder/Vector3d;)V", at = @At("HEAD"), remap = false)
+    private static void fangsu$beginLcdFrame(long millisElapsed, Vector3d cameraShakeOffset, CallbackInfo ci) {
+        VehicleLcdRenderer.beginFrame();
     }
 
     /**
@@ -111,6 +76,7 @@ public class RenderVehiclesMixin {
                                                  org.mtr.mapping.holder.Vector3d cameraShakeOffset,
                                                  CallbackInfo ci) {
         RailRollRenderHelper.beginVehicleFrame();
+        com.fangsu.train.connector.ConnectorRendererMtr4.beginFrame();
     }
 
     /**
@@ -331,9 +297,18 @@ public class RenderVehiclesMixin {
         final double rollDegrees = RailRollRenderHelper.getConnectionRollDegrees(positionAndRotation, useOffset);
         // 无滚转 → 原样委托；加 0.0 会把 -0.0 变成 +0.0，所以显式短路，保持与 MTR 原生逐位一致
         final double newOscillationAmount = rollDegrees == 0.0D ? oscillationAmount : oscillationAmount + rollDegrees;
+        // MTR 4.0.5: 风挡调用 canHaveLight=true，挡板=false；挡板仅沿用滚转。
+        int replaced = canHaveLight ? com.fangsu.train.connector.ConnectorRendererMtr4.tryRender(
+                shouldRender1, shouldRender2, previousConnectionPositions, outerSide, innerSide,
+                positionAndRotation, useOffset, vehicleLength, width, height, yOffset, zOffset,
+                newOscillationAmount, isOnRoute) : 0;
+        boolean replaceExterior=(replaced&com.fangsu.train.connector.ConnectorSet.EXTERIOR)!=0;
+        boolean replaceInterior=(replaced&com.fangsu.train.connector.ConnectorSet.INTERIOR)!=0;
+        // 成功接管的层只屏蔽原版相应贴图；未接管的层及下一车端点记账保持原生。
         original.call(
-                shouldRender1, shouldRender2, canHaveLight, previousConnectionPositions,
-                innerSide, innerTop, innerBottom, outerSide, outerTop, outerBottom,
+                replaceExterior && replaceInterior ? false : shouldRender1, shouldRender2, canHaveLight, previousConnectionPositions,
+                replaceInterior ? null : innerSide, replaceInterior ? null : innerTop, replaceInterior ? null : innerBottom,
+                replaceExterior ? null : outerSide, replaceExterior ? null : outerTop, replaceExterior ? null : outerBottom,
                 positionAndRotation, useOffset,
                 vehicleLength, width, height, yOffset, zOffset, newOscillationAmount, isOnRoute
         );

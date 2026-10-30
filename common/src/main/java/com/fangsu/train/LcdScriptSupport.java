@@ -6,6 +6,8 @@ import com.fangsu.userScripts.ScriptManager;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.resources.ResourceLocation;
+import org.graalvm.polyglot.proxy.ProxyArray;
+import org.graalvm.polyglot.proxy.ProxyObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,6 +30,21 @@ import java.util.Map;
 public final class LcdScriptSupport {
 
     private LcdScriptSupport() {
+    }
+
+    /** 保持脚本使用 state.foo / info.texSize[0] / extraConfig.foo 的普通对象调用方式。 */
+    public static Object toScriptValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            final Map<String, Object> members = new LinkedHashMap<>();
+            map.forEach((key, item) -> members.put(key.toString(), toScriptValue(item)));
+            return ProxyObject.fromMap(members);
+        }
+        if (value instanceof List<?> list) {
+            final List<Object> items = new ArrayList<>();
+            list.forEach(item -> items.add(toScriptValue(item)));
+            return ProxyArray.fromList(items);
+        }
+        return value;
     }
 
     /**

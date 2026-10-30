@@ -59,6 +59,7 @@ public class AtlasManager {
 
     public void clear() {
         sprites.clear();
+        noAtlasList.clear();
     }
 
 }

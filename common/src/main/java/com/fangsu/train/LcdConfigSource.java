@@ -10,23 +10,8 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 /**
- * LCD 车型配置的来源解析。
- * <p>
- * 历史上 LCD 配置写在 {@code fangsu:custom_trains.json}（方速自定义车型注册用的文件）。
- * 现在允许两种写法，本类统一读取：
- * <ol>
- *   <li>{@code fangsu:custom_trains.json} → {@code custom_trains} 对象（旧格式，key 即车型 key）；</li>
- *   <li>{@code mtr:mtr_custom_resources.json} → {@code custom_trains} 对象（MTR3 风格）
- *       或 {@code vehicles} 数组（MTR4 风格，{@code id} 即车型 ID）——
- *       只要条目上挂了 {@code lcd} 就会被识别。</li>
- * </ol>
- * <b>读取方式</b>：统一用 MTR 的 {@link ResourceManagerHelper#readResource(Identifier)}，
- * 与 MTR 自己注册车型时走的是同一条路，不依赖 {@code ResourceUtil} 的初始化时序
- * （后者在 JCM 车辆脚本重载阶段可能还没拿到 ResourceManager，会刷
- * {@code No resources found for: fangsu:custom_trains.json}）。
- * <p>
- * 每次调用直读（不做缓存）：这两个文件很小，而调用方本来就是低频的
- * （资源重载 / tick 补注入），换掉 ResourceUtil 的缓存反而少一层「缓存过期」坑。
+ * 独立读取 LCD 车型配置，支持 MTR4 vehicles 数组和旧 custom_trains 对象。
+ * 资源包优先，无法读取时回退到模组 jar；由方速资源重载调用，不参与 JCM 的脚本重载。
  */
 public final class LcdConfigSource {
     private LcdConfigSource() {
@@ -71,7 +56,7 @@ public final class LcdConfigSource {
      * 读一个 json 资源：资源包优先（这样能被资源包覆盖、且多个资源包会合并），
      * 资源包拿不到时回退到 classloader 直读 mod jar。
      * <p>
-     * 兜底是必须的：JCM 车辆脚本重载发生得很早，那时 {@code ResourceUtil} 还没拿到
+     * 兜底是必须的：资源加载早期，那时 {@code ResourceUtil} 还没拿到
      * ResourceManager，纯资源包读取会返回空对象（表现为「registry has 0 entries」每帧刷）。
      */
     private static JsonElement readJson(String path) {
