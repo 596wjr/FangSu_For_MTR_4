@@ -9,7 +9,7 @@ public class ModBlockClient {
     public static void initClient() {
         BlockEntityRendererRegistry.register(
                 ModBlocks.BLOCK_ENTITY_ROTATING_RAIL.get(),
-                ctx -> new BaseBlockEntityRender<>(ctx.getBlockEntityRenderDispatcher())
+                ctx -> new TurnoutBlockEntityRenderer(ctx.getBlockEntityRenderDispatcher())
         );
         BlockEntityRendererRegistry.register(
                 ModBlocks.BLOCK_ENTITY_MULTI_DIRECTION_NODE.get(),

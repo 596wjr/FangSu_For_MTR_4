@@ -92,7 +92,7 @@ public class ModBlocks {
     public static final RegistrySupplier<Block> BLOCK_ROTATING_RAIL =
             RegisterUtil.addBlock("rotating_rail", BlockRotatingRail::new);
     public static final RegistrySupplier<Item> ITEM_ROTATING_RAIL =
-            RegisterUtil.addBlockItem("rotating_rail", BLOCK_ROTATING_RAIL);
+            RegisterUtil.addItem("rotating_rail", () -> new ItemTurnout(BLOCK_ROTATING_RAIL.get(), RegisterUtil.tabProps(new Item.Properties())));
     public static final RegistrySupplier<BlockEntityType<BaseObjBlockEntity>> BLOCK_ENTITY_ROTATING_RAIL =
             RegisterUtil.addBlockEntity("block_entity_rotating_rail", BLOCK_ROTATING_RAIL, BlockEntityRotatingRail::new);
 
