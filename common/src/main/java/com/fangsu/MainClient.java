@@ -78,6 +78,7 @@ public class MainClient {
     }
 
     public static void initResources(ResourceManager resourceManager) {
+        com.fangsu.shape.RotatableShapeHelper.getInstance().clearAll();
         Main.LOGGER.info("[FangSu] initResources called, resourceManager={}", resourceManager);
 
         if (resourceManager == null) {
