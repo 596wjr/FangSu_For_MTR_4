@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -28,13 +29,19 @@ public abstract class TrainMixin {
     @Final
     private static int CHECK_DOOR_RADIUS_Y;
 
+    // 与 MTR3 同步：不在 <clinit> 中反射探测可选依赖，避免合并静态初始化器时丢失异常表。
+    @Unique
+    private static volatile boolean fangsu$platformCompatibilityDetected;
+
     // 用于反射调用 Metropolis 的缓存
-    private static boolean metropolisLoaded = false;
+    private static boolean metropolisLoaded;
     private static Class<?> metropolisPlatformClass;
     private static Class<?> metropolisDoorClass;
     private static Method setOpenStateMethod;
 
-    static {
+    @Unique
+    private static synchronized void fangsu$detectPlatformCompatibility() {
+        if (fangsu$platformCompatibilityDetected) return;
         try {
             metropolisPlatformClass = Class.forName("team.dovecotmc.metropolis.block.interfaces.IBlockPlatform");
             metropolisDoorClass = Class.forName("team.dovecotmc.old.metropolis.block.interfaces.IBlockMTRPlatformDoor");
@@ -45,9 +52,10 @@ public abstract class TrainMixin {
                     Class.forName("net.minecraft.world.level.block.state.BlockState")
             );
             metropolisLoaded = true;
-        } catch (ClassNotFoundException | NoSuchMethodException e) {
+        } catch (ReflectiveOperationException | LinkageError e) {
             metropolisLoaded = false;
         }
+        fangsu$platformCompatibilityDetected = true;
     }
 
     /**
@@ -63,6 +71,7 @@ public abstract class TrainMixin {
             return false;
         }
 
+        if (!fangsu$platformCompatibilityDetected) fangsu$detectPlatformCompatibility();
         final Vector3d doorwayPosition1 = positionAndRotation.transformForwards(
                 new Vector3d(doorway.getMinXMapped(), doorway.getMaxYMapped(), doorway.getMinZMapped()),
                 Vector3d::rotateX, Vector3d::rotateY, Vector3d::add);
