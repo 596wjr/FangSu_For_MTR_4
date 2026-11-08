@@ -6,6 +6,14 @@ import com.fangsu.blockEntities.BlockEntityScreendoorCentralControl;
 import com.fangsu.blockEntities.BlockEntityTicketBarrier;
 import com.fangsu.blockEntities.Syncable;
 import com.fangsu.items.TicketItem;
+import com.fangsu.client.ClientHooks;
+import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.ticketSystem.MtrTicketSystem;
+import io.netty.buffer.Unpooled;
+import org.mtr.core.data.Station;
+
+import java.util.HashMap;
+import java.util.Map;
 import dev.architectury.networking.NetworkManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
@@ -30,6 +38,7 @@ public class ModNetwork {
 
     public static final ResourceLocation BE_SYNC =
             new ResourceLocation("fangsu", "be_sync");
+    private static final ResourceLocation TICKET_MACHINE_OPEN = new ResourceLocation("fangsu", "ticket_machine_open");
     public static final ResourceLocation TICKET_MACHINE_SYNC =
             new ResourceLocation("fangsu", "ticket_machine_sync");
     public static final ResourceLocation CENTRAL_CONTROL_SYNC =
@@ -99,6 +108,16 @@ public class ModNetwork {
     public static void initClient() {
         TurnoutBindingPayload.registerClient();
         HiddenRoutesPackets.registerClient();
+        NetworkManager.registerReceiver(NetworkManager.Side.S2C, TICKET_MACHINE_OPEN, (buf, context) -> {
+            final String stationName = buf.readUtf();
+            final Map<Long, Integer> fares = new HashMap<>();
+            final int count = buf.readVarInt();
+            for (int i = 0; i < count; i++) {
+                fares.put(buf.readLong(), buf.readVarInt());
+            }
+            context.queue(() -> ClientHooks.openTicketMachineScreen(
+                    ComponentHelper.translatable("ui.fangsu.ticketmachine"), stationName, fares));
+        });
     }
 
     /**
@@ -236,6 +255,19 @@ public class ModNetwork {
 //                );
             }
         });
+    }
+
+    public static void openTicketMachine(ServerPlayer player, Level level, BlockPos pos) {
+        final Station station = MtrTicketSystem.getStation(level, pos);
+        final Map<Long, Integer> fares = MtrTicketSystem.getStationFares(level, station);
+        final FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        buf.writeUtf(station == null ? "" : station.getName());
+        buf.writeVarInt(fares.size());
+        fares.forEach((stationId, fare) -> {
+            buf.writeLong(stationId);
+            buf.writeVarInt(fare);
+        });
+        NetworkManager.sendToPlayer(player, TICKET_MACHINE_OPEN, buf);
     }
 
     private static void ticketMachineSync(

@@ -3,6 +3,7 @@ package com.fangsu.items;
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.ticketSystem.FareInfo;
 import com.fangsu.ticketSystem.FareType;
+import com.fangsu.ticketSystem.MtrTicketSystem;
 import com.fangsu.ticketSystem.SingleJourneyTicketData;
 import com.fangsu.utils.RegisterUtil;
 import net.minecraft.nbt.CompoundTag;
@@ -49,9 +50,6 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
         }
     }
 
-    private static final int BASE_FARE = 2;
-    private static final int ZONE_FARE = 1;
-
     @Override
     public boolean exit(Level world, Player player, ItemStack stack, FareInfo info) {
         if (!SingleJourneyTicketData.hasEntered(stack)) {
@@ -66,11 +64,7 @@ public class ItemSingleJourneyTicket extends Item implements TicketItem {
             int exitZone1 = info.value();
             int exitZone2 = info.value2();
             int exitZone3 = info.value3();
-            int fare = BASE_FARE + ZONE_FARE * (
-                    Math.abs(entryZone1 - exitZone1) +
-                    Math.abs(entryZone2 - exitZone2) +
-                    Math.abs(entryZone3 - exitZone3)
-            );
+            int fare = MtrTicketSystem.calcFare(exitZone1, exitZone2, exitZone3, entryZone1, entryZone2, entryZone3);
             if (SingleJourneyTicketData.getPrice(stack) < fare) {
                 player.displayClientMessage(ComponentHelper.translatable("ui.fangsu.ticket.error"), true);
                 return false;

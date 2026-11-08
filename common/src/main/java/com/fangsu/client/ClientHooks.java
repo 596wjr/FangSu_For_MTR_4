@@ -32,7 +32,7 @@ public final class ClientHooks {
                 Main.LOGGER.error("打开方法没有被替换!");
             });
     public static TicketMachineConsumer OPEN_TICKET_MACHINE_SCREEN
-            = ((title, pos) -> {
+            = ((title, stationName, fares) -> {
                 Main.LOGGER.error("打开方法没有被替换!");
             });
     public static PlatformSelectConsumer OPEN_PLATFORM_SELECT_SCREEN
@@ -112,8 +112,8 @@ public final class ClientHooks {
         OPEN_OBJ_SIGN_SCREEN.accept(faces, setter);
     }
 
-    public static void openTicketMachineScreen(Component title, BlockPos pos) {
-        OPEN_TICKET_MACHINE_SCREEN.accept(title, pos);
+    public static void openTicketMachineScreen(Component title, String stationName, java.util.Map<Long, Integer> fares) {
+        OPEN_TICKET_MACHINE_SCREEN.accept(title, stationName, fares);
     }
 
     public static void openPlatformSelectScreen(Component component, List<Long> defaultValue, Consumer<List<Long>> setter, BlockPos pos, int maxSelect) {
@@ -170,7 +170,7 @@ public final class ClientHooks {
     @FunctionalInterface
     public interface TicketMachineConsumer {
 
-        void accept(Component title, BlockPos pos);
+        void accept(Component title, String stationName, java.util.Map<Long, Integer> fares);
     }
 
     @FunctionalInterface

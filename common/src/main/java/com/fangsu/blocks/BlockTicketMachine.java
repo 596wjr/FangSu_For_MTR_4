@@ -1,10 +1,9 @@
 package com.fangsu.blocks;
 
-import com.fangsu.mappings.ComponentHelper;
-import com.fangsu.client.ClientHooks;
+import com.fangsu.network.ModNetwork;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -135,10 +134,9 @@ public class BlockTicketMachine extends Block {
 
     @Override
     public InteractionResult use(BlockState blockState, Level level, BlockPos blockPos, Player player, InteractionHand interactionHand, BlockHitResult blockHitResult) {
-        if (level.isClientSide()) {
-
-            ClientHooks.openTicketMachineScreen(ComponentHelper.translatable("ui.fangsu.ticketmachine"), blockPos);
-
+        if (player instanceof ServerPlayer serverPlayer) {
+            final BlockPos basePos = blockState.getValue(HALF) == DoubleBlockHalf.UPPER ? blockPos.below() : blockPos;
+            ModNetwork.openTicketMachine(serverPlayer, level, basePos);
         }
         return InteractionResult.SUCCESS;
     }

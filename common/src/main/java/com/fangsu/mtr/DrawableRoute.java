@@ -16,11 +16,19 @@ public class DrawableRoute {
     public final int beginIndexInclusive;
     private final int endIndexInclusive;
 
-    private static final Map<Long, DrawableRoute> cacheRequestLongestRoute = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<Long, CachedRoute> cacheRequestLongestRoute = Collections.synchronizedMap(new HashMap<>());
 
     /**
      * 清除缓存。在重进存档/世界重载时应调用此方法。
      */
+    private record CachedRoute(long sourceId, org.mtr.core.data.SimplifiedRoute source, DrawableRoute drawable) {}
+
+    private static DrawableRoute getCachedRoute(long routeId) {
+        final CachedRoute cached = cacheRequestLongestRoute.get(routeId);
+        return cached != null && MtrUtil.getSimplifiedRouteById(cached.sourceId()) == cached.source()
+                ? cached.drawable() : null;
+    }
+
     public static void clearCache() {
         cacheRequestLongestRoute.clear();
     }
@@ -141,16 +149,16 @@ public class DrawableRoute {
     }
 
     public static DrawableRoute requestLongestRoute(Long routeId) {
-        if (cacheRequestLongestRoute.containsKey(routeId)) return cacheRequestLongestRoute.get(routeId);
+        final DrawableRoute cached = getCachedRoute(routeId);
+        if (cached != null) return cached;
         LocalRoute route = MtrUtil.getRouteById(routeId);
         if (route == null) return null;
         return requestLongestRoute(route);
     }
 
     public static DrawableRoute requestLongestRoute(LocalRoute route) {
-        if (cacheRequestLongestRoute.containsKey(route.id)) {
-            return cacheRequestLongestRoute.get(route.id);
-        }
+        final DrawableRoute cached = getCachedRoute(route.id);
+        if (cached != null) return cached;
 
         List<LocalRoute> candidates = MtrUtil.getRouteByName(route.name);
         if (candidates == null) {
@@ -170,9 +178,11 @@ public class DrawableRoute {
             int prevStnIdx = -1;
             boolean reversedCandidate = false;
 
-            for (int i = 0; i < longestRoute.platformIds.size(); i++) {
-                LocalRoute.RoutePlatform pid = longestRoute.platformIds.get(i);
-                int curIdx = r.platformIds.indexOf(pid);
+            // 始终相对原交路判断方向，避免中途选中反向长交路后方向翻转。
+            // 仅比较站台 ID：半程车的自定义目的地可以与全程车不同。
+            for (int i = 0; i < route.platformIds.size(); i++) {
+                LocalRoute.RoutePlatform pid = route.platformIds.get(i);
+                int curIdx = r.getPlatformIdIndex(pid.platformId);
                 if (curIdx < 0) continue RouteLoop;
 
                 if (i == 1) {
@@ -196,14 +206,17 @@ public class DrawableRoute {
                 // 更长 → 直接替换；等长但当前为反向候选为同向 → 优选同向
                 longestRoute = r;
                 isReversed = reversedCandidate;
-                beginIdx = r.platformIds.indexOf(route.platformIds.get(0));
-                endIdx = r.platformIds.indexOf(route.platformIds.get(route.platformIds.size() - 1));
+                beginIdx = r.getPlatformIdIndex(route.platformIds.get(0).platformId);
+                endIdx = r.getPlatformIdIndex(route.platformIds.get(route.platformIds.size() - 1).platformId);
             }
         }
 
         DrawableRoute result = getDrawableRoute(longestRoute.asRouteDetail(), isReversed, beginIdx, endIdx);
-        // 数据尚未同步时不缓存空图，否则后续站序到达也无法恢复。
-        if (!result.stations.isEmpty()) cacheRequestLongestRoute.put(route.id, result);
+        // 只缓存已有同步站序的线路图，并在同步数据更新后重新生成。
+        final var source = MtrUtil.getSimplifiedRouteById(longestRoute.id);
+        if (source != null && !source.getPlatforms().isEmpty()) {
+            cacheRequestLongestRoute.put(route.id, new CachedRoute(longestRoute.id, source, result));
+        }
         return result;
     }
 

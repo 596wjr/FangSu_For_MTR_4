@@ -24,6 +24,8 @@ import org.mtr.core.simulation.Simulator;
 import org.mtr.mod.Init;
 
 import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MtrTicketSystem {
     //TODO 交通卡系统
@@ -146,26 +148,43 @@ public class MtrTicketSystem {
      */
     public static Station getStation(Level world, BlockPos pos) {
         try {
-            final Main main = InitAccessorMixin.getMain();
-            final String dimensionId = Init.getWorldId(new org.mtr.mapping.holder.World(world));
             final Position position = new Position(pos.getX(), pos.getY(), pos.getZ());
-
-            for (final Object simulatorObj : (Iterable<?>) SIMULATORS_FIELD.get(main)) {
-                final Simulator simulator = (Simulator) simulatorObj;
-                if (simulator.dimension.equals(dimensionId)) {
-                    for (final Object stationObj : (Iterable<?>) STATIONS_FIELD.get(simulator)) {
-                        final Station station = (Station) stationObj;
-                        if (station.inArea(position)) {
-                            return station;
-                        }
-                    }
-                }
+            for (final Object stationObj : getStations(world)) {
+                final Station station = (Station) stationObj;
+                if (station.inArea(position)) return station;
             }
         } catch (Exception e) {
-            // 记录异常便于排查 mixin 注入失败或 MTR API 变动等问题，避免静默失败
             com.fangsu.Main.LOGGER.warn("Failed to get MTR station at {}: {}", pos, e.toString());
         }
         return null;
+    }
+
+    private static Iterable<?> getStations(Level world) throws IllegalAccessException {
+        final Main main = InitAccessorMixin.getMain();
+        final String dimensionId = Init.getWorldId(new org.mtr.mapping.holder.World(world));
+        for (final Object simulatorObj : (Iterable<?>) SIMULATORS_FIELD.get(main)) {
+            final Simulator simulator = (Simulator) simulatorObj;
+            if (simulator.dimension.equals(dimensionId)) {
+                return (Iterable<?>) STATIONS_FIELD.get(simulator);
+            }
+        }
+        return java.util.List.of();
+    }
+
+    public static Map<Long, Integer> getStationFares(Level world, Station origin) {
+        final Map<Long, Integer> fares = new HashMap<>();
+        if (origin == null) return fares;
+        try {
+            for (final Object stationObj : getStations(world)) {
+                final Station target = (Station) stationObj;
+                fares.put(target.getId(), calcFare(
+                        (int) target.getZone1(), (int) target.getZone2(), (int) target.getZone3(),
+                        (int) origin.getZone1(), (int) origin.getZone2(), (int) origin.getZone3()));
+            }
+        } catch (Exception e) {
+            com.fangsu.Main.LOGGER.warn("Failed to get MTR station fares: {}", e.toString());
+        }
+        return fares;
     }
 
     public static void addObjectivesIfMissing(Level world) {
@@ -293,11 +312,4 @@ public class MtrTicketSystem {
         );
     }
 
-    /**
-     * 简化版：仅用 zone1 计算票价（用于售票机 UI 预估显示）
-     */
-    public static int calcFare(int currentZone, int targetZone) {
-        int distance = Math.abs(currentZone - targetZone);
-        return BASE_FARE + ZONE_FARE * distance;
-    }
 }

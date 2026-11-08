@@ -24,6 +24,7 @@ public class LocalRoute {
     public long id;
 
     private LocalRouteDetail cachedRouteDetail;
+    private SimplifiedRoute cachedSimplifiedRoute;
     private SimplifiedRoute sourceSimplifiedRoute;
 
     public LocalRoute(Route route) {
@@ -120,13 +121,13 @@ public class LocalRoute {
     }
 
     public LocalRouteDetail asRouteDetail() {
-        if (cachedRouteDetail != null) return cachedRouteDetail;
         final List<LocalRouteDetail.StationDetails> stations = new ArrayList<>();
 
         // 优先使用 SimplifiedRoute（客户端数据始终完整）
         final SimplifiedRoute synced = MtrUtil.getSimplifiedRouteById(this.id);
         // 保留构造时的站序响应，不要求远端普通线路同时存在于 MTR 的附近数据表。
         final SimplifiedRoute sr = synced != null && !synced.getPlatforms().isEmpty() ? synced : sourceSimplifiedRoute;
+        if (sr != null && sr == cachedSimplifiedRoute) return cachedRouteDetail;
         if (sr != null && !sr.getPlatforms().isEmpty()) {
             for (final SimplifiedRoutePlatform sp : sr.getPlatforms()) {
                 final String stationName = sp.getStationName();
@@ -148,17 +149,14 @@ public class LocalRoute {
                             trans.add(new ColorNameTuple(route.getColor(), TextUtil.getNonExtraParts(route.getName())));
                         }
                     }
-                } else {
-                    // 远端车站：利用 SimplifiedRoutePlatform 内建的换乘数据
-                    //（该数据在服务端构建 SimplifiedRoute 时已预计算，不依赖本地 Station 加载状态）
-                    sp.forEach((color, interchangeRouteNamesForColor) -> {
-                        interchangeRouteNamesForColor.forEach(routeName -> {
-                            if (!TextUtil.getNonExtraParts(routeName).equals(TextUtil.getNonExtraParts(name))) {
-                                trans.add(new ColorNameTuple(color, TextUtil.getNonExtraParts(routeName)));
-                            }
-                        });
-                    });
                 }
+                // 本地站台已加载时，关联线路仍可能缺失，始终合并服务端的换乘数据。
+                sp.forEach((color, routeNames) -> routeNames.forEach(routeName -> {
+                    final String displayName = TextUtil.getNonExtraParts(routeName);
+                    if (!displayName.equals(TextUtil.getNonExtraParts(name))) {
+                        trans.add(new ColorNameTuple(color, displayName));
+                    }
+                }));
 
                 if (!trans.isEmpty()) {
                     stations.add(new LocalRouteDetail.StationDetails(stationName, new ArrayList<>(trans)));
@@ -198,7 +196,10 @@ public class LocalRoute {
         }
 
         final LocalRouteDetail result = new LocalRouteDetail(name, color, circularState, 0, stations);
-        if (!stations.isEmpty()) cachedRouteDetail = result;
+        if (sr != null && !sr.getPlatforms().isEmpty()) {
+            cachedSimplifiedRoute = sr;
+            cachedRouteDetail = result;
+        }
         return result;
     }
 }

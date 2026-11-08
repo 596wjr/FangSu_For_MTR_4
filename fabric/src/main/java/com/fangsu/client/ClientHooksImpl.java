@@ -75,8 +75,8 @@ public final class ClientHooksImpl {
         Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new SignConfigUI(faces, setter)));
     }
 
-    public static void openTicketMachineScreen(Component title, BlockPos pos) {
-        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new TicketMachineMainScreen(title, pos)));
+    public static void openTicketMachineScreen(Component title, String stationName, java.util.Map<Long, Integer> fares) {
+        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new TicketMachineMainScreen(title, stationName, fares)));
     }
 
     public static void openPlatformSelectScreen(Component component, List<Long> defaultValue, Consumer<List<Long>> setter, BlockPos pos, int maxSelect) {

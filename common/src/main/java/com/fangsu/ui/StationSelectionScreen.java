@@ -2,6 +2,7 @@ package com.fangsu.ui;
 
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.utils.MtrUtil;
+import org.mtr.core.data.AreaBase;
 import org.mtr.core.data.Station;
 import org.mtr.mod.client.MinecraftClientData;
 import net.minecraft.client.Minecraft;
@@ -36,9 +37,12 @@ public class StationSelectionScreen extends BaseSelectionScreen {
         else this.items = new ArrayList<>();
         final List<SelectionItem> items = new ArrayList<>();
 
-        // 按距离从近到远排序
+        // 按距离从近到远排序，缺少角点的车站排在末尾。
         final double px = pos.getX(), pz = pos.getZ();
         raw.sort(Comparator.comparingDouble(station -> {
+            if (!AreaBase.validCorners(station)) {
+                return Double.POSITIVE_INFINITY;
+            }
             final double sx = (station.getMinX() + station.getMaxX()) / 2.0;
             final double sz = (station.getMinZ() + station.getMaxZ()) / 2.0;
             final double dx = sx - px, dz = sz - pz;

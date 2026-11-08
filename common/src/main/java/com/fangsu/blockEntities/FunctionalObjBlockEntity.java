@@ -425,6 +425,7 @@ public abstract class FunctionalObjBlockEntity extends BaseObjBlockEntity implem
             buf.writeBlockPos(getBlockPos());
             writeC2S(buf);
             NetworkManager.sendToServer(ModNetwork.BE_SYNC, buf);
+            com.fangsu.utils.ScreendoorRenderProbe.packetSent();
         }
     }
 
