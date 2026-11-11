@@ -217,7 +217,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_lcd_trailer",
@@ -309,7 +313,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_lcd_cab_2",
@@ -401,7 +409,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_lcd_cab_3",
@@ -493,7 +505,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_small_lcd_cab_1",
@@ -585,7 +601,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_small_lcd_trailer",
@@ -677,7 +697,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_small_lcd_cab_2",
@@ -769,7 +793,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_small_lcd_cab_3",
@@ -861,7 +889,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_mini_lcd_cab_1",
@@ -953,7 +985,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_mini_lcd_trailer",
@@ -1045,7 +1081,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_mini_lcd_cab_2",
@@ -1137,7 +1177,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_r_train_mini_lcd_cab_3",
@@ -1229,7 +1273,11 @@
         "fangsu_r_train_interior_right",
         "fangsu_r_train_interior_roof",
         "fangsu_r_train_interior_floor"
-      ]
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_led_trailer",
@@ -1313,7 +1361,11 @@
         "slots": "mtr:s_train/slots.json"
       },
       "bogie1Position": -8.5,
-      "bogie2Position": 8.5
+      "bogie2Position": 8.5,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_led_cab_1",
@@ -1397,7 +1449,11 @@
         "slots": "mtr:s_train/slots.json"
       },
       "bogie1Position": -8.5,
-      "bogie2Position": 8.5
+      "bogie2Position": 8.5,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_led_cab_2",
@@ -1481,7 +1537,11 @@
         "slots": "mtr:s_train/slots.json"
       },
       "bogie1Position": -8.5,
-      "bogie2Position": 8.5
+      "bogie2Position": 8.5,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_led_cab_3",
@@ -1565,7 +1625,11 @@
         "slots": "mtr:s_train/slots.json"
       },
       "bogie1Position": -8.5,
-      "bogie2Position": 8.5
+      "bogie2Position": 8.5,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_small_led_trailer",
@@ -1649,7 +1713,11 @@
         "slots": "mtr:s_train/slots_small.json"
       },
       "bogie1Position": -6.0,
-      "bogie2Position": 6.0
+      "bogie2Position": 6.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_small_led_cab_1",
@@ -1733,7 +1801,11 @@
         "slots": "mtr:s_train/slots_small.json"
       },
       "bogie1Position": -6.0,
-      "bogie2Position": 6.0
+      "bogie2Position": 6.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_small_led_cab_2",
@@ -1817,7 +1889,11 @@
         "slots": "mtr:s_train/slots_small.json"
       },
       "bogie1Position": -6.0,
-      "bogie2Position": 6.0
+      "bogie2Position": 6.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_small_led_cab_3",
@@ -1901,7 +1977,11 @@
         "slots": "mtr:s_train/slots_small.json"
       },
       "bogie1Position": -6.0,
-      "bogie2Position": 6.0
+      "bogie2Position": 6.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_mini_led_trailer",
@@ -1985,7 +2065,11 @@
         "slots": "mtr:s_train/slots_mini.json"
       },
       "bogie1Position": -5.0,
-      "bogie2Position": 5.0
+      "bogie2Position": 5.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_mini_led_cab_1",
@@ -2069,7 +2153,11 @@
         "slots": "mtr:s_train/slots_mini.json"
       },
       "bogie1Position": -1.0,
-      "bogie2Position": 5.0
+      "bogie2Position": 5.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_mini_led_cab_2",
@@ -2153,7 +2241,11 @@
         "slots": "mtr:s_train/slots_mini.json"
       },
       "bogie1Position": -5.0,
-      "bogie2Position": 1.0
+      "bogie2Position": 1.0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     },
     {
       "id": "fangsu_s_train_mini_led_cab_3",
@@ -2237,7 +2329,11 @@
         "slots": "mtr:s_train/slots_mini.json"
       },
       "bogie1Position": 0,
-      "bogie2Position": 0
+      "bogie2Position": 0,
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
     }
   ]
 }

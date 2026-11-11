@@ -43,6 +43,9 @@ public class MainClient {
     public static List<Runnable> resourceInitRunnables = com.fangsu.client.ClientBootstrap.resourceInitRunnables();
 
     public static void initClient() {
+        com.fangsu.platform.CurvedPlatformClient.init();
+        com.fangsu.platform.PlatformDoorClient.init();
+        com.fangsu.announcements.AnnouncementClient.init();
         ModBlocks.initClient();
         ModMenus.initClient();
         ShadersModHandler.init();
@@ -90,6 +93,7 @@ public class MainClient {
 
             com.fangsu.train.VehicleLcdRenderer.beginReload();
             ResourceUtil.init(resourceManager);
+            com.fangsu.announcements.AnnouncementClient.reload(resourceManager);
             com.fangsu.mtr.CustomTrainRegister.markNeedsRegister();
             // 必须先更换 ResourceUtil 缓存，再让已有 holder 重新读取 JS 和脚本内引用的资源。
             ScriptManager.getInstance().reloadAllScripts();

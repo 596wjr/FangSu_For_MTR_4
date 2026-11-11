@@ -28,10 +28,29 @@ public final class TicketBarrierHandler {
             Map<String, String> extraConfigs,
             Runnable sendUpdateC2S
     ) {
-        if (level.isClientSide) return false;
+        return handleResult(level, pos, player, hand, hit, extraConfigs, sendUpdateC2S).handled();
+    }
+
+    public enum Outcome {
+        ACCEPTED(true), REJECTED(false), REJECTED_HANDLED(true), ALREADY_OPEN(false), NOT_HANDLED(false);
+        private final boolean handled;
+        Outcome(boolean handled) { this.handled = handled; }
+        public boolean handled() { return handled; }
+    }
+
+    public static Outcome handleResult(
+            Level level,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult hit,
+            Map<String, String> extraConfigs,
+            Runnable sendUpdateC2S
+    ) {
+        if (level.isClientSide) return Outcome.NOT_HANDLED;
 
         boolean isOpen = Boolean.parseBoolean(extraConfigs.getOrDefault("isOpen", "false"));
-        if (isOpen) return false;
+        if (isOpen) return Outcome.ALREADY_OPEN;
 
         int fareType = Integer.parseInt(extraConfigs.getOrDefault("fareType", "0"));
         boolean isExit = Boolean.parseBoolean(extraConfigs.getOrDefault("isExit", "false"));
@@ -53,7 +72,7 @@ public final class TicketBarrierHandler {
                             ComponentHelper.translatable("msg.fangsu.ticketbarrier.noStationArea"),
                             true
                     );
-                    return false;
+                    return Outcome.REJECTED;
                 }
                 metroName = station.getName();
                 metroZone = (int) station.getZone1();
@@ -61,10 +80,10 @@ public final class TicketBarrierHandler {
             boolean metroSuccess = isExit
                     ? MetropolisTicketUtil.exit(level, player, stack, metroName, metroZone)
                     : MetropolisTicketUtil.enter(level, player, stack, metroName, metroZone);
-            if (!metroSuccess) return false;
+            if (!metroSuccess) return Outcome.REJECTED;
             extraConfigs.put("isOpen", "true");
             sendUpdateC2S.run();
-            return true;
+            return Outcome.ACCEPTED;
         }
 
         switch (fareType) {
@@ -84,7 +103,7 @@ public final class TicketBarrierHandler {
                                 ComponentHelper.translatable("msg.fangsu.ticketbarrier.noStationArea"),
                                 true
                         );
-                        return false;
+                        return Outcome.REJECTED;
                     }
                     dispName = station.getName();
                     zone1 = (int) station.getZone1();
@@ -97,24 +116,24 @@ public final class TicketBarrierHandler {
                         if (MtrTicketSystem.enter(level, dispName, zone1, zone2, zone3, player)) {
                             extraConfigs.put("isOpen", "true");
                             sendUpdateC2S.run();
-                            return true;
+                            return Outcome.ACCEPTED;
                         }
                     } else {
                         if (MtrTicketSystem.exit(level, dispName, zone1, zone2, zone3, player)) {
                             extraConfigs.put("isOpen", "true");
                             sendUpdateC2S.run();
-                            return true;
+                            return Outcome.ACCEPTED;
                         }
                     }
-                    return true;
+                    return Outcome.REJECTED_HANDLED;
                 } else {
                     boolean success = isExit
                             ? ticket.exit(level, player, stack, new FareInfo(FareType.CUSTOM, zone1, zone2, zone3, dispName))
                             : ticket.enter(level, player, stack, new FareInfo(FareType.CUSTOM, zone1, zone2, zone3, dispName));
-                    if (!success) return false;
+                    if (!success) return Outcome.REJECTED;
                     extraConfigs.put("isOpen", "true");
                     sendUpdateC2S.run();
-                    return true;
+                    return Outcome.ACCEPTED;
                 }
 
             case 1:
@@ -124,24 +143,24 @@ public final class TicketBarrierHandler {
                     int val = Integer.parseInt(extraConfigs.getOrDefault("fareVal", "10"));
                     if (MtrTicketSystem.getScoreValue(balance) < val) {
                         player.displayClientMessage(ComponentHelper.translatable("gui.mtr.insufficient_balance", MtrTicketSystem.getScoreValue(balance)), true);
-                        return false;
+                        return Outcome.REJECTED;
                     }
                     MtrTicketSystem.addScoreValue(balance, -val);
                     player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticketbarrier.fareOnce", val, MtrTicketSystem.getScoreValue(balance)), true);
                     extraConfigs.put("isOpen", "true");
                     sendUpdateC2S.run();
-                    return true;
+                    return Outcome.ACCEPTED;
                 } else {
                     int val = Integer.parseInt(extraConfigs.getOrDefault("fareVal", "10"));
                     boolean success = ticket.enter(level, player, stack, new FareInfo(FareType.FARE_ONCE, val, ""));
-                    if (!success) return false;
+                    if (!success) return Outcome.REJECTED;
                     extraConfigs.put("isOpen", "true");
                     sendUpdateC2S.run();
-                    return true;
+                    return Outcome.ACCEPTED;
                 }
 
             default:
-                return false;
+                return Outcome.REJECTED;
         }
     }
 }

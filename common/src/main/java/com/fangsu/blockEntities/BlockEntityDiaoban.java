@@ -285,6 +285,9 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
         return result;
     }
 
+    /** 自动构件未绑定线路时也保留吊板实体外观。 */
+    protected boolean displayUnboundModel(){return false;}
+
     @Override
     public void whenRendering() {
         if (markedError) return;
@@ -338,6 +341,8 @@ public class BlockEntityDiaoban extends BaseDisplayBlockEntity implements IPlatf
         // 绘制预拼接的完整模型 — 单次 drawModel 调用，无需矩阵变换
         if (stitchedLoaded) {
             ctx.drawModel(modelStitched, null);
+        } else if (routes.isEmpty() && displayUnboundModel()) {
+            ctx.drawModel(dmhStitched, null);
         }
 
         // 绘制显示面纹理

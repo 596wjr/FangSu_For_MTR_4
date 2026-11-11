@@ -369,7 +369,7 @@ public class BlockEntityScreendoorGlass extends FunctionalObjBlockEntity {
      * 读取相邻屏蔽门（门块）的平滑开门进度。left=true 取左邻块，否则取右邻块；
      * 邻居不是屏蔽门门块时视为关门（0）。
      */
-    private float adjacentDoorValue(boolean left) {
+    protected float adjacentDoorValue(boolean left) {
         Level level = getLevel();
         if (level == null) return 0f;
         BlockState state = getBlockState();
