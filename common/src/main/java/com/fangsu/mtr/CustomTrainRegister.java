@@ -8,15 +8,18 @@ import dev.architectury.event.events.client.ClientTickEvent;
 import net.minecraft.resources.ResourceLocation;
 import org.mtr.core.data.TransportMode;
 import org.mtr.core.serializer.JsonReader;
+import org.mtr.legacy.resource.LegacyVehicleResource;
+import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.mtr.mod.client.CustomResourceLoader;
 import org.mtr.mod.resource.ResourceProvider;
 import org.mtr.mod.resource.VehicleResource;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * 把方速 custom_trains 注册为 MTR 4 可选车型（出现在 Siding 车辆选择 UI 中）。
+ * 把方速 custom_trains 注册为 MTR 4 可选车型，并补注册因加载顺序遗漏的旧式资源包车型。
  * <p>
  * MTR 4.0.5 的 {@code LegacyVehicleResource} 转换依赖 base_train_type 在 VEHICLES_CACHE 中命中，
  * 且文件含 custom_trains 时 lifts 会被丢弃，跨文件处理顺序不确定时会静默跳过且无日志——
@@ -103,12 +106,7 @@ public final class CustomTrainRegister {
     public static int register() {
         try {
             final JsonObject root = ResourceUtil.loadAsJSON(new ResourceLocation("fangsu", "custom_trains.json")).getAsJsonObject();
-            if (root == null || !root.isJsonObject() || !root.has("custom_trains")) {
-                Main.LOGGER.info("[FangSu] No custom_trains in fangsu:custom_trains.json");
-                return 0;
-            }
-            final JsonObject customTrains = root.getAsJsonObject("custom_trains");
-            if (customTrains.size() == 0) return 0;
+            final JsonObject customTrains = root.has("custom_trains") ? root.getAsJsonObject("custom_trains") : new JsonObject();
 
             // MTR 内置车型：mtr:mtr_custom_resources.json 经 loadAsJSON 合并后含内置 vehicles 数组
             final JsonObject builtinRoot = ResourceUtil.loadAsJSON(new ResourceLocation("mtr", "mtr_custom_resources.json")).getAsJsonObject();
@@ -173,10 +171,49 @@ public final class CustomTrainRegister {
                 }
             }
             Main.LOGGER.info("[FangSu] Registered {} custom train vehicles", registered);
-            return registered;
+            return registered + registerMissingLegacyTrains(builtinRoot, builtinById, provider);
         } catch (Exception e) {
             Main.LOGGER.error("[FangSu] Failed to register custom trains", e);
             return 0;
         }
+    }
+
+    private static int registerMissingLegacyTrains(JsonObject root, Map<String, JsonObject> builtinById, ResourceProvider provider) {
+        if (!root.has("custom_trains") || !root.get("custom_trains").isJsonObject()) return 0;
+
+        int registered = 0;
+        for (var entry : root.getAsJsonObject("custom_trains").entrySet()) {
+            if (!entry.getValue().isJsonObject()) continue;
+            var train = entry.getValue().getAsJsonObject();
+            if (!train.has("base_train_type") || !train.get("base_train_type").isJsonPrimitive()) continue;
+
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            String baseType = train.get("base_train_type").getAsString();
+            try {
+                // MTR 第一次转换可能早于内置基础车型注册。此时已进入 tick，可以按原规则重试。
+                boolean missingVariant = false;
+                for (String[] variant : VARIANTS) {
+                    if (builtinById.containsKey(baseType + variant[0]) && !isVehicleRegistered("mtr_custom_train_" + key + variant[0])) {
+                        missingVariant = true;
+                        break;
+                    }
+                }
+                if (!missingVariant) continue;
+
+                var definition = org.mtr.libraries.com.google.gson.JsonParser.parseString(train.toString());
+                var vehicles = new ObjectArrayList<VehicleResource>();
+                new LegacyVehicleResource(new JsonReader(definition)).convert(vehicles, key, provider);
+                for (VehicleResource vehicle : vehicles) {
+                    if (vehicle.getTransportMode() != TransportMode.TRAIN || isVehicleRegistered(vehicle.getId())) continue;
+                    CustomResourceLoader.registerVehicle(vehicle);
+                    if (registeredProbeId == null) registeredProbeId = vehicle.getId();
+                    registered++;
+                }
+            } catch (Exception e) {
+                Main.LOGGER.warn("[FangSu] Failed to recover legacy train {}", key, e);
+            }
+        }
+        if (registered > 0) Main.LOGGER.info("[FangSu] Recovered {} legacy train vehicles after MTR resource reload", registered);
+        return registered;
     }
 }

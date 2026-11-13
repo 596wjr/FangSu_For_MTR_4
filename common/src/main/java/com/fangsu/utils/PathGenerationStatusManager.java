@@ -33,7 +33,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 聊天消息：客户端包处理在 netty 线程，必须 {@code Minecraft.getInstance().execute}
  * 切回主线程；1.18.2 用 {@code displayClientMessage}，1.19+ 用 {@code sendSystemMessage}
- * （参照 {@link com.fangsu.events.JoinInMessage} 模板）。
  */
 public final class PathGenerationStatusManager {
 
