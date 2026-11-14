@@ -242,21 +242,37 @@ public class MtrUtil {
     }
 
     /**
-     * 获取站台对应的所有路线（优先使用 SimplifiedRoute，客户端数据始终完整）。
+     * 获取 MTR 常规同步数据中经过站台的线路。
      */
     @Nullable
     public static List<LocalRoute> getRouteByPlatform(Platform platform) {
+        return getRouteByPlatform(platform, false);
+    }
+
+    /**
+     * 线路选择等场景可同时查询方速同步的隐藏线路。
+     */
+    @Nullable
+    public static List<LocalRoute> getRouteByPlatform(Platform platform, boolean includeHidden) {
         if (platform == null) return null;
         final long platformId = platform.getId();
+        final MinecraftClientData data = MinecraftClientData.getInstance();
         final List<LocalRoute> routes = new ArrayList<>();
-        for (final SimplifiedRoute simplifiedRoute : MinecraftClientData.getInstance().simplifiedRoutes) {
+        for (final SimplifiedRoute simplifiedRoute : data.simplifiedRoutes) {
             if (simplifiedRoute.getPlatformIndex(platformId) >= 0) {
                 // 优先使用完整 Route 数据，回退到 SimplifiedRoute
-                final Route fullRoute = MinecraftClientData.getInstance().routeIdMap.get(simplifiedRoute.getId());
+                final Route fullRoute = data.routeIdMap.get(simplifiedRoute.getId());
                 if (fullRoute != null) {
                     routes.add(new LocalRoute(fullRoute));
                 } else {
                     routes.add(new LocalRoute(simplifiedRoute));
+                }
+            }
+        }
+        if (includeHidden) {
+            for (final SimplifiedRoute route : HiddenRoutesClient.getHiddenRoutes()) {
+                if (!data.simplifiedRouteIdMap.containsKey(route.getId()) && route.getPlatformIndex(platformId) >= 0) {
+                    routes.add(new LocalRoute(route));
                 }
             }
         }

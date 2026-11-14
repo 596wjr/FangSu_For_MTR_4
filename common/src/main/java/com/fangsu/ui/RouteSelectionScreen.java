@@ -2,6 +2,7 @@ package com.fangsu.ui;
 
 import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.mtr.LocalRoute;
+import com.fangsu.network.HiddenRoutesPackets;
 import com.fangsu.utils.ColorUtil;
 import com.fangsu.utils.MtrUtil;
 import net.minecraft.client.Minecraft;
@@ -36,6 +37,12 @@ public class RouteSelectionScreen extends BaseSelectionScreen {
     }
 
     @Override
+    protected void init() {
+        super.init();
+        HiddenRoutesPackets.requestFullHiddenRoutesC2S();
+    }
+
+    @Override
     public void updateColumn() {
         final Station station = MtrUtil.getStationAt(MtrUtil.getCenterVector3f(pos));
         if (station != null) {
@@ -62,7 +69,7 @@ public class RouteSelectionScreen extends BaseSelectionScreen {
                 if (selectedPlat != null) {
                     final Platform p = MtrUtil.getPlatformById(selectedPlat);
                     if (p != null) {
-                        final List<LocalRoute> routes = MtrUtil.getRouteByPlatform(p);
+                        final List<LocalRoute> routes = MtrUtil.getRouteByPlatform(p, true);
                         if (routes != null) {
                             for (final LocalRoute r : routes) {
                                 routePlatformMap.put(r.id, p.getId());

@@ -2,8 +2,10 @@ package com.fangsu.network;
 
 import com.fangsu.mixin.InitAccessorMixin;
 import com.fangsu.mixin.MainAccessorMixin;
+import com.fangsu.ui.RouteSelectionScreen;
 import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -84,7 +86,12 @@ public class HiddenRoutesPackets {
 
 	private static void handleHiddenRoutesResponse(FriendlyByteBuf buf, NetworkManager.PacketContext ctx) {
 		final String json = buf.readUtf();
-		ctx.queue(() -> HiddenRoutesClient.mergeHiddenRoutes(json));
+		ctx.queue(() -> {
+			HiddenRoutesClient.mergeHiddenRoutes(json);
+			if (Minecraft.getInstance().screen instanceof RouteSelectionScreen screen) {
+				screen.updateColumn();
+			}
+		});
 	}
 
 	/** JCM 站序适配和 LCD 共用：请求指定 routeId 的线路详情 */
