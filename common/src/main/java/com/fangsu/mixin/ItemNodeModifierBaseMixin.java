@@ -107,7 +107,7 @@ public abstract class ItemNodeModifierBaseMixin {
         // ---- 轨道连接器 / 删除器 ----
         if (item instanceof ItemRailModifier) {
             if (this.isConnector) {
-                handleRailConnect(level, serverWorld, posStart, endPos, item, (ServerPlayer) player.data);
+                handleRailConnect(level, serverWorld, posStart, endPos, context.getStack().data, (ServerPlayer) player.data);
             } else {
                 // 轨道删除器：删除两端间轨道（connected 重置由 BlockNodeMixin.resetRailNode 处理）
                 final Position p1 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(posStart));
@@ -139,7 +139,16 @@ public abstract class ItemNodeModifierBaseMixin {
      * {@code atan(高差 / 水平距离)}，使几何内核的竖向剖面从 MTR 原生的 S 形二次曲线
      * 变成恒定坡率的直线坡（两端切线都等于弦向坡率时三次 Hermite 退化为直线）。
      */
-    private void handleRailConnect(Level level, org.mtr.mapping.holder.ServerWorld serverWorld, BlockPos posStart, BlockPos endPos, net.minecraft.world.item.Item item, ServerPlayer serverPlayer) {
+    private void handleRailConnect(Level level, org.mtr.mapping.holder.ServerWorld serverWorld, BlockPos posStart, BlockPos endPos, net.minecraft.world.item.ItemStack stack, ServerPlayer serverPlayer) {
+        final var item = stack.getItem();
+        final var settings = item instanceof com.fangsu.items.ItemServiceRail tool ? tool.settings(stack) : null;
+        if (settings != null) {
+            final var endBlock = level.getBlockState(endPos).getBlock();
+            if (!(endBlock instanceof com.fangsu.blocks.BlockMultiDirectionNode)
+                    && (!(endBlock instanceof BlockNode node) || node.transportMode != TransportMode.TRAIN)) {
+                return;
+            }
+        }
         final boolean startIsNode = isMultiDirectionNode(level, posStart);
         final boolean endIsNode = isMultiDirectionNode(level, endPos);
         final boolean startBonded = isBonded(level, posStart);
@@ -211,7 +220,7 @@ public abstract class ItemNodeModifierBaseMixin {
         final boolean isOneWay = accessor.isOneWay();
 
         for (final double[] cand : candidates) {
-            if (NodeConnector.createAndSendRail(serverWorld, posStart, cand[0], endPos, cand[1], railType, isOneWay, serverPlayer.getUUID())) {
+            if (NodeConnector.createAndSendRail(serverWorld, posStart, cand[0], endPos, cand[1], railType, isOneWay, serverPlayer.getUUID(), settings)) {
                 // 非直线模式仍是「建轨成功后才绑定」；直线模式已在建轨前绑定（见上）
                 if (!straightMode) {
                     if (startIsNode && !startBonded) bindNode(level, posStart, cand[0]);

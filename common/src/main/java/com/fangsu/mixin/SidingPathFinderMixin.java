@@ -56,6 +56,74 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(value = SidingPathFinder.class, remap = false)
 public abstract class SidingPathFinderMixin {
 
+    @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final
+    public org.mtr.core.data.SavedRailBase<?, ?> startSavedRail;
+
+    @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final
+    public org.mtr.core.data.SavedRailBase<?, ?> endSavedRail;
+
+    @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final
+    private org.mtr.libraries.it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap<Position,
+            org.mtr.libraries.it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap<Position, Rail>> positionsToRail;
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "tick", at = @At("HEAD"), cancellable = true)
+    private void fangsu$validateBypass(long altitude,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList<org.mtr.core.data.PathData>> cir) {
+        if (!fangsu$validWaypoint(startSavedRail) || !fangsu$validWaypoint(endSavedRail)) {
+            cir.setReturnValue(new org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList<>());
+        }
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private boolean fangsu$validWaypoint(org.mtr.core.data.SavedRailBase<?, ?> waypoint) {
+        if (com.fangsu.mtr.RouteStopStatus.of(waypoint) != com.fangsu.mtr.RouteStopStatus.SKIPPED) {
+            return true;
+        }
+        final var metadata = ((com.fangsu.mtr.ServiceStop.Holder) (Object) waypoint).fangsu$getServiceStop();
+        if (metadata == null || metadata.bypass() == null || !metadata.express()) return false;
+        final var start = com.fangsu.mtr.RouteBypass.position(metadata.bypass().start());
+        final var end = com.fangsu.mtr.RouteBypass.position(metadata.bypass().end());
+        if (!waypoint.containsPos(start) || !waypoint.containsPos(end)) return false;
+        final var rail = org.mtr.core.data.Data.tryGet(positionsToRail, start, end);
+        final var settings = com.fangsu.mtr.rail.ServiceRail.get(rail);
+        return settings != null && settings.kind() == com.fangsu.mtr.rail.ServiceRail.Kind.BYPASS;
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "tick", at = @At("RETURN"), cancellable = true)
+    private void fangsu$requireBypassEdge(long altitude,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList<org.mtr.core.data.PathData>> cir) {
+        final var path = cir.getReturnValue();
+        if (path != null && !path.isEmpty() && (!fangsu$matchesEdge(startSavedRail, path.get(0))
+                || !fangsu$matchesEdge(endSavedRail, path.get(path.size() - 1)))) {
+            cir.setReturnValue(new org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList<>());
+        }
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private static boolean fangsu$matchesEdge(org.mtr.core.data.SavedRailBase<?, ?> stop, org.mtr.core.data.PathData path) {
+        return com.fangsu.mtr.RouteStopStatus.of(stop) != com.fangsu.mtr.RouteStopStatus.SKIPPED
+                || stop.containsPos(path.getOrderedPosition1()) && stop.containsPos(path.getOrderedPosition2());
+    }
+
+    @WrapOperation(method = "tick", at = @At(value = "INVOKE", target = "Lorg/mtr/core/data/Platform;getDwellTime()J"))
+    private long fangsu$skipDwell(org.mtr.core.data.Platform waypoint, Operation<Long> original) {
+        return com.fangsu.mtr.RouteStopStatus.of(waypoint) == com.fangsu.mtr.RouteStopStatus.NORMAL ? original.call(waypoint) : 0;
+    }
+
+    @WrapOperation(method = "tick", at = @At(value = "NEW",
+            target = "(Lorg/mtr/core/data/Rail;JJILorg/mtr/core/data/Position;Lorg/mtr/core/data/Position;)Lorg/mtr/core/data/PathData;"))
+    private org.mtr.core.data.PathData fangsu$parkingDwell(Rail rail, long savedRailId, long dwell, int stopIndex,
+                                                         Position start, Position end, Operation<org.mtr.core.data.PathData> original) {
+        if (savedRailId != 0 && dwell == 0) {
+            savedRailId = 0;
+        }
+        final var settings = com.fangsu.mtr.rail.ServiceRail.get(rail);
+        if (savedRailId == 0 && settings != null && settings.kind() == com.fangsu.mtr.rail.ServiceRail.Kind.PARKING) {
+            dwell = settings.value() * 1000L;
+        }
+        return original.call(rail, savedRailId, dwell, stopIndex, start, end);
+    }
+
     /** 节点处允许的最大转弯角度：与"直行"（数值相等）的最短角差上限（度）。 */
     private static final float MAX_TURN_DEVIATION = 22.5f;
 

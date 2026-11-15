@@ -79,6 +79,7 @@ public class ModNetwork {
         // 逐轨道超高编辑（三个倾斜控制点 + 半轨距）：载荷与校验都在 RailTiltPackets 里，
         // 注册位置紧挨 NODE_REFRESH_RAIL（同属「轨道几何编辑」这一类 C2S 通道）。
         RailTiltPackets.registerServer();
+        ServiceRailPackets.registerServer();
         NetworkManager.registerReceiver(
                 NetworkManager.Side.C2S,
                 TICKET_MACHINE_SYNC,

@@ -2,6 +2,7 @@ package com.fangsu.mixin;
 
 import com.fangsu.mappings.rail.RailPoseExtra;
 import com.fangsu.mtr.rail.RailPoseExtraHolder;
+import com.fangsu.mtr.rail.ServiceRail;
 import org.mtr.core.data.Position;
 import org.mtr.core.data.Rail;
 import org.mtr.core.generated.data.RailSchema;
@@ -42,7 +43,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 姿态为默认（全零）的轨道序列化结果与原版逐字节相同，老存档不会被"污染"。
  */
 @Mixin(value = RailSchema.class, remap = false)
-public abstract class RailSchemaMixin implements RailPoseExtraHolder {
+public abstract class RailSchemaMixin implements RailPoseExtraHolder, ServiceRail.Holder {
+
+    @Unique
+    private volatile ServiceRail fangsu$serviceRail;
 
     /**
      * 端点几何信息（{@code position1/position2/angle1/angle2/shape/verticalRadius}）。
@@ -95,6 +99,7 @@ public abstract class RailSchemaMixin implements RailPoseExtraHolder {
     @Inject(method = "<init>(Lorg/mtr/core/serializer/ReaderBase;)V", at = @At("TAIL"), remap = false)
     private void fangsu$readPose(ReaderBase readerBase, CallbackInfo ci) {
         this.fangsu$pose = RailPoseExtra.decode(readerBase.getString(RailPoseExtra.KEY, ""));
+        this.fangsu$serviceRail = ServiceRail.decode(readerBase.getString(ServiceRail.KEY, ""));
     }
 
     /**
@@ -111,6 +116,20 @@ public abstract class RailSchemaMixin implements RailPoseExtraHolder {
         if (pose.shouldPersist()) {
             writerBase.writeString(RailPoseExtra.KEY, pose.encode());
         }
+        final var settings = fangsu$serviceRail;
+        if (settings != null) {
+            writerBase.writeString(ServiceRail.KEY, settings.encode());
+        }
+    }
+
+    @Override
+    public ServiceRail fangsu$getServiceRail() {
+        return fangsu$serviceRail;
+    }
+
+    @Override
+    public void fangsu$setServiceRail(ServiceRail settings) {
+        fangsu$serviceRail = settings;
     }
 
     @Override

@@ -499,7 +499,7 @@ public abstract class BasicConfigScreen extends Screen {
         //$$ }
         //#endif
 
-        private void renderLabel(GraphicContext g) {
+        protected void renderLabel(GraphicContext g) {
             var font = Minecraft.getInstance().font;
             //#if MC_VERSION >= 11903
             int x = this.getX();

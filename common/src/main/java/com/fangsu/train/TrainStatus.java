@@ -57,7 +57,7 @@ public class TrainStatus {
     public LocalRoute currentRoute;
     public DrawableRoute drawableRoute;
     /** 下一站的站台 id（0 = 未知），用于在「当前线路自己的站序」里定位索引 */
-    private long nextPlatformId;
+    private int nextRoutePassengerIndex = -1;
     public boolean isOnRoute;
     public boolean isReverse;
     /**
@@ -88,7 +88,6 @@ public class TrainStatus {
         isInDetailDistance = false;
         currentRoute = null;
         drawableRoute = null;
-        nextPlatformId = 0;
         isOnRoute = false;
         isReverse = false;
         trainStatus = 0;
@@ -182,7 +181,15 @@ public class TrainStatus {
             route = findRouteContaining(extra, nextPlatformId, route);
         }
         this.currentRoute = route;
-        this.nextPlatformId = nextPlatformId;
+        nextRoutePassengerIndex = -1;
+        if (route != null && nextPlatformId != 0) {
+            final int index = routePlatformIndex(route, nextPlatformId);
+            if (index >= 0) {
+                nextRoutePassengerIndex = nextPassengerIndex(route, index);
+                nextPlatformId = nextRoutePassengerIndex < route.platformIds.size()
+                        ? route.platformIds.get(nextRoutePassengerIndex).platformId : 0;
+            }
+        }
 
         // ===== 逐车节开门方向（LCD 可直接读，见 DESIGN 第 8 节）=====
         // 实时值：观测端保存的原始帧（未按反向规范化），长度与当前编组一致才采用
@@ -280,25 +287,32 @@ public class TrainStatus {
      * 站台 id 拿不到、或者该站台不在这条线路的站序里时，才退回按里程推进。
      */
     public int getThisRoutePlatformsNextIndex() {
-        if (currentRoute != null && nextPlatformId != 0) {
-            final int index = routePlatformIndex(currentRoute, nextPlatformId);
-            if (index >= 0) return index;
+        if (currentRoute == null || train == null) return 0;
+        if (nextRoutePassengerIndex >= 0) return nextRoutePassengerIndex;
+        final var stops = train.getThisRouteStops();
+        final int nextStop = findNextStopIndex(stops);
+        if (nextStop < stops.size() && stops.get(nextStop).platform != null) {
+            final int index = routePlatformIndex(currentRoute, stops.get(nextStop).platform.getId());
+            if (index >= 0) return nextPassengerIndex(currentRoute, index);
         }
-        return findNextStopIndex(train.getThisRouteStops());
+        return nextStop >= stops.size() && !stops.isEmpty()
+                ? currentRoute.platformIds.size() : nextPassengerIndex(currentRoute, nextStop);
+    }
+
+    private static int nextPassengerIndex(LocalRoute route, int index) {
+        while (index < route.platformIds.size()
+                && route.platformIds.get(index).stopStatus != com.fangsu.mtr.RouteStopStatus.NORMAL) {
+            index++;
+        }
+        return index;
     }
 
     /**
      * 站台在指定线路站序里的索引（-1 = 不在这条线路上）。
      * <p>
-     * 先用 {@link SimplifiedRoute}（客户端数据始终完整、且与 MTR 的服务端站序一致），
-     * 查不到再退回到本地 {@link LocalRoute#getPlatformIdIndex(long)}。
+     * 使用正在绘制的完整站序，保留划线和越行站的下标。
      */
     private static int routePlatformIndex(LocalRoute route, long platformId) {
-        final SimplifiedRoute simplifiedRoute = MtrUtil.getSimplifiedRouteById(route.id);
-        if (simplifiedRoute != null) {
-            final int index = simplifiedRoute.getPlatformIndex(platformId);
-            if (index >= 0) return index;
-        }
         return route.getPlatformIdIndex(platformId);
     }
 
@@ -362,19 +376,31 @@ public class TrainStatus {
     private int findNextStopIndex(List<VehicleWrapper.Stop> stops) {
         if (stops == null || stops.isEmpty()) return 0;
 
-        // 里程可用：按里程推进
+        int index = 0;
         if (stops.get(0).distance >= 0) {
             final double progress = train.getRailProgress();
-            int idx = 0;
-            for (VehicleWrapper.Stop stop : stops) {
-                if (progress > stop.distance) idx++;
-                else break;
+            while (index < stops.size() && progress > stops.get(index).distance) {
+                index++;
             }
-            return Math.min(idx, stops.size());
+        } else {
+            index = Math.max(0, train.getNextStopIndex(stops, 0));
         }
 
-        // 兜底：服务端数据还没到（首帧）时用 JCM 原实现
-        return train.getNextStopIndex(stops, 0);
+        // 旧的车辆站序缓存可能还包括已划线或改走越行轨道的站点。
+        while (index < stops.size() && isPassThrough(stops.get(index))) {
+            index++;
+        }
+        return Math.min(index, stops.size());
+    }
+
+    private static boolean isPassThrough(VehicleWrapper.Stop stop) {
+        if (stop.route == null || stop.platform == null) return false;
+        final long platformId = stop.platform.getId();
+        final var current = MtrUtil.getSimplifiedRouteById(stop.route.getId());
+        final var route = current == null ? stop.route : current;
+        final int index = route.getPlatformIndex(platformId);
+        return index >= 0 && com.fangsu.mtr.RouteStopStatus.of(route.getPlatforms().get(index))
+                != com.fangsu.mtr.RouteStopStatus.NORMAL;
     }
 
     private int calcTrainStatus() {
@@ -425,7 +451,8 @@ public class TrainStatus {
     private LocalRoute stopToLocalRoute(VehicleWrapper.Stop stop) {
         if (stop.route == null) return null;
         // 站序响应中的普通线路也可能只存在于 JCM 的独立数据集，不能回查本地表后丢掉它。
-        return new LocalRoute(stop.route);
+        final var local = MtrUtil.getRouteById(stop.route.getId());
+        return local == null ? new LocalRoute(stop.route) : local;
     }
 
     private static LocalRoute resolveRoute(long routeId) {

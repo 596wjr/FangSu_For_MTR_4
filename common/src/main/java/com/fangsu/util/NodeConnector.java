@@ -737,7 +737,7 @@ public final class NodeConnector {
             org.mtr.mapping.holder.ServerWorld serverWorld,
             BlockPos pos1, double angle1,
             BlockPos pos2, double angle2,
-            RailType railType, boolean isOneWay, UUID uuid
+            RailType railType, boolean isOneWay, UUID uuid, com.fangsu.mtr.rail.ServiceRail settings
     ) {
         final Position p1 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos1));
         final Position p2 = Init.blockPosToPosition(new org.mtr.mapping.holder.BlockPos(pos2));
@@ -775,6 +775,7 @@ public final class NodeConnector {
         }
         if (styledRail != null) {
             RailPoseExtraHolder.apply(styledRail, pose);
+            com.fangsu.mtr.rail.ServiceRail.set(styledRail, settings);
         }
         com.fangsu.Main.LOGGER.info("[NodeConnector] createAndSendRail {}->{} a1={} a2={} type={} oneWay={} rail={} valid={}", pos1, pos2, angle1, angle2, railType, isOneWay, styledRail, styledRail == null ? "n/a" : styledRail.isValid());
         PacketUpdateData.sendDirectlyToServerRail(serverWorld, styledRail);

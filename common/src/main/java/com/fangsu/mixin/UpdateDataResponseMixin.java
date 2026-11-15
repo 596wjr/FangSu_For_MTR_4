@@ -34,6 +34,7 @@ public abstract class UpdateDataResponseMixin {
 
     @Inject(method = "write", at = @At("TAIL"))
     private void fangsu$checkGenerationFinished(CallbackInfo ci) {
+        com.fangsu.mtr.DrawableRoute.clearCache();
         PathGenerationStatusManager.checkGenerationFinished(data);
     }
 }

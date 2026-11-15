@@ -39,7 +39,8 @@ public class LocalRoute {
         this.id = route.getId();
         this.color = route.getColor();
         for (final RoutePlatformData p : route.getRoutePlatforms()) {
-            this.platformIds.add(new RoutePlatform(p.platform != null ? p.platform.getId() : 0L, p.getCustomDestination()));
+            this.platformIds.add(new RoutePlatform(p.platform != null ? p.platform.getId() : 0L,
+                    p.getCustomDestination(), RouteStopStatus.of(p)));
         }
     }
 
@@ -59,7 +60,7 @@ public class LocalRoute {
         this.id = route.getId();
         this.color = route.getColor();
         for (final SimplifiedRoutePlatform p : route.getPlatforms()) {
-            this.platformIds.add(new RoutePlatform(p.getPlatformId(), p.getDestination()));
+            this.platformIds.add(new RoutePlatform(p.getPlatformId(), p.getDestination(), RouteStopStatus.of(p)));
         }
     }
 
@@ -79,21 +80,27 @@ public class LocalRoute {
     public static class RoutePlatform {
         public String customDestination;
         public final long platformId;
+        public final RouteStopStatus stopStatus;
 
         public RoutePlatform(long platformId, String customDestination) {
+            this(platformId, customDestination, RouteStopStatus.NORMAL);
+        }
+
+        public RoutePlatform(long platformId, String customDestination, RouteStopStatus stopStatus) {
             this.platformId = platformId;
             this.customDestination = customDestination;
+            this.stopStatus = stopStatus;
         }
 
         @Override
         public int hashCode() {
-            return super.hashCode();
+            return Objects.hash(platformId, customDestination, stopStatus);
         }
 
         @Override
         public boolean equals(Object obj) {
             if (obj instanceof RoutePlatform o) {
-                return platformId == o.platformId && customDestination.equals(o.customDestination);
+                return platformId == o.platformId && customDestination.equals(o.customDestination) && stopStatus == o.stopStatus;
             }
             return false;
         }
@@ -132,7 +139,7 @@ public class LocalRoute {
             for (final SimplifiedRoutePlatform sp : sr.getPlatforms()) {
                 final String stationName = sp.getStationName();
                 if (stationName == null || stationName.isEmpty()) {
-                    stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null));
+                    stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null, RouteStopStatus.of(sp)));
                     continue;
                 }
 
@@ -159,9 +166,9 @@ public class LocalRoute {
                 }));
 
                 if (!trans.isEmpty()) {
-                    stations.add(new LocalRouteDetail.StationDetails(stationName, new ArrayList<>(trans)));
+                    stations.add(new LocalRouteDetail.StationDetails(stationName, new ArrayList<>(trans), RouteStopStatus.of(sp)));
                 } else {
-                    stations.add(new LocalRouteDetail.StationDetails(stationName, List.of()));
+                    stations.add(new LocalRouteDetail.StationDetails(stationName, List.of(), RouteStopStatus.of(sp)));
                 }
             }
         } else {
@@ -184,13 +191,15 @@ public class LocalRoute {
                             }
                         }
                         if (!trans.isEmpty()) {
-                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), new ArrayList<>(trans)));
+                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), new ArrayList<>(trans), p.stopStatus));
                         } else {
-                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), List.of()));
+                            stations.add(new LocalRouteDetail.StationDetails(stn.getName(), List.of(), p.stopStatus));
                         }
                     } else {
-                        stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null));
+                        stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null, p.stopStatus));
                     }
+                } else {
+                    stations.add(new LocalRouteDetail.StationDetails("未命名|Undefined", null, p.stopStatus));
                 }
             }
         }

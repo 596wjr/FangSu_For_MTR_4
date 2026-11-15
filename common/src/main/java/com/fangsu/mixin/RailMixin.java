@@ -47,6 +47,32 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = Rail.class, remap = false)
 public abstract class RailMixin {
 
+    @Inject(method = "getSpeedLimitKilometersPerHour", at = @At("HEAD"), cancellable = true)
+    private void fangsu$bypassLimit(boolean reversed, CallbackInfoReturnable<Long> cir) {
+        final var settings = com.fangsu.mtr.rail.ServiceRail.get(this);
+        if (settings != null && settings.kind() == com.fangsu.mtr.rail.ServiceRail.Kind.BYPASS) {
+            cir.setReturnValue((long) settings.value());
+        }
+    }
+
+    @Inject(method = "getSpeedLimitMetersPerMillisecond(Z)D", at = @At("HEAD"), cancellable = true)
+    private void fangsu$bypassDirectionalSpeed(boolean reversed, CallbackInfoReturnable<Double> cir) {
+        fangsu$bypassSpeed(cir);
+    }
+
+    @Inject(method = "getSpeedLimitMetersPerMillisecond(Lorg/mtr/core/data/Position;)D", at = @At("HEAD"), cancellable = true)
+    private void fangsu$bypassSpeedFrom(Position start, CallbackInfoReturnable<Double> cir) {
+        fangsu$bypassSpeed(cir);
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private void fangsu$bypassSpeed(CallbackInfoReturnable<Double> cir) {
+        final var settings = com.fangsu.mtr.rail.ServiceRail.get(this);
+        if (settings != null && settings.kind() == com.fangsu.mtr.rail.ServiceRail.Kind.BYPASS) {
+            cir.setReturnValue(settings.value() / 3600D);
+        }
+    }
+
     /** MTR 的几何对象；{@code public final}，用 {@code @Mutable} 打开写入。 */
     @Shadow(remap = false) @Final @Mutable
     public RailMath railMath;
@@ -203,6 +229,7 @@ public abstract class RailMixin {
         final RailPoseExtra pose = ((RailPoseExtraHolder) (Object) source).getFangSuPose();
         final RailPoseExtraHolder holder = (RailPoseExtraHolder) (Object) target;
         holder.setFangSuPose(pose);
+        com.fangsu.mtr.rail.ServiceRail.set(target, com.fangsu.mtr.rail.ServiceRail.get(source));
         holder.rebuildRailMath();
     }
 }
