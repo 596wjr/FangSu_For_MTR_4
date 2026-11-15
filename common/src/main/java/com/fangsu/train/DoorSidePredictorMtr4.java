@@ -29,12 +29,7 @@ final class DoorSidePredictorMtr4 {
 
     static PathData nextStop(VehicleExtension vehicle) {
         final double progress = ((VehicleDoorPredictionAccessor) vehicle).fangsu$getRailProgress();
-        for (final PathData path : vehicle.vehicleExtraData.immutablePath) {
-            if (path.getEndDistance() + 0.001 < progress || path.getDwellTime() <= 0) continue;
-            if (path.getSavedRailBaseId() == 0 || path.getSavedRailBaseId() == vehicle.vehicleExtraData.getSidingId()) continue;
-            return path;
-        }
-        return null;
+        return JcmStopLookup.nextPhysicalStop(vehicle.vehicleExtraData, progress);
     }
 
     static void predict(VehicleExtension vehicle) {

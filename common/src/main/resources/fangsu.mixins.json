@@ -31,6 +31,9 @@
     "PacketDepotGenerateMixin",
     "DepotOperationByIdsSchemaAccessorMixin",
     "UpdateDataResponseMixin",
+    "JcmLimitedStopsMixin",
+    "JcmNextStopIndexMixin",
+    "JcmStopsDataCacheMixin",
     "EditDepotScreenMixin",
     "PlatformOverlayWorldMixin",
     "PlatformFrustumAccessor"
@@ -40,6 +43,7 @@
     "DashboardServiceRailsSchemaMixin",
     "RouteStopDepotMixin",
     "RouteStopTimesMixin",
+    "JcmRouteStopsPacketMixin",
     "RouteWaypointMixin",
     "DepotDataAccess",
     "RoutePlatformDataStatusMixin",

@@ -1,8 +1,11 @@
 package com.fangsu.announcements.mtradapter;
 
+import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.train.JcmStopLookup;
 import com.fangsu.train.TrainStatus;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.NTETrainWrapper;
 import com.lx862.mtrscripting.mod.impl.mtr.vehicle.VehicleScriptContext;
+import org.mtr.core.data.PathData;
 import org.mtr.mod.client.MinecraftClientData;
 import java.util.*;
 
@@ -19,6 +22,7 @@ public final class MtrAnnouncementAdapter {
             var stops = status.getAllPlatforms(); int index = status.getAllPlatformsNextIndex();
             if (index < 0 || index >= stops.size()) continue;
             var stop = stops.get(index); double progress = wrapper.getRailProgress(), remaining = stop.distance - progress;
+            if (!JcmStopLookup.matchesPhysicalStop(stop, JcmStopLookup.nextPhysicalStop(vehicle.vehicleExtraData, progress))) continue;
             if(!Double.isFinite(remaining)||remaining<=.5||stop.platform==null||stop.route==null||!platforms.contains(stop.platform.getId()))continue;
             result.add(new ApproachingTrain(vehicle.getId(),stop.route.getId(),stop.platform.getId(),index,progress,remaining,Double.NaN,wrapper.getDepartureIndex(),stop.destinationName));
         }
@@ -38,21 +42,42 @@ public final class MtrAnnouncementAdapter {
             String vehicleType = vehicle.vehicleExtraData.immutableVehicleCars.get(ridingCar).getVehicleId();
             TrainStatus status = new TrainStatus(wrapper); status.updateRoute();
             var stops = status.getAllPlatforms(); int index = status.getAllPlatformsNextIndex();
-            if (wrapper.getDoorValue() > .01) for (int n = 0; n < stops.size(); n++)
-                if (stops.get(n).platform != null && stops.get(n).platform.getId() == vehicle.vehicleExtraData.getThisPlatformId()) { index = n; break; }
-            if(forecast>=0)index+=(wrapper.getDoorValue()>.01?1:0)+forecast;
             if (index < 0 || index >= stops.size()) return null;
+            final double progress = wrapper.getRailProgress();
+            final boolean doorsOpen = wrapper.getDoorValue() > .01;
+            final PathData physical = JcmStopLookup.nextPhysicalStop(vehicle.vehicleExtraData, progress);
+            if (!JcmStopLookup.matchesPhysicalStop(stops.get(index), physical)) return null;
+            final int currentIndex = index;
+            if (forecast >= 0) index += (doorsOpen ? 1 : 0) + forecast;
+            if (index >= stops.size()) return null;
             var stop = stops.get(index); if (stop.platform == null || stop.route == null) return null;
-            var routeStops = wrapper.getThisRouteStops(); int localIndex = status.getThisRoutePlatformsNextIndex();
+            // 共用站台可以同时是上一趟终点和本趟首站，使用与 LCD 相同的当前方向。
+            if (index == currentIndex && status.currentRoute != null && stop.roundUpRoute != null
+                    && stop.roundUpRoute.route != null && stop.roundUpRoute.route.getId() == status.currentRoute.id) {
+                stop = stop.roundUpRoute;
+            }
+            var routeStops = wrapper.getThisRouteStops();
+            int localIndex = routeStops.indexOf(stop);
             String destinationName = routeStops.isEmpty() ? stop.destinationName : routeStops.get(routeStops.size() - 1).station == null
                     ? routeStops.get(routeStops.size() - 1).destinationName : routeStops.get(routeStops.size() - 1).station.getName();
             var namedStation = new com.fangsu.announcements.recordings.RecordingFamily.Named(stop.station == null ? 0 : stop.station.getId(), stop.station == null ? "" : stop.station.getName());
             long destinationId = routeStops.isEmpty() || routeStops.get(routeStops.size() - 1).station == null ? 0 : routeStops.get(routeStops.size() - 1).station.getId();
-            boolean terminal=!routeStops.isEmpty()&&routeStops.get(routeStops.size()-1).platform!=null&&stop.platform.getId()==routeStops.get(routeStops.size()-1).platform.getId();
-            if(forecast>=0&&!stop.route.getPlatforms().isEmpty()){
-                var futurePlatforms=stop.route.getPlatforms();var last=futurePlatforms.get(futurePlatforms.size()-1);
-                destinationId=last.getStationId();destinationName=last.getStationName();
-                localIndex=stop.route.getPlatformIndex(stop.platform.getId());if(localIndex<0)return null;terminal=last.getPlatformId()==stop.platform.getId();
+            boolean terminal = localIndex >= 0 && localIndex == routeStops.size() - 1;
+            if (localIndex < 0) {
+                final var passengerPlatforms = stop.route.getPlatforms().stream()
+                        .filter(platform -> RouteStopStatus.of(platform) == RouteStopStatus.NORMAL).toList();
+                final long platformId = stop.platform.getId();
+                for (int n = 0; n < passengerPlatforms.size(); n++) {
+                    if (passengerPlatforms.get(n).getPlatformId() == platformId) {
+                        localIndex = n;
+                        break;
+                    }
+                }
+                if (localIndex < 0) return null;
+                final var last = passengerPlatforms.get(passengerPlatforms.size() - 1);
+                destinationId = last.getStationId();
+                destinationName = last.getStationName();
+                terminal = localIndex == passengerPlatforms.size() - 1;
             }
             var destination = new com.fangsu.announcements.recordings.RecordingFamily.Named(destinationId, destinationName == null ? "" : destinationName);
             List<com.fangsu.announcements.recordings.RecordingFamily.Named> transfers = new ArrayList<>();
@@ -69,8 +94,9 @@ public final class MtrAnnouncementAdapter {
             var context = new com.fangsu.announcements.recordings.RecordingFamily.Context(namedStation, destination,
                     new com.fangsu.announcements.recordings.RecordingFamily.Named(stop.route.getId(), stop.route.getName()), List.copyOf(transfers), localIndex <= 1,
                     terminal, left, right);
-            double progress = wrapper.getRailProgress();
-            return new RidingAnnouncementState(vehicle.getId(), vehicleType, stop.route.getId(), stop.platform.getId(), index, progress, stop.distance-progress, wrapper.getDoorValue()>.01, wrapper.isOnRoute(), context);
+            final double stopDistance = index == currentIndex && physical != null ? physical.getEndDistance() : stop.distance;
+            return new RidingAnnouncementState(vehicle.getId(), vehicleType, stop.route.getId(), stop.platform.getId(), index, progress,
+                    stopDistance - progress, doorsOpen, wrapper.isOnRoute(), context);
         }
         return null;
     }

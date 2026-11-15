@@ -219,9 +219,11 @@ public final class VehicleLcdRenderer {
                 status = buildStatus(vehicle);
                 statusFrame = frame;
                 final long now = System.nanoTime();
-                if (status.currentRoute == null || status.drawableRoute == null) {
-                    HiddenRoutesClient.requestMissingRoutes(vehicle.vehicleExtraData.getThisRouteId(),
-                            vehicle.vehicleExtraData.getNextRouteId());
+                final var extra = vehicle.vehicleExtraData;
+                final boolean missingRoute = status.currentRoute == null || status.drawableRoute == null
+                        || waitingForStop(status);
+                if (missingRoute) {
+                    HiddenRoutesClient.requestMissingRoutes(extra.getThisRouteId(), extra.getNextRouteId());
                 }
                 if (dataSidingId != 0 && !status.getWrapper().isStopsDataFetched()
                         && now - lastDataRetry >= RETRY_INTERVAL_NS) {
@@ -229,7 +231,7 @@ public final class VehicleLcdRenderer {
                     VehicleDataCache.clearStopsDataCache(vehicle.getId());
                     lastDataRetry = now;
                 }
-                if (status.currentRoute != null && status.drawableRoute != null) {
+                if (!missingRoute) {
                     missingRouteSince = 0;
                     missingRouteReported = false;
                 } else if (vehicle.getIsOnRoute() || vehicle.vehicleExtraData.getThisRouteId() != 0
@@ -238,9 +240,9 @@ public final class VehicleLcdRenderer {
                     if (!missingRouteReported && now - missingRouteSince >= RETRY_INTERVAL_NS) {
                         missingRouteReported = true;
                         // 持续缺失才记录一次，区分车辆同步、站序获取与线路查询的问题。
-                        Main.LOGGER.warn("[FangSu LCD] 车辆 {} 线路数据持续缺失：thisRoute={} nextRoute={} stops={} fetched={} routeCache={}",
-                                vehicle.getId(), vehicle.vehicleExtraData.getThisRouteId(),
-                                vehicle.vehicleExtraData.getNextRouteId(), status.getAllPlatforms().size(),
+                        Main.LOGGER.warn("[FangSu LCD] 车辆 {} 线路或站序持续缺失：thisRoute={} thisPlatform={} nextRoute={} nextPlatform={} stops={} fetched={} routeCache={}",
+                                vehicle.getId(), extra.getThisRouteId(), extra.getThisPlatformId(),
+                                extra.getNextRouteId(), extra.getNextPlatformId(), status.getAllPlatforms().size(),
                                 status.getWrapper().isStopsDataFetched(), VehicleDataCache.mtrData.routeIdMap.size());
                     }
                 }
@@ -252,6 +254,10 @@ public final class VehicleLcdRenderer {
             lcds.values().forEach(Lcd::close);
             lcds.clear();
         }
+    }
+
+    private static boolean waitingForStop(TrainStatus status) {
+        return status.isOnRoute && status.trainStatus != 6 && status.getThisRoutePlatformsNextIndex() < 0;
     }
 
     /** 同一列车的同一车型共享纹理，不同车型的几何/脚本状态互相独立。 */
@@ -303,6 +309,8 @@ public final class VehicleLcdRenderer {
             }
             if (now < nextPaint) return;
             final TrainStatus status = vehicle.status();
+            // 已在运行但当前站序未同步时，先保留上一帧，避免绘制器把未知站当成终点。
+            if (waitingForStop(status)) return;
             nextPaint = now + PAINT_INTERVAL_NS;
             painting = new FutureTask<>(() -> {
                 if (closed) return null;
