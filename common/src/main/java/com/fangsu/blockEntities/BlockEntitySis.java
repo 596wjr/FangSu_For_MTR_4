@@ -20,7 +20,9 @@ import com.fangsu.utils.ContentInfoUtil;
 import com.fangsu.utils.GraphicsTextureHelper;
 import com.fangsu.utils.ResourceUtil;
 import com.fangsu.utils.MtrUtil;
+import org.mtr.core.data.AreaBase;
 import org.mtr.core.data.Platform;
+import org.mtr.core.data.Station;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -50,6 +52,11 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
         super(BLOCK_ENTITY_SIS.get(), blockPos, blockState);
     }
 
+    private static Station getStationWithCorners(long stationId) {
+        Station station = MtrUtil.getStationById(stationId);
+        return AreaBase.validCorners(station) ? station : null;
+    }
+
     @Override
     public void whenLoading() {
         // whenLoading 可能改变 shape，清除形状缓存使 setShape 重新计算
@@ -69,7 +76,7 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
         // 服务端不需要加载模型和绘制
         if (level == null || !level.isClientSide) return;
 
-        var rawStn = MtrUtil.getStationById(Long.parseLong(getExtraConfig("station", "0")));
+        var rawStn = getStationWithCorners(Long.parseLong(getExtraConfig("station", "0")));
         stn = (rawStn == null) ? new LocalStation() : new LocalStation(rawStn);
 
         try {
@@ -145,7 +152,7 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
 
         // 如果车站数据还未加载完成，节流重试
         if (stn != null && stn.getRaw() == null && firstInit && shouldRetryInit()) {
-            var rawStn = MtrUtil.getStationById(Long.parseLong(getExtraConfig("station", "0")));
+            var rawStn = getStationWithCorners(Long.parseLong(getExtraConfig("station", "0")));
             if (rawStn != null) {
                 stn = new LocalStation(rawStn);
                 resetDrawingState();
@@ -159,7 +166,7 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
             }
         } else if (content != null && stn != null && stn.getRaw() != null && shouldCheckDataChange()) {
             // 检测外部 MTR 数据变更（如车站名称、路线颜色），使用独立长间隔（2秒）
-            var rawStn = MtrUtil.getStationById(Long.parseLong(getExtraConfig("station", "0")));
+            var rawStn = getStationWithCorners(Long.parseLong(getExtraConfig("station", "0")));
             if (rawStn != null) {
                 String oldName = stn.name;
                 int oldColor = stn.color;
@@ -261,7 +268,7 @@ public class BlockEntitySis extends BaseDisplayBlockEntity {
                                 if (l != null && !l.isEmpty()) {
                                     Long stationId = l.get(0);
                                     extraConfigs.put("station", stationId.toString());
-                                    var rawStn = MtrUtil.getStationById(stationId);
+                                    var rawStn = getStationWithCorners(stationId);
                                     if (rawStn == null) stn = new LocalStation();
                                     else stn = new LocalStation(rawStn);
                                     resetDrawingState();
