@@ -2,6 +2,7 @@ package com.fangsu.mixin;
 
 import com.fangsu.mtr.RouteStopStatus;
 import com.fangsu.mtr.RouteServices;
+import com.fangsu.mtr.StationOpening;
 import org.mtr.core.data.Route;
 import org.mtr.libraries.it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -40,11 +41,10 @@ public abstract class RouteStopDepotMixin {
     @WrapOperation(method = "writeRouteCache",
             at = @At(value = "FIELD", target = "Lorg/mtr/core/data/RoutePlatformData;platform:Lorg/mtr/core/data/Platform;"))
     private Platform fangsu$copyPathStop(RoutePlatformData stop, Operation<Platform> original) {
-        final var status = RouteStopStatus.of(stop);
         final Platform platform = original.call(stop);
-        if (platform == null || status == RouteStopStatus.NORMAL) {
-            return platform;
-        }
+        if (platform == null) return null;
+        final var status = StationOpening.pathStatus(stop, platform.area);
+        if (status == RouteStopStatus.NORMAL) return platform;
         final var data = ((DepotDataAccess) (Object) this).fangsu$getData();
         final var metadata = ServiceStop.get(stop);
         final var bypass = metadata == null ? null : metadata.bypass();

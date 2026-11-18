@@ -1,6 +1,7 @@
 package com.fangsu.mixin;
 
 import com.fangsu.mappings.ComponentHelper;
+import com.fangsu.mtr.DrawableRoute;
 import com.fangsu.mtr.RouteStopStatus;
 import com.fangsu.mtr.RouteEditorAccess;
 import com.fangsu.mtr.RouteServices;
@@ -49,6 +50,13 @@ public abstract class EditRouteServiceMixin {
             }
             return;
         }
+        if (fangsu$parentRoute.getRoutePlatforms().size() >= 2 && MinecraftClientData.getDashboardInstance().routes.stream().noneMatch(route -> {
+            final var child = RouteServices.relation(route);
+            return child != null && child.parentRoute() == fangsu$parentRoute.getId();
+        })) {
+            fangsu$addAction(((ScreenExtension) (Object) this).getWidthMapped() - 120, 108,
+                    "ui.fangsu.route.import", this::fangsu$chooseImportType);
+        }
         final String direction = TextUtil.getExtraParts(fangsu$parentRoute.getName());
         if (direction.isEmpty() || direction.contains("||") || fangsu$parentRoute.getRoutePlatforms().size() < 2) {
             return;
@@ -70,6 +78,56 @@ public abstract class EditRouteServiceMixin {
         //#endif
         screen.addChild(new ClickableWidget(button));
     }
+
+    @Unique
+    private void fangsu$chooseImportType() {
+        final var client = Minecraft.getInstance();
+        final var editor = client.screen;
+        final var types = java.util.List.of(
+                new ConfigChoiceScreen.Choice("express", ComponentHelper.translatable("ui.fangsu.route.import_express").getString()),
+                new ConfigChoiceScreen.Choice("short_turn", ComponentHelper.translatable("ui.fangsu.route.import_short_turn").getString()));
+        client.setScreen(new ConfigChoiceScreen(editor, "ui.fangsu.route.import", types,
+                value -> fangsu$chooseImportParent("express".equals(value))));
+    }
+
+    @Unique
+    private void fangsu$chooseImportParent(boolean express) {
+        final var client = Minecraft.getInstance();
+        final var typeScreen = client.screen;
+        final var candidates = new java.util.LinkedHashMap<String, Route>();
+        final var choices = new ArrayList<ConfigChoiceScreen.Choice>();
+        for (final var route : MinecraftClientData.getDashboardInstance().routes) {
+            if (route.getId() != fangsu$parentRoute.getId() && route.getTransportMode() == fangsu$parentRoute.getTransportMode()
+                    && RouteServices.matchImport(route, fangsu$parentRoute, this::fangsu$stationForPlatform) != null) {
+                final String id = Long.toUnsignedString(route.getId());
+                candidates.put(id, route);
+                choices.add(new ConfigChoiceScreen.Choice(id, route.getName().replace("||", " · ").replace('|', ' ')));
+            }
+        }
+        choices.sort(java.util.Comparator.comparing(ConfigChoiceScreen.Choice::label, String.CASE_INSENSITIVE_ORDER));
+        final String title = choices.isEmpty() ? "ui.fangsu.route.import_no_parent" : "ui.fangsu.route.import_parent";
+        client.setScreen(new ConfigChoiceScreen(typeScreen, title, choices,
+                id -> fangsu$importRoute(candidates.get(id), express)));
+    }
+
+    @Unique
+    private long fangsu$stationForPlatform(long platformId) {
+        final var station = MinecraftClientData.getDashboardInstance().platformIdMap.get(platformId);
+        return station == null ? 0 : station.area == null ? 0 : station.area.getId();
+    }
+
+    @Unique
+    private void fangsu$importRoute(Route source, boolean express) {
+        if (source == null || RouteServices.matchImport(source, fangsu$parentRoute, this::fangsu$stationForPlatform) == null) return;
+        fangsu$saveParent();
+        if (!RouteServices.importService(source, fangsu$parentRoute, express, this::fangsu$stationForPlatform)) return;
+        DrawableRoute.clearCache();
+        final var data = MinecraftClientData.getDashboardInstance();
+        final var request = new org.mtr.core.operation.UpdateDataRequest(data).addRoute(source).addRoute(fangsu$parentRoute);
+        org.mtr.mod.InitClient.REGISTRY_CLIENT.sendPacketToServer(new org.mtr.mod.packet.PacketUpdateData(request));
+        fangsu$openDashboard(fangsu$parentRoute, false);
+    }
+
 
     @Unique
     private void fangsu$configure(boolean shortTurn) {

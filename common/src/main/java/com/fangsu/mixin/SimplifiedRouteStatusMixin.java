@@ -1,6 +1,8 @@
 package com.fangsu.mixin;
 
 import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.mtr.ServiceStop;
+import com.fangsu.mtr.StationOpening;
 import org.mtr.core.data.Route;
 import org.mtr.core.data.SimplifiedRoute;
 import org.spongepowered.asm.mixin.Mixin;
@@ -14,8 +16,11 @@ public abstract class SimplifiedRouteStatusMixin {
     private void fangsu$copyStopStatus(Route route, CallbackInfo ci) {
         final var simplified = ((SimplifiedRoute) (Object) this).getPlatforms();
         for (int index = 0; index < Math.min(simplified.size(), route.getRoutePlatforms().size()); index++) {
-            final var status = RouteStopStatus.of(route.getRoutePlatforms().get(index));
-            ((RouteStopStatus.Holder) (Object) simplified.get(index)).fangsu$setStopStatus(status);
+            final var stop = route.getRoutePlatforms().get(index);
+            final var status = StationOpening.displayStatus(stop, stop.platform == null ? null : stop.platform.area);
+            final var entry = simplified.get(index);
+            RouteStopStatus.set(entry, status);
+            ServiceStop.copyDisplayLink(stop, entry);
         }
     }
 }

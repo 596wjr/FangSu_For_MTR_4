@@ -1,6 +1,7 @@
 package com.fangsu.mixin;
 
 import com.fangsu.ui.DashboardRoutePanel;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.mtr.mod.screen.DashboardList;
@@ -32,6 +33,17 @@ public abstract class DashboardRouteListMixin {
             public void text(Component label, int x, int y, int color) {
                 final var styled = label.copy().withStyle(style -> style.getColor() == null ? style.withColor(color & 0xFFFFFF) : style);
                 graphics.drawText(new MutableText(styled), x, y, color, false, GraphicsHolder.getDefaultLight());
+            }
+
+            public void clip(int left, int top, int right, int bottom, Runnable draw) {
+                final double scale = window.getGuiScale();
+                RenderSystem.enableScissor((int) (left * scale), window.getHeight() - (int) (bottom * scale),
+                        (int) (right * scale) - (int) (left * scale), (int) (bottom * scale) - (int) (top * scale));
+                try {
+                    draw.run();
+                } finally {
+                    RenderSystem.disableScissor();
+                }
             }
 
             public void icon(DashboardRoutePanel.Icon icon, int x, int y, boolean hovered) {

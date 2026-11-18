@@ -3,6 +3,7 @@ package com.fangsu.mixin;
 import com.fangsu.mtr.RouteBypass;
 import com.fangsu.mtr.RouteStopStatus;
 import com.fangsu.mtr.ServiceStop;
+import com.fangsu.mtr.StationOpening;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -28,7 +29,8 @@ public abstract class JcmRouteStopsPacketMixin {
             @Local VehicleDataCache.SimplifiedStopsData response) {
         final var path = original.call(extra);
         if (depot.routes.stream().noneMatch(route -> route.getRoutePlatforms().stream()
-                .anyMatch(stop -> RouteStopStatus.of(stop) != RouteStopStatus.NORMAL))) {
+                .anyMatch(stop -> StationOpening.displayStatus(stop, stop.platform == null ? null : stop.platform.area)
+                        != RouteStopStatus.NORMAL))) {
             return path;
         }
 
@@ -62,7 +64,8 @@ public abstract class JcmRouteStopsPacketMixin {
                 }
 
                 final Integer pathIndex = arrivals.get(waypointIndex);
-                if (status != RouteStopStatus.NORMAL || waypointIndex == lastAddedWaypoint || pathIndex == null) continue;
+                if (StationOpening.displayStatus(stop, platform.area) != RouteStopStatus.NORMAL
+                        || waypointIndex == lastAddedWaypoint || pathIndex == null) continue;
                 final PathData arrival = path.get(pathIndex);
                 if (arrival.getSavedRailBaseId() != platformId) continue;
                 final long stationId = platform.area == null ? 0 : platform.area.getId();

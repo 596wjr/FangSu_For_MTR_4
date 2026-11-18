@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 补充线路客户端缓存与 JCM 公开数据合并桥，保留旧类名和查询方法以兼容现有调用。
@@ -63,6 +64,17 @@ public final class HiddenRoutesClient {
 		if (requested.isEmpty()) return;
 		HiddenRoutesPackets.sendHiddenRoutesRequestC2S(requested);
 		requested.forEach(id -> nextRequests.put(id, now + 5_000_000_000L));
+	}
+
+	public static void refreshRoutes(Set<Long> routeIds, Set<Long> stationIds) {
+		final var affected = new ArrayList<Long>();
+		hiddenRoutes.forEach((id, route) -> {
+			if (routeIds.contains(id) || !stationIds.isEmpty()
+					&& route.getPlatforms().stream().anyMatch(stop -> stationIds.contains(stop.getStationId()))) {
+				affected.add(id);
+			}
+		});
+		if (!affected.isEmpty()) HiddenRoutesPackets.sendHiddenRoutesRequestC2S(affected);
 	}
 
 	/** 客户端初始化时探测 mtrscripting 是否加载，缓存反射句柄 */

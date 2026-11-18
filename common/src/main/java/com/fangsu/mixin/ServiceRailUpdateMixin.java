@@ -5,6 +5,7 @@ import com.fangsu.mtr.RouteStopStatus;
 import com.fangsu.mtr.RouteServices;
 import com.fangsu.mtr.RouteBypass;
 import com.fangsu.mtr.ServiceStop;
+import com.fangsu.mtr.StationOpening;
 import com.fangsu.network.ServiceRailPackets;
 import org.mtr.core.data.Data;
 import org.mtr.core.data.Depot;
@@ -49,6 +50,13 @@ public abstract class ServiceRailUpdateMixin {
             simulator.run(() -> ServiceRailPackets.regenerate(simulator, changed));
         }
         final var changedRoutes = new HashSet<Long>();
+        final var changedStations = new HashSet<Long>();
+        for (final var station : access.fangsu$getStations()) {
+            if (StationOpening.isDeferred(station) != StationOpening.isDeferred(data.stationIdMap.get(station.getId()))) {
+                changedStations.add(station.getId());
+            }
+        }
+        fangsu$collectStationRoutes(changedStations, changedRoutes);
         final var submitted = new LinkedHashMap<Long, Route>();
         access.fangsu$getRoutes().forEach(route -> submitted.put(route.getId(), route));
         for (final var route : List.copyOf(submitted.values())) {
@@ -79,8 +87,9 @@ public abstract class ServiceRailUpdateMixin {
                 changedRoutes.add(route.getId());
             }
         }
-        if (!changedRoutes.isEmpty()) {
+        if (!changedRoutes.isEmpty() || !changedStations.isEmpty()) {
             simulator.run(() -> {
+                fangsu$collectStationRoutes(changedStations, changedRoutes);
                 final var depots = new ObjectArrayList<Depot>();
                 for (final var depot : simulator.depots) {
                     if (depot.getRouteIds().stream().anyMatch(changedRoutes::contains)) {
@@ -91,6 +100,15 @@ public abstract class ServiceRailUpdateMixin {
                     Depot.generateDepots(simulator, depots);
                 }
             });
+        }
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private void fangsu$collectStationRoutes(HashSet<Long> stations, HashSet<Long> routes) {
+        if (stations.isEmpty()) return;
+        for (final var route : data.routes) {
+            if (route.getRoutePlatforms().stream().anyMatch(stop -> stop.platform != null && stop.platform.area != null
+                    && stations.contains(stop.platform.area.getId()))) routes.add(route.getId());
         }
     }
 

@@ -1,14 +1,23 @@
 package com.fangsu.mixin;
 
+import com.fangsu.mtr.StationOpening;
+import com.fangsu.network.HiddenRoutesClient;
 import com.fangsu.utils.PathGenerationStatusManager;
+import net.minecraft.client.Minecraft;
 import org.mtr.core.data.Data;
+import org.mtr.core.data.Route;
+import org.mtr.core.data.Station;
 import org.mtr.core.operation.UpdateDataResponse;
+import org.mtr.libraries.it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import org.mtr.mod.client.MinecraftClientData;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.HashSet;
 
 /**
  * 路径生成完成回执：服务端生成完成后通过 {@code PacketUpdateData} 把更新的车厂
@@ -31,6 +40,26 @@ public abstract class UpdateDataResponseMixin {
     @Shadow
     @Final
     private Data data;
+
+    @Shadow abstract ObjectArrayList<Station> getStations();
+    @Shadow abstract ObjectArrayList<Route> getRoutes();
+
+    @Inject(method = "write", at = @At("HEAD"))
+    private void fangsu$refreshSupplementalRoutes(CallbackInfo ci) {
+        if (data != MinecraftClientData.getInstance()) return;
+        final var changedStations = new HashSet<Long>();
+        for (final var station : getStations()) {
+            final var previous = data.stationIdMap.get(station.getId());
+            if (previous == null || StationOpening.isDeferred(previous) != StationOpening.isDeferred(station)) {
+                changedStations.add(station.getId());
+            }
+        }
+        final var changedRoutes = new HashSet<Long>();
+        for (final var route : getRoutes()) changedRoutes.add(route.getId());
+        if (!changedStations.isEmpty() || !changedRoutes.isEmpty()) {
+            Minecraft.getInstance().execute(() -> HiddenRoutesClient.refreshRoutes(changedRoutes, changedStations));
+        }
+    }
 
     @Inject(method = "write", at = @At("TAIL"))
     private void fangsu$checkGenerationFinished(CallbackInfo ci) {

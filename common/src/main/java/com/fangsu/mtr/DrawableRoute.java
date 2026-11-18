@@ -176,6 +176,19 @@ public class DrawableRoute {
         final DrawableRoute cached = getCachedRoute(route.id);
         if (cached != null) return cached;
 
+        final long parentId = route.parentRouteId();
+        if (parentId != 0) {
+            final LocalRoute parent = MtrUtil.getRouteById(parentId);
+            final int[] indices = parent == null ? null : matchParentStops(route, parent);
+            if (indices != null && parent.asRouteDetail().stationDetails.size() == parent.platformIds.size()) {
+                return cacheRoute(route, parent, drawService(route, parent, indices, false));
+            }
+            if (parent == null) {
+                net.minecraft.client.Minecraft.getInstance().execute(() ->
+                        com.fangsu.network.HiddenRoutesClient.requestMissingRoutes(parentId));
+            }
+        }
+
         List<LocalRoute> candidates = MtrUtil.getRouteByName(route.name);
         if (candidates == null) {
             candidates = Collections.emptyList();
@@ -199,11 +212,17 @@ public class DrawableRoute {
             }
         }
 
-        final var display = longestRoute.asRouteDetail();
-        if (indices == null) {
-            return cacheRoute(route, longestRoute, getDrawableRoute(display));
+        if (indices == null || longestRoute.asRouteDetail().stationDetails.size() != longestRoute.platformIds.size()) {
+            final var result = getDrawableRoute(route.asRouteDetail());
+            return parentId == 0 ? cacheRoute(route, route, result) : result;
         }
+        // 显式母线的站序还没同步时保留原先的同名线路图，等同步后重新对齐。
+        final var result = drawService(route, longestRoute, indices, reversed);
+        return parentId == 0 ? cacheRoute(route, longestRoute, result) : result;
+    }
 
+    private static DrawableRoute drawService(LocalRoute route, LocalRoute longestRoute, int[] indices, boolean reversed) {
+        final var display = longestRoute.asRouteDetail();
         final var stations = new ArrayList<>(display.stationDetails);
         int displayIndex = indices[0];
         final int step = reversed ? -1 : 1;
@@ -226,9 +245,26 @@ public class DrawableRoute {
         if (reversed) {
             for (int i = 0; i < indices.length; i++) indices[i] = stations.size() - 1 - indices[i];
         }
-        final var result = new DrawableRoute(chart.routeName, chart.routeColor, chart.stations, chart.circularState,
+        return new DrawableRoute(chart.routeName, chart.routeColor, chart.stations, chart.circularState,
                 chart.beginIndexInclusive, chart.endIndexInclusive, indices);
-        return cacheRoute(route, longestRoute, result);
+    }
+
+    /** 站台替换不改变站点身份，环线重复经过同一座车站时也按对应的母线条目对齐。 */
+    private static int[] matchParentStops(LocalRoute service, LocalRoute parent) {
+        final int[] result = new int[service.platformIds.size()];
+        int parentIndex = 0;
+        for (int i = 0; i < result.length; i++) {
+            final var linked = service.platformIds.get(i).serviceStop;
+            if (linked == null || linked.parentRoute() != parent.id || linked.parentStop() == null) return null;
+            while (parentIndex < parent.platformIds.size()) {
+                final var candidate = parent.platformIds.get(parentIndex).serviceStop;
+                if (candidate != null && linked.parentStop().equals(candidate.id())) break;
+                parentIndex++;
+            }
+            if (parentIndex >= parent.platformIds.size()) return null;
+            result[i] = parentIndex++;
+        }
+        return result;
     }
 
     /** 保留每个站台出现的位置，长短交路中间有缺站或同站台出现两次时也能对齐。 */

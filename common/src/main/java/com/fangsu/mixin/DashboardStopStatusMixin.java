@@ -18,6 +18,7 @@ import com.fangsu.mtr.RouteEditorAccess;
 import com.fangsu.mtr.RouteOverview;
 import com.fangsu.mtr.RouteServices;
 import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.mtr.StationOpening;
 import com.fangsu.mtr.ServiceStop;
 import com.fangsu.ui.DashboardRouteGroupScreen;
 import net.minecraft.client.Minecraft;
@@ -95,7 +96,7 @@ public abstract class DashboardStopStatusMixin extends ScreenExtension implement
                 final var request = new UpdateDataRequest(MinecraftClientData.getDashboardInstance());
                 for (final var member : row.routes()) {
                     final var route = member.value();
-                    if (name != null) {
+                    if (name != null && member.groupName().equals(row.label())) {
                         route.setName(name + (member.branchName().isEmpty() ? "" : "||" + member.branchName()));
                     }
                     if (color != null) {
@@ -128,7 +129,7 @@ public abstract class DashboardStopStatusMixin extends ScreenExtension implement
             final var station = stop.platform == null ? null : stop.platform.area;
             final var metadata = ServiceStop.get(stop);
             stops.add(new RouteOverview.Stop(station == null ? 0 : station.getId(),
-                    station == null ? "?" : station.getName(), RouteStopStatus.of(stop),
+                    station == null ? "?" : station.getName(), StationOpening.displayStatus(stop, station),
                     metadata == null ? null : metadata.id(), metadata == null ? null : metadata.parentStop()));
         }
         return new RouteOverview.Line(member.id(), member.parentId(),
@@ -257,14 +258,14 @@ public abstract class DashboardStopStatusMixin extends ScreenExtension implement
         for (int index = 0; index < entries.size(); index++) {
             final int row = index;
             final var stop = entries.get(index);
-            final var status = RouteStopStatus.of(stop);
             final var platform = stop.platform;
             final var station = platform == null ? null : platform.area;
+            final var status = StationOpening.displayStatus(stop, station);
             final String name = station == null ? "?" : station.getName().replace('|', ' ');
             final var metadata = ServiceStop.get(stop);
             final var settings = metadata == null || metadata.bypass() == null ? null
                     : RouteBypass.settings(MinecraftClientData.getDashboardInstance(), metadata.bypass());
-            final var number = status == RouteStopStatus.SKIPPED
+            final var number = RouteStopStatus.of(stop) == RouteStopStatus.SKIPPED
                     ? ComponentHelper.translatable("ui.fangsu.route.bypass_stop", settings == null ? "?" : settings.number())
                     : ComponentHelper.literal(platform == null ? "?" : platform.getName());
             final String destination = java.util.Objects.toString(stop.getCustomDestination(), "");
@@ -299,7 +300,8 @@ public abstract class DashboardStopStatusMixin extends ScreenExtension implement
             final boolean canEditStop = canEdit && fangsu$replaceIndex < 0 && !editingDestination;
             rows.add(new DashboardRoutePanel.Row(title, subtitle, 1, status == RouteStopStatus.NORMAL ? editingRoute.getColor() : 0x818B96,
                     true, actions, canEditStop ? () -> fangsu$startDestination(row) : null,
-                    canEditStop && status != RouteStopStatus.SKIPPED ? () -> fangsu$toggleStop(row) : null));
+                    canEditStop && !StationOpening.isDeferred(station) && status != RouteStopStatus.SKIPPED
+                            ? () -> fangsu$toggleStop(row) : null));
         }
         return rows;
     }
@@ -329,7 +331,9 @@ public abstract class DashboardStopStatusMixin extends ScreenExtension implement
                 final boolean expressStops = RouteOverview.Diagram.stops(diagram.upExpress(), stop.up())
                         || RouteOverview.Diagram.stops(diagram.downExpress(), stop.down());
                 final var station = stop.up() == null ? stop.down() : stop.up();
-                rows.add(new DashboardRoutePanel.Row(ComponentHelper.literal(station.name().replace('|', ' ')), null, 1,
+                final var title = ComponentHelper.literal(station.name().replace('|', ' ')).withStyle(style ->
+                        style.withStrikethrough(!localStops && !expressStops && station.status() == RouteStopStatus.DISABLED));
+                rows.add(new DashboardRoutePanel.Row(title, null, 1,
                         diagram.up().color(), false, List.of(), null, null,
                         new DashboardRoutePanel.DiagramStop(express, localStops, expressStops, index == 0, index + 1 == diagram.rows().size())));
             }

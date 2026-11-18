@@ -181,12 +181,15 @@ public class TrainStatus {
             route = stopToLocalRoute(allPlatforms.get(allPlatforms.size() - 1));
             nextRoutePassengerIndex = route == null ? -1 : route.platformIds.size();
         }
+        final boolean noPassengerStops = route != null && !route.platformIds.isEmpty()
+                && route.platformIds.stream().noneMatch(stop -> stop.stopStatus == RouteStopStatus.NORMAL);
+        if (noPassengerStops) nextRoutePassengerIndex = route.platformIds.size();
 
         this.currentRoute = route;
         final long nextPlatformId = route != null && nextRoutePassengerIndex >= 0
                 && nextRoutePassengerIndex < route.platformIds.size()
                 ? route.platformIds.get(nextRoutePassengerIndex).platformId : physicalId;
-        final double nextStopDistance = physicalStop != null ? physicalStop.getEndDistance()
+        final double nextStopDistance = physicalStop != null && physicalId == nextPlatformId ? physicalStop.getEndDistance()
                 : next != null && next.distance >= 0 && reportedId == nextPlatformId ? next.distance : Double.NaN;
 
         // ===== 逐车节开门方向（LCD 可直接读，见 DESIGN 第 8 节）=====
@@ -228,7 +231,7 @@ public class TrainStatus {
 
         this.isOnRoute = train.getMtrVehicle().getIsOnRoute();
         this.isReverse = train.getMtrVehicle().getReversed();
-        this.trainStatus = calcTrainStatus(progress, nextStopDistance, pastLastStop);
+        this.trainStatus = calcTrainStatus(progress, nextStopDistance, pastLastStop || noPassengerStops);
         updateDoorState(train.getDoorValue());
     }
 

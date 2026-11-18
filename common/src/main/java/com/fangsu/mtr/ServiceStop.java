@@ -24,6 +24,11 @@ public record ServiceStop(UUID id, long parentRoute, UUID parentStop, boolean ex
         ((Holder) entry).fangsu$setServiceStop(stop);
     }
 
+    public static void copyDisplayLink(Object source, Object destination) {
+        final var link = get(source);
+        if (link != null) set(destination, link.override(false, null, null));
+    }
+
     public static ServiceStop ensure(Object entry) {
         var stop = get(entry);
         if (stop == null) {

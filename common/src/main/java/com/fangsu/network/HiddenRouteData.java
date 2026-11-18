@@ -1,5 +1,8 @@
 package com.fangsu.network;
 
+import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.mtr.ServiceStop;
+import com.fangsu.mtr.StationOpening;
 import org.mtr.core.data.Platform;
 import org.mtr.core.data.Route;
 import org.mtr.core.data.RoutePlatformData;
@@ -70,6 +73,8 @@ public final class HiddenRouteData {
 					station == null ? 0 : station.getId(),
 					route.getDestination(i),
 					station == null ? "" : station.getName());
+			RouteStopStatus.set(srp, StationOpening.displayStatus(rpd, station));
+			ServiceStop.copyDisplayLink(rpd, srp);
 			final JsonObject platformJson = new JsonObject();
 			srp.serializeFullData(new JsonWriter(platformJson));
 			// 换乘颜色：复刻 TSC SimplifiedRoute 构造器的 addInterchangeRoutes，只收集非隐藏线路。

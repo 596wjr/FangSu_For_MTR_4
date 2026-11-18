@@ -1,6 +1,7 @@
 package com.fangsu.mixin;
 
 import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.mtr.ServiceStop;
 import org.mtr.core.generated.data.SimplifiedRoutePlatformSchema;
 import org.mtr.core.serializer.ReaderBase;
 import org.mtr.core.serializer.WriterBase;
@@ -11,12 +12,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = SimplifiedRoutePlatformSchema.class, remap = false)
-public abstract class SimplifiedRoutePlatformStatusMixin implements RouteStopStatus.Holder {
+public abstract class SimplifiedRoutePlatformStatusMixin implements RouteStopStatus.Holder, ServiceStop.Holder {
     @Unique private static final String FANGSU_STOP_STATUS = "fangsu_stop_status";
     @Unique private RouteStopStatus fangsu$stopStatus;
+    @Unique private ServiceStop fangsu$serviceStop;
 
     @Inject(method = "<init>(Lorg/mtr/core/serializer/ReaderBase;)V", at = @At("RETURN"))
     private void fangsu$readStatus(ReaderBase reader, CallbackInfo ci) {
+        fangsu$serviceStop = ServiceStop.decode(reader.getString(ServiceStop.KEY, ""));
         final String status = reader.getString(FANGSU_STOP_STATUS, "");
         fangsu$stopStatus = RouteStopStatus.NORMAL;
         if (!status.isEmpty()) {
@@ -30,6 +33,7 @@ public abstract class SimplifiedRoutePlatformStatusMixin implements RouteStopSta
 
     @Inject(method = "serializeData", at = @At("RETURN"))
     private void fangsu$writeStatus(WriterBase writer, CallbackInfo ci) {
+        if (fangsu$serviceStop != null) writer.writeString(ServiceStop.KEY, fangsu$serviceStop.encode());
         if (fangsu$getStopStatus() != RouteStopStatus.NORMAL) {
             writer.writeString(FANGSU_STOP_STATUS, fangsu$stopStatus.name());
         }
@@ -43,5 +47,15 @@ public abstract class SimplifiedRoutePlatformStatusMixin implements RouteStopSta
     @Override
     public void fangsu$setStopStatus(RouteStopStatus status) {
         fangsu$stopStatus = status;
+    }
+
+    @Override
+    public ServiceStop fangsu$getServiceStop() {
+        return fangsu$serviceStop;
+    }
+
+    @Override
+    public void fangsu$setServiceStop(ServiceStop stop) {
+        fangsu$serviceStop = stop;
     }
 }

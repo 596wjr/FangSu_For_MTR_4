@@ -39,8 +39,8 @@ public class LocalRoute {
         this.id = route.getId();
         this.color = route.getColor();
         for (final RoutePlatformData p : route.getRoutePlatforms()) {
-            this.platformIds.add(new RoutePlatform(p.platform != null ? p.platform.getId() : 0L,
-                    p.getCustomDestination(), RouteStopStatus.of(p)));
+            this.platformIds.add(new RoutePlatform(RouteServices.platformId(p), p.getCustomDestination(),
+                    StationOpening.displayStatus(p, p.platform == null ? null : p.platform.area), ServiceStop.get(p)));
         }
     }
 
@@ -60,7 +60,7 @@ public class LocalRoute {
         this.id = route.getId();
         this.color = route.getColor();
         for (final SimplifiedRoutePlatform p : route.getPlatforms()) {
-            this.platformIds.add(new RoutePlatform(p.getPlatformId(), p.getDestination(), RouteStopStatus.of(p)));
+            this.platformIds.add(new RoutePlatform(p.getPlatformId(), p.getDestination(), RouteStopStatus.of(p), ServiceStop.get(p)));
         }
     }
 
@@ -81,15 +81,21 @@ public class LocalRoute {
         public String customDestination;
         public final long platformId;
         public final RouteStopStatus stopStatus;
+        final ServiceStop serviceStop;
 
         public RoutePlatform(long platformId, String customDestination) {
             this(platformId, customDestination, RouteStopStatus.NORMAL);
         }
 
         public RoutePlatform(long platformId, String customDestination, RouteStopStatus stopStatus) {
+            this(platformId, customDestination, stopStatus, null);
+        }
+
+        private RoutePlatform(long platformId, String customDestination, RouteStopStatus stopStatus, ServiceStop serviceStop) {
             this.platformId = platformId;
             this.customDestination = customDestination;
             this.stopStatus = stopStatus;
+            this.serviceStop = serviceStop;
         }
 
         @Override
@@ -104,6 +110,15 @@ public class LocalRoute {
             }
             return false;
         }
+    }
+
+    long parentRouteId() {
+        for (final var platform : platformIds) {
+            if (platform.serviceStop != null && platform.serviceStop.parentStop() != null) {
+                return platform.serviceStop.parentRoute();
+            }
+        }
+        return 0;
     }
 
     public int getPlatformIdIndex(long platformId) {

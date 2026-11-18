@@ -1,6 +1,7 @@
 package com.fangsu.mixin;
 
 import com.fangsu.mtr.RouteStopStatus;
+import com.fangsu.mtr.StationOpening;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -20,6 +21,8 @@ public abstract class RouteStopTimesMixin {
     )
     private boolean fangsu$recordOnlyPassengerStops(ObjectArrayList<Object> stops, Object value, Operation<Boolean> original,
                                                    @Local Route route, @Local(index = 11) int index) {
-        return RouteStopStatus.of(route.getRoutePlatforms().get(index)) == RouteStopStatus.NORMAL && original.call(stops, value);
+        final var stop = route.getRoutePlatforms().get(index);
+        return StationOpening.displayStatus(stop, stop.platform == null ? null : stop.platform.area) == RouteStopStatus.NORMAL
+                && original.call(stops, value);
     }
 }
