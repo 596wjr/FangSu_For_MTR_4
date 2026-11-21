@@ -1,5 +1,6 @@
 package com.fangsu.blocks;
 
+import com.fangsu.mappings.ComponentHelper;
 import com.fangsu.network.ModNetwork;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
@@ -45,7 +46,7 @@ public class BlockTicketMachine extends Block implements net.minecraft.world.lev
                 //#else
                 //$$ net.minecraft.world.level.material.Material.METAL)
                 //#endif
-                .strength(2).noOcclusion());
+                .strength(2).noOcclusion().dynamicShape());
         ticketMachineKind = kind;
         registerDefaultState(this.defaultBlockState().setValue(CUSTOM_MODEL, true).setValue(FACING, Direction.NORTH).setValue(HALF, DoubleBlockHalf.LOWER));
     }
@@ -151,8 +152,8 @@ public class BlockTicketMachine extends Block implements net.minecraft.world.lev
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
             BlockPos base = state.getValue(HALF) == DoubleBlockHalf.UPPER ? pos.below() : pos;
-            try { com.fangsu.ticketSystem.v2.TicketPackets.open(serverPlayer,base); }
-            catch(RuntimeException ex) { player.displayClientMessage(ComponentHelper.literal("票务设备打开失败："+ex.getMessage()),true); }
+            try { com.fangsu.ticketSystem.v2.TicketPackets.open(serverPlayer,base,player.getItemInHand(hand).is(com.fangsu.items.ModItems.ITEM_WRENCH.get())); }
+            catch(RuntimeException ex) { player.displayClientMessage(ComponentHelper.translatable("msg.fangsu.ticketing.open_failed",com.fangsu.ticketSystem.v2.TicketMessages.error(ex)),true); }
         }
         return InteractionResult.SUCCESS;
     }
