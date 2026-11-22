@@ -4,18 +4,26 @@ import java.util.*;
 public final class TicketRouteChoices {
     public record RouteChoice(String name,int color,Set<Long> stations) { }
     public static List<RouteChoice> load(){
-        List<RouteChoice> result=new ArrayList<>();
+        Map<String, RouteChoice> grouped = new LinkedHashMap<>();
         var data=org.mtr.mod.client.MinecraftClientData.getInstance();
         if(!data.simplifiedRoutes.isEmpty())for(var route:data.simplifiedRoutes){
             Set<Long> stations=new LinkedHashSet<>();for(var platform:route.getPlatforms())stations.add(platform.getStationId());
-            result.add(new RouteChoice(com.fangsu.scripting.TextUtil.getNonExtraParts(route.getName()),route.getColor(),stations));
+            merge(grouped, route.getName(), route.getColor(), stations);
         }else for(var route:data.routes){
             Set<Long> stations=new LinkedHashSet<>();for(var platform:route.getRoutePlatforms()){
                 var p=platform.getPlatform();if(p!=null&&p.area!=null)stations.add(p.area.getId());
             }
-            result.add(new RouteChoice(com.fangsu.scripting.TextUtil.getNonExtraParts(route.getName()),route.getColor(),stations));
+            merge(grouped, route.getName(), route.getColor(), stations);
         }
-        return result;
+        return grouped.values().stream()
+                .sorted(Comparator.comparing(RouteChoice::name).thenComparingInt(RouteChoice::color)).toList();
+    }
+
+    private static void merge(Map<String, RouteChoice> grouped, String name, int color, Set<Long> stations) {
+        String key = com.fangsu.scripting.TextUtil.getNonExtraParts(name);
+        if (key.isBlank()) return;
+        grouped.computeIfAbsent(key, ignored -> new RouteChoice(key, color, new LinkedHashSet<>()))
+                .stations().addAll(stations);
     }
     private TicketRouteChoices(){ }
 }

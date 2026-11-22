@@ -146,6 +146,16 @@ public class MtrTicketSystem {
     /**
      * 通过 Mixin 访问器获取 MTR4 服务端 Simulator，按位置查找车站。
      */
+    public static java.util.List<Station> allStations(Level world) {
+        java.util.List<Station> stations = new java.util.ArrayList<>();
+        try {
+            for (Object station : getStations(world)) stations.add((Station) station);
+        } catch (Exception ex) {
+            com.fangsu.Main.LOGGER.warn("Failed to list MTR stations: {}", ex.toString());
+        }
+        return stations;
+    }
+
     public static Station getStation(Level world, BlockPos pos) {
         try {
             final Position position = new Position(pos.getX(), pos.getY(), pos.getZ());

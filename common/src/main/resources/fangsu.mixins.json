@@ -32,6 +32,7 @@
     "TicketItemRendererMixin"
   ],
   "mixins": [
+    "TicketMachineChunkMixin",
     "ClientDataMixin",
     "DataMixin",
     "InitAccessorMixin",
