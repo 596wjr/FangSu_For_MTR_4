@@ -32,12 +32,21 @@ public record LcdPanelConfig(String id,
     /**
      * 一个 slot 的面板：一块 texArea + 一组已经算好 offset 的四边形。
      *
-     * @param name       slot 名（{@code lcd_door_left} 等），用于取 {@link Layout}，
-     *                   也是交给 {@code MtrLcd.draw} 的 {@code side} 参数
+     * @param name       slot 名（{@code lcd_door_left} 等），也是绘图的 {@code side} 参数
      * @param quads      四边形列表，每个元素是 4 个顶点 {@code {x,y,z}}（已应用 offsets）
      * @param renderType 渲染阶段；取 slot 的 {@code renderType} 字段，缺省为 <b>{@code light}</b>
+     * @param textureLayout 当前条目自己的纹理区域，允许多个同名部件各用一块区域
+     * @param carFilter  车厢白名单和黑名单
      */
-    public record Panel(String name, List<double[][]> quads, String renderType) {
+    public record Panel(String name, List<double[][]> quads, String renderType,
+                        Layout textureLayout, LcdCarFilter carFilter) {
+        public Panel(String name, List<double[][]> quads, String renderType) {
+            this(name, quads, renderType, null, null);
+        }
+
+        boolean matchesCar(int car, int totalCars) {
+            return carFilter == null || carFilter.matches(car, totalCars);
+        }
     }
 
     /** slot 未声明 renderType 时的默认渲染阶段（自发光，LCD 不依赖环境光） */
@@ -48,6 +57,10 @@ public record LcdPanelConfig(String id,
             if (layout.name().equals(name)) return layout;
         }
         return layouts.isEmpty() ? new Layout(name, 0, 0, texWidth, texHeight) : layouts.get(0);
+    }
+
+    Layout layoutFor(Panel panel) {
+        return panel.textureLayout() == null ? layout(panel.name()) : panel.textureLayout();
     }
 
     /**
@@ -78,11 +91,13 @@ public record LcdPanelConfig(String id,
                     final JsonObject slot = el.getAsJsonObject();
                     final String name = slot.has("name") ? slot.get("name").getAsString() : "slot" + layouts.size();
 
+                    Layout textureLayout = null;
                     if (slot.has("texArea")) {
                         final JsonArray area = slot.getAsJsonArray("texArea");
-                        layouts.add(new Layout(name,
+                        textureLayout = new Layout(name,
                                 area.get(0).getAsInt(), area.get(1).getAsInt(),
-                                area.get(2).getAsInt(), area.get(3).getAsInt()));
+                                area.get(2).getAsInt(), area.get(3).getAsInt());
+                        layouts.add(textureLayout);
                     }
 
                     final List<double[][]> quads = parseQuads(slot);
@@ -93,7 +108,7 @@ public record LcdPanelConfig(String id,
                     final String renderType = slot.has("renderType")
                             ? slot.get("renderType").getAsString()
                             : DEFAULT_RENDER_TYPE;
-                    panels.add(new Panel(name, quads, renderType));
+                    panels.add(new Panel(name, quads, renderType, textureLayout, new LcdCarFilter(slot)));
                 }
             }
         }

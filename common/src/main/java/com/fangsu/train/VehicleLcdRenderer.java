@@ -17,6 +17,7 @@ import org.mtr.mod.render.StoredMatrixTransformations;
 import java.awt.Graphics2D;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -105,9 +106,10 @@ public final class VehicleLcdRenderer {
     }
 
     /** 在车体提交处逐节匹配；混编列车不会套用第一节车的 LCD 配置。 */
-    public static void renderCar(VehicleExtension vehicle, int car, StoredMatrixTransformations transform, int light) {
+    public static void renderCar(VehicleExtension vehicle, int car, int totalCars,
+                                 StoredMatrixTransformations transform, int light) {
         if (vehicle == null || Minecraft.getInstance().level == null || reloading || RELOAD_REQUESTED.get()) return;
-        if (car < 0 || car >= vehicle.vehicleExtraData.immutableVehicleCars.size()) return;
+        if (car < 0 || car >= totalCars || car >= vehicle.vehicleExtraData.immutableVehicleCars.size()) return;
         final String type = vehicle.vehicleExtraData.immutableVehicleCars.get(car).getVehicleId();
         final LcdVehicleRegistry.LcdVehicleEntry entry = LcdVehicleRegistry.match(type);
         if (entry == null || FAILED_CONFIGS.contains(type)) return;
@@ -131,7 +133,10 @@ public final class VehicleLcdRenderer {
                     return;
                 }
             }
-            if (System.nanoTime() >= state.retryAfter) {
+            final boolean canRetry = System.nanoTime() >= state.retryAfter;
+            final LcdModel model = lcd.modelForCar(car, totalCars, canRetry);
+            if (model == null) return;
+            if (canRetry) {
                 try {
                     lcd.update(state);
                 } catch (Exception | LinkageError e) {
@@ -139,7 +144,7 @@ public final class VehicleLcdRenderer {
                     Main.LOGGER.error("[FangSu LCD] 车辆 {} 状态刷新失败，保留上一帧", vehicle.getId(), e);
                 }
             }
-            if (lcd.ready) lcd.model.queue(transform, light);
+            if (lcd.ready) model.queue(transform, light);
         } catch (Exception | LinkageError e) {
             state.retryAfter = System.nanoTime() + RETRY_INTERVAL_NS;
             Main.LOGGER.error("[FangSu LCD] 车辆 {} 提交失败，稍后重试", vehicle.getId(), e);
@@ -259,7 +264,9 @@ public final class VehicleLcdRenderer {
         final LcdInfo info;
         final LcdPanelConfig config;
         final LcdTexture texture;
-        final LcdModel model;
+        final Map<List<LcdPanelConfig.Panel>, LcdModel> models = new HashMap<>();
+        final Map<Integer, List<LcdPanelConfig.Panel>> panelsByCar = new HashMap<>();
+        int cachedTotalCars = -1;
         final LcdBase painter;
         final Map<String, Object> paintState = new HashMap<>();
         FutureTask<Void> painting;
@@ -275,14 +282,22 @@ public final class VehicleLcdRenderer {
             painter = LcdManager.getInstance().getLcd(info.id());
             if (!info.hasScript() && painter == null) throw new IllegalArgumentException("未知 LCD id: " + info.id());
             texture = new LcdTexture(config.texWidth(), config.texHeight());
-            try {
-                model = new LcdModel(config, texture.identifier());
-            } catch (RuntimeException | Error e) {
-                texture.close();
-                throw e;
-            }
             Main.LOGGER.info("[FangSu LCD] 创建车辆 {} 的车型 {}：{} 个面板，{}x{}", vehicleId, entry.vehicleId(),
                     config.panels().size(), config.texWidth(), config.texHeight());
+        }
+
+        LcdModel modelForCar(int car, int totalCars, boolean canRetry) {
+            if (cachedTotalCars != totalCars) {
+                panelsByCar.clear();
+                cachedTotalCars = totalCars;
+            }
+            // 按整列编组筛选；显示相同部件的车厢复用网格和纹理。
+            final List<LcdPanelConfig.Panel> panels = panelsByCar.computeIfAbsent(car, index ->
+                    config.panels().stream().filter(panel -> panel.matchesCar(index, totalCars)).toList());
+            if (panels.isEmpty()) return null;
+            return canRetry
+                    ? models.computeIfAbsent(panels, selected -> new LcdModel(config, selected, texture.identifier()))
+                    : models.get(panels);
         }
 
         void update(VehicleState vehicle) throws Exception {
@@ -322,7 +337,9 @@ public final class VehicleLcdRenderer {
             closed = true;
             // 不提前把运行中的绘图标记为完成；旧任务只能写旧的堆内图像，永不触及已释放的纹理。
             if (painting != null) painting.cancel(false);
-            model.close();
+            models.values().forEach(LcdModel::close);
+            models.clear();
+            panelsByCar.clear();
             texture.close();
         }
     }

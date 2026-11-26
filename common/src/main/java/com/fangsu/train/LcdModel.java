@@ -46,11 +46,11 @@ final class LcdModel implements AutoCloseable {
     private final OptimizedModelWrapper model;
     private boolean closed;
 
-    LcdModel(LcdPanelConfig config, Identifier texture) {
+    LcdModel(LcdPanelConfig config, List<LcdPanelConfig.Panel> panels, Identifier texture) {
         final RawModel raw = new RawModel();
-        for (LcdPanelConfig.Panel panel : config.panels()) {
+        for (LcdPanelConfig.Panel panel : panels) {
             final RawMesh mesh = new RawMesh(new MaterialProperties(shaderType(panel.renderType()), texture, 0xFFFFFFFF));
-            final LcdPanelConfig.Layout layout = config.layout(panel.name());
+            final LcdPanelConfig.Layout layout = config.layoutFor(panel);
             final float u0 = (float) layout.x() / config.texWidth();
             final float u1 = (float) (layout.x() + layout.w()) / config.texWidth();
             final float v0 = (float) layout.y() / config.texHeight();

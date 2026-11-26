@@ -393,6 +393,7 @@ public class ModNetwork {
             FriendlyByteBuf buf,
             NetworkManager.PacketContext ctx
     ) {
+        if (buf.readableBytes() < Long.BYTES) return;
         BlockPos pos = buf.readBlockPos();
         byte[] payload = new byte[buf.readableBytes()];
         buf.readBytes(payload);
@@ -406,12 +407,17 @@ public class ModNetwork {
             //#else
             //$$ Level level = player.level;
             //#endif
-            BlockEntity be = level.getBlockEntity(pos);
-
-            if (be instanceof BlockEntityScreendoorCentralControl ctrl) {
+            if (!(level instanceof net.minecraft.server.level.ServerLevel server)
+                    || player.distanceToSqr(pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5) > 64
+                    || !com.fangsu.platform.PlatformPlacementPolicy.accessible(server, player, pos)) return;
+            if (level.getBlockEntity(pos) instanceof BlockEntityScreendoorCentralControl ctrl) {
                 FriendlyByteBuf safeBuf =
                         new FriendlyByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(payload));
-                ctrl.readSync(safeBuf);
+                try {
+                    ctrl.readSync(safeBuf, player);
+                } finally {
+                    safeBuf.release();
+                }
             }
         });
     }

@@ -1,5 +1,7 @@
 package com.fangsu.train;
 
+import com.fangsu.train.lcds.MtrLcd;
+
 //#if WITH_JS
 import com.fangsu.userScripts.ScriptHolderBase;
 import com.fangsu.userScripts.ScriptManager;
@@ -32,19 +34,27 @@ public final class LcdJavaPainter {
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
+        boolean scriptDrawn = false;
         //#if WITH_JS
         if (info.hasScript()) {
             final ScriptHolderBase holder = LcdScriptSupport.getHolder(info.script());
             if (holder == null) throw new IllegalStateException("LCD 脚本尚未就绪: " + info.script());
-            ScriptManager.getInstance().requestRunFunctionSync(holder, null, "draw", graphics, ProxyObject.fromMap(state),
-                    status, LcdScriptSupport.toScriptValue(LcdScriptSupport.buildInfo(info)),
-                    LcdScriptSupport.toScriptValue(LcdScriptSupport.buildExtraConfig(info)));
-            return;
+            final Graphics2D scriptGraphics = (Graphics2D) graphics.create();
+            try {
+                ScriptManager.getInstance().requestRunFunctionSync(holder, null, "draw", scriptGraphics, ProxyObject.fromMap(state),
+                        status, LcdScriptSupport.toScriptValue(LcdScriptSupport.buildInfo(info)),
+                        LcdScriptSupport.toScriptValue(LcdScriptSupport.buildExtraConfig(info)));
+            } finally {
+                scriptGraphics.dispose();
+            }
+            if (!(painter instanceof MtrLcd)) return;
+            scriptDrawn = true;
         }
         //#endif
         if (painter == null) throw new IllegalArgumentException("未知 LCD id: " + info.id());
         for (LcdPanelConfig.Panel panel : config.panels()) {
-            final LcdPanelConfig.Layout layout = config.layout(panel.name());
+            if (scriptDrawn && !MtrLcd.isDisplay(panel.name())) continue;
+            final LcdPanelConfig.Layout layout = config.layoutFor(panel);
             // 每个 slot 隔离 Graphics2D 的变换、裁剪和绘图属性，异常交给上层统一冷却。
             final Graphics2D slotGraphics = (Graphics2D) graphics.create();
             try {

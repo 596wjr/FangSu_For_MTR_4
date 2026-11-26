@@ -19,6 +19,6 @@ public class VehicleResourceLcdMixin {
     private void fangsu$queueLcd(StoredMatrixTransformations transformations, VehicleExtension vehicle,
                                  int carNumber, int totalCars, int light, boolean noOpenDoorways,
                                  CallbackInfo ci) {
-        VehicleLcdRenderer.renderCar(vehicle, carNumber, transformations, light);
+        VehicleLcdRenderer.renderCar(vehicle, carNumber, totalCars, transformations, light);
     }
 }
