@@ -1,8 +1,9 @@
 package com.fangsu.mixin;
 
-import com.fangsu.mtr.rail.RailPoseExtraHolder;
 import com.fangsu.mtr.RouteMapSelection;
 import com.fangsu.mtr.ServiceStop;
+import com.fangsu.mtr.rail.BypassMapMarker;
+import com.fangsu.mtr.rail.RailPoseExtraHolder;
 import com.fangsu.mtr.rail.ServiceRail;
 import com.fangsu.network.ServiceRailPackets;
 import com.fangsu.ui.ServiceRailScreen;
@@ -20,6 +21,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.util.function.Consumer;
 
 @Mixin(value = WidgetMap.class, remap = false)
 public abstract class ServiceRailMapMixin implements RouteMapSelection {
@@ -39,19 +42,20 @@ public abstract class ServiceRailMapMixin implements RouteMapSelection {
     private void fangsu$renderBypass(GraphicsHolder graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         final var widget = (WidgetMap) (Object) this;
         final var drawing = new GuiDrawing(graphics);
-        fangsu$forEachMarker((start, end, settings, marker) -> {
+        fangsu$forEachMarker(marker -> {
             drawing.beginDrawingRectangle();
             drawing.drawRectangle(Math.max(widget.getX2(), marker.left()), Math.max(widget.getY2(), marker.top()),
                     Math.min(widget.getX2() + widget.getWidth(), marker.right()),
                     Math.min(widget.getY2() + widget.getHeight(), marker.bottom()), 0xFFFFFFFF);
             drawing.finishDrawingRectangle();
             if (scale >= 8) {
+                final String number = marker.settings().number();
                 final int textX = (marker.left() + marker.right()) / 2;
                 final int textY = (marker.top() + marker.bottom()) / 2 - 4;
-                final int textWidth = GraphicsHolder.getTextWidth(settings.number());
+                final int textWidth = GraphicsHolder.getTextWidth(number);
                 if (textX - textWidth / 2 >= widget.getX2() && textX + (textWidth + 1) / 2 <= widget.getX2() + widget.getWidth()
                         && textY >= widget.getY2() && textY + 9 <= widget.getY2() + widget.getHeight()) {
-                    graphics.drawText(settings.number(), textX - textWidth / 2, textY, 0xFFFFFFFF, true, GraphicsHolder.getDefaultLight());
+                    graphics.drawText(number, textX - textWidth / 2, textY, 0xFFFFFFFF, true, GraphicsHolder.getDefaultLight());
                 }
             }
         });
@@ -62,13 +66,15 @@ public abstract class ServiceRailMapMixin implements RouteMapSelection {
         if (button != 0 || !MinecraftClientData.hasPermission() || !((WidgetMap) (Object) this).isMouseOver2(mouseX, mouseY)) {
             return;
         }
-        fangsu$forEachMarker((start, end, settings, marker) -> {
+        fangsu$forEachMarker(marker -> {
             if (!cir.isCancelled() && marker.contains(mouseX, mouseY)) {
+                final var start = marker.start();
+                final var end = marker.end();
                 final var selection = fangsu$selection;
                 if (selection != null) {
                     if (!selection.test(new ServiceStop.Bypass(start, end))) return;
                 } else {
-                    ServiceRailScreen.openTrack(settings, value -> ServiceRailPackets.updateTrack(start, end, value));
+                    ServiceRailScreen.openTrack(marker.settings(), value -> ServiceRailPackets.updateTrack(start, end, value));
                 }
                 cir.setReturnValue(true);
             }
@@ -76,7 +82,7 @@ public abstract class ServiceRailMapMixin implements RouteMapSelection {
     }
 
     @Unique
-    private void fangsu$forEachMarker(MarkerConsumer consumer) {
+    private void fangsu$forEachMarker(Consumer<BypassMapMarker> consumer) {
         if (!showStations || transportMode != TransportMode.TRAIN) {
             return;
         }
@@ -100,20 +106,10 @@ public abstract class ServiceRailMapMixin implements RouteMapSelection {
             final int right = Math.max(left + 1, (int) Math.floor(x + (blockX + 1 - centerX) * scale + width / 2D));
             final int bottom = Math.max(top + 1, (int) Math.floor(y + (blockZ + 1 - centerY) * scale + height / 2D));
             if (right > x && left < x + width && bottom > y && top < y + height) {
-                consumer.accept(new BlockPos((int) start.getX(), (int) start.getY(), (int) start.getZ()),
+                consumer.accept(new BypassMapMarker(new BlockPos((int) start.getX(), (int) start.getY(), (int) start.getZ()),
                         new BlockPos((int) end.getX(), (int) end.getY(), (int) end.getZ()), settings,
-                        new Marker(left, top, right, bottom));
+                        left, top, right, bottom));
             }
-        }
-    }
-
-    public interface MarkerConsumer {
-        void accept(BlockPos start, BlockPos end, ServiceRail settings, Marker marker);
-    }
-
-    public record Marker(int left, int top, int right, int bottom) {
-        public boolean contains(double x, double y) {
-            return x >= left && x < right && y >= top && y < bottom;
         }
     }
 }
