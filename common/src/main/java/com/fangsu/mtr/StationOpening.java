@@ -21,3 +21,4 @@ public interface StationOpening {
         // 暂缓期间列车仍走已配置的越行轨道。
         return status == RouteStopStatus.NORMAL ? displayStatus(stop, station) : status;
     }
+}
