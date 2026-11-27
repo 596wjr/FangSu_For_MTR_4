@@ -56,6 +56,8 @@ public class MainClient {
         // 道岔 S2C（绑定结果）接收器
         com.fangsu.network.ModNetwork.initClient();
         com.fangsu.train.DoorOpenCacheClient.initClient();
+        com.fangsu.train.data.TrainDataClient.register();
+        com.fangsu.train.parts.TrainPartRenderer.register();
         // 平交路口的网格构建队列（客户端 tick 驱动，与渲染回调解耦）
         com.fangsu.blockEntities.BlockEntityLevelCrossing.initBuildQueue();
         com.fangsu.train.DoorSideObserverMtr4.init();
@@ -190,6 +192,7 @@ public class MainClient {
             // 注册全部完成再发布代际，已放置方块下次渲染时会重新加载模型、配置及绘制状态。
             ResourceUtil.completeReload();
             com.fangsu.train.connector.ConnectorRegistry.reload();
+            com.fangsu.train.parts.TrainPartsRegistry.reload(resourceManager);
             Main.LOGGER.info("[FangSu] initResources completed successfully");
         } catch (Exception e) {
             Main.LOGGER.error("[FangSu] initResources failed with unexpected exception", e);

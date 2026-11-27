@@ -21,9 +21,17 @@ import java.util.List;
 public class DrawScheduler {
 
     public final BatchManager batchManager = new BatchManager();
-    public final ShaderManager shaderManager = new ShaderManager();
+    public final ShaderManager shaderManager;
 
     private final List<ClusterDrawCall> drawCalls = new ArrayList<>();
+
+    public DrawScheduler() {
+        this(new ShaderManager());
+    }
+
+    public DrawScheduler(ShaderManager shaderManager) {
+        this.shaderManager = shaderManager;
+    }
 
     public void reloadShaders(ResourceManager resourceManager) throws IOException {
         shaderManager.reloadShaders(resourceManager);
@@ -39,12 +47,17 @@ public class DrawScheduler {
             commitFrame(vertexConsumers,drawContext);
         } finally {
             // 队列只属于当前帧；着色器未就绪、兼容路径异常也不能积压旧帧和旧模型。
-            drawCalls.clear();
-            batchManager.batches.clear();
+            clearQueue();
         }
     }
 
+    public void clearQueue() {
+        drawCalls.clear();
+        batchManager.batches.clear();
+    }
+
     private void commitFrame(BufferSourceProxy vertexConsumers,DrawContext drawContext) {
+        if (drawCalls.isEmpty()) return;
         // ===== 兼容模式：使用私有 Immediate BufferSource =====
         if (MainClient.is_nte_loaded) {
             // 1. 创建私有的 Immediate BufferSource
@@ -86,7 +99,6 @@ public class DrawScheduler {
             return;
         }
         if (!drawContext.drawWithBlaze && !shaderManager.isReady()) return;
-        if (drawCalls.isEmpty()) return;
         if (drawContext.drawWithBlaze) {
             for (ClusterDrawCall drawCall : drawCalls) {
                 if (drawCall.model == null || drawCall.model.isClosed()) continue;

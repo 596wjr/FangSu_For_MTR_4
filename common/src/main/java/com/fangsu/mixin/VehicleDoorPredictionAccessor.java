@@ -9,4 +9,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface VehicleDoorPredictionAccessor {
     @Accessor("railProgress")
     double fangsu$getRailProgress();
+
+    @Accessor("speed")
+    double fangsu$getSpeed();
 }

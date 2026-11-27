@@ -23,6 +23,15 @@ import java.util.List;
 public class TrainStatus {
     private final VehicleWrapper train;
 
+    public String getTrainData(String key) {
+        return getTrainData(key, 0);
+    }
+
+    /** 指定 1 起始的车厢号，先查这节车厢，再使用全列默认值。 */
+    public String getTrainData(String key, int car) {
+        return train == null ? null : com.fangsu.train.data.TrainDataClient.get(train.getMtrVehicle().getId()).text(car, key);
+    }
+
     public final boolean[] doorLeftOpen;
     public final boolean[] doorRightOpen;
 

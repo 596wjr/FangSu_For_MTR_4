@@ -1,6 +1,13 @@
 {
   "custom_trains": {
     "r_train_fangsu_lcd": {
+      "bogie": {
+        "id": "fangsu_motor_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
       "name": "R-TRAIN (LCD)",
       "description": "Provided by FangSu Blocks",
       "color": "6CB5E2",
@@ -17,6 +24,13 @@
       }
     },
     "r_train_small_fangsu_lcd": {
+      "bogie": {
+        "id": "fangsu_motor_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
       "name": "R-TRAIN (LCD) (Small)",
       "description": "Provided by FangSu Blocks",
       "color": "6CB5E2",
@@ -33,6 +47,13 @@
       }
     },
     "r_train_mini_fangsu_lcd": {
+      "bogie": {
+        "id": "fangsu_motor_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
       "name": "R-TRAIN (LCD) (Mini)",
       "description": "Provided by FangSu Blocks",
       "color": "6CB5E2",
@@ -49,6 +70,13 @@
       }
     },
     "r_train_fangsu_js_lcd": {
+      "bogie": {
+        "id": "fangsu_motor_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
       "name": "R-TRAIN (JS LCD)",
       "description": "Provided by FangSu Blocks",
       "color": "6CB5E2",
