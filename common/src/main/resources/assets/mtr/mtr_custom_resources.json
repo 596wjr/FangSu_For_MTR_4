@@ -355,6 +355,224 @@
       }
     },
     {
+      "id": "fangsu_r_train_lcd_trailer_tc1",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, 10.5], "rotation": [0, 180, 0], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC1, Normal, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:5",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 25.0,
+      "bogie1Position": -8.5,
+      "bogie2Position": 8.5,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
+      "id": "fangsu_r_train_lcd_trailer_tc2",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, -10.5], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC2, Normal, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:5",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 25.0,
+      "bogie1Position": -8.5,
+      "bogie2Position": 8.5,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
       "id": "fangsu_r_train_lcd_cab_2",
       "bogie": {
         "id": "fangsu_motor_bogie",
@@ -767,6 +985,224 @@
       }
     },
     {
+      "id": "fangsu_r_train_small_lcd_trailer_tc1",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, 8], "rotation": [0, 180, 0], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC1, Small, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:4",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_small.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_small.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 20.0,
+      "bogie1Position": -6.0,
+      "bogie2Position": 6.0,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots_small.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
+      "id": "fangsu_r_train_small_lcd_trailer_tc2",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, -8], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC2, Small, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:4",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_small.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_small.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_small_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 20.0,
+      "bogie1Position": -6.0,
+      "bogie2Position": 6.0,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots_small.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
       "id": "fangsu_r_train_small_lcd_cab_2",
       "bogie": {
         "id": "fangsu_motor_bogie",
@@ -1085,6 +1521,224 @@
         ]
       },
       "name": "R-Train Trailer (Mini, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:2",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_mini.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_mini.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 10.0,
+      "bogie1Position": -5.0,
+      "bogie2Position": 5.0,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots_mini.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
+      "id": "fangsu_r_train_mini_lcd_trailer_tc1",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, 3.1875], "rotation": [0, 180, 0], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC1, Mini, LCD)",
+      "color": "6CB5E2",
+      "transportMode": "TRAIN",
+      "width": 2,
+      "couplingPadding1": 0,
+      "couplingPadding2": 0,
+      "wikipediaArticle": "MTR_Hyundai_Rotem_EMU",
+      "tags": [
+        "family:r_train",
+        "iso_3166:HK",
+        "doors:2",
+        "type:trailer"
+      ],
+      "models": [
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "fangsu:properties/vehicle/r_train_lcd_common.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_mini.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/r_train.bbmodel",
+          "textureResource": "mtr:textures/vehicle/r_train.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_end_2.json",
+          "positionDefinitionsResource": "mtr:properties/definition/r_train_mini.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_left.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_left_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_r_train_right.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_right_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        },
+        {
+          "modelResource": "mtr:models/vehicle/door_overlay_top_sp1900.bbmodel",
+          "textureResource": "mtr:textures/overlay/door_overlay_sp1900_top.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/r_train_door_top_overlay.json",
+          "positionDefinitionsResource": "mtr:properties/definition/urban_line_mini_base.json"
+        }
+      ],
+      "bogie1Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "bogie2Models": [
+        {
+          "modelResource": "mtr:models/vehicle/bogie_1.bbmodel",
+          "textureResource": "mtr:textures/vehicle/bogie_1.png",
+          "modelPropertiesResource": "mtr:properties/vehicle/bogie_1.json",
+          "positionDefinitionsResource": "mtr:properties/definition/origin.json"
+        }
+      ],
+      "hasGangway1": true,
+      "hasGangway2": true,
+      "hasBarrier1": true,
+      "hasBarrier2": true,
+      "legacySpeedSoundBaseResource": "c1141a",
+      "legacySpeedSoundCount": 90,
+      "legacyDoorSoundBaseResource": "sp1900",
+      "legacyDoorCloseSoundTime": 0.5,
+      "length": 10.0,
+      "bogie1Position": -5.0,
+      "bogie2Position": 5.0,
+      "lcd": {
+        "id": "mtr",
+        "slots": "mtr:r_train/slots_mini.json"
+      },
+      "connector": [
+        "fangsu_r_train_exterior",
+        "fangsu_r_train_interior_left",
+        "fangsu_r_train_interior_right",
+        "fangsu_r_train_interior_roof",
+        "fangsu_r_train_interior_floor"
+      ],
+      "announcements": {
+        "id": "fangsu:bjmtr",
+        "config": "fangsu:fangsu/announcements/train/bjmtr.json"
+      }
+    },
+    {
+      "id": "fangsu_r_train_mini_lcd_trailer_tc2",
+      "pantograph": {
+        "id": "fangsu_single_arm_pantograph",
+        "slots": [
+          { "name": "bow_1", "pos": [0, 3.75, -3.1875], "raise_progress": 0.471810 }
+        ]
+      },
+      "bogie": {
+        "id": "fangsu_trailer_bogie",
+        "slots": [
+          { "slot": 0, "offset": [0, 1, 0] },
+          { "slot": 1, "offset": [0, 1, 0] }
+        ]
+      },
+      "name": "R-Train Trailer (TC2, Mini, LCD)",
       "color": "6CB5E2",
       "transportMode": "TRAIN",
       "width": 2,
